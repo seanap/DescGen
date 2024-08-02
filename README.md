@@ -1,6 +1,6 @@
 # Auto-Strava-Stat-Description
-Automatically set your strava description with fun stats from Strava, Garmin, Smashrun, and Weather
-To automate updating your Strava activity descriptions with your running stats, we can use the Strava API and Python. Below is a step-by-step guide.
+Automatically set your strava description with fun stats from Strava, Garmin, Smashrun, and WeatherAPI.  
+To automate updating your Strava activity descriptions with your running stats, this will use the Strava API and Python. Below is a step-by-step guide.
 ```
 🏆 214 days in a row
 🌡️ Misery Index: 150.3 🥵 Oppressive
