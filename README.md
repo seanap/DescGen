@@ -32,7 +32,7 @@ To automate updating your Strava activity descriptions with your running stats, 
 pip install requests garminconnect pytz logging dateutil
 ```
 ### 3. Prepare the Python Script:
-* Download this repo locally, ex `c:\scripts`
+* Download this repo locally `C:/scripts/`
 * Replace 'your_client_id', 'your_client_secret', 'your_access_token', and 'your_refresh_token' with your actual Strava API credentials in the stat_modules
 * Get USER LEVEL AUTHENTICATION from smashrun: https://api.smashrun.com/v1/documentation and replce with your access token in `notables.py`
 * Get a free WeatherAPI access https://www.weatherapi.com/ and replace you API Key in `misery_index.py`
