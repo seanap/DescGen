@@ -58,3 +58,16 @@ To schedule your script to run every 10 minutes between 4 AM and 10 PM on Window
 #### Step 5: Finish and Save
   * Review the settings, then click "Finish" to save the task.
   * If prompted, enter your Windows account password to allow the task to run.
+
+## Misery Index
+* https://wildstar84.wordpress.com/2013/06/30/the-misery-index-calculating-how-miserable-your-summer-workout-will-be/
+* “Misery Index” = (temperature°F + ((dew-point°F * 2) + humidity) / 3) – (windspeed-mph * (1 – (%humidity / 100)))
+```
+😭Misery Index: {less than 130} {😀 Perfect conditions for a run!}
+😭Misery Index: {130 - 140} {😅 Mildly Uncomfortable - Not too bad for a decent workout}
+😭Misery Index: {140 - 145} {😓 Moderately Uncomfortable}
+😭Misery Index: {145-150} {😰 Very Uncomfortable}
+😭Misery Index: {150-155} {🥵 Oppressive - Difficult to accomplish much}
+😭Misery Index: {155-160} {😡 Miserable - Why??}
+😭Misery Index: {160+} {☠️⚠️ Un-doable due to a high risk of heat-exhaustion}
+```
