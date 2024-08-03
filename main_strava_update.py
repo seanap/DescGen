@@ -14,12 +14,12 @@ import os
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Strava API credentials
-CLIENT_ID = 'your_id'
-CLIENT_SECRET = 'your_secret'
-REFRESH_TOKEN = 'your_token'
-ACCESS_TOKEN = 'your_token'
-GARMIN_EMAIL = 'garmin_email'
-GARMIN_PASSWORD = 'Garmin_pass'
+CLIENT_ID = 'id'
+CLIENT_SECRET = 'secret'
+REFRESH_TOKEN = 'token'
+ACCESS_TOKEN = 'token'
+GARMIN_EMAIL = 'email'
+GARMIN_PASSWORD = 'pass'
 
 # Log file to track processed activities
 LOG_FILE = "processed_activities.log"
@@ -106,13 +106,19 @@ def main(force_update=False):
         logging.info(f"Activity {latest_activity_id} has already been processed. Skipping...")
         return
 
+    # Check if the most recent activity is from today
+    now = datetime.datetime.now(pytz.utc)
     latest_activity_start_date = date_parser.isoparse(latest_activity['start_date'])
+    
+    if latest_activity_start_date.date() != now.date():
+        logging.info("No new activities found for today")
+        return
 
-    if not force_update:
-        last_checked = datetime.datetime.now(pytz.utc) - datetime.timedelta(minutes=10)
-        if latest_activity_start_date < last_checked:
-            logging.info("No new activities to update")
-            return
+    # Check if the activity has already been processed
+    if not force_update and is_activity_processed(latest_activity_id):
+        logging.info(f"Activity {latest_activity_id} has already been processed. Skipping...")
+        return
+
 
     # Define date ranges for stats
     today = datetime.datetime.now()
@@ -168,11 +174,14 @@ def main(force_update=False):
         f"🏃 {year_gap} | 🗺️ {year_distance:.0f} | 🏔️ {int(year_elevation)}' | 🕓 {year_duration} | 🍺 {year_beers_earned:.0f}\n\n"
     )
 
-    # Update Strava activity description
-    update_activity_description(latest_activity_id, description)
-    
-    # Log the activity as processed
-    log_activity(latest_activity_id)
+    # Update Strava activity description and log the activity ID only if the update was successful
+    response = update_activity_description(latest_activity_id, description)
+    if response and response.get('id') == latest_activity_id:
+        log_activity(latest_activity_id)
+        logging.info(f"Activity {latest_activity_id} updated and logged successfully.")
+    else:
+        logging.error(f"Failed to update or log activity {latest_activity_id}")
+
 
 if __name__ == "__main__":
     import argparse
