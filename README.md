@@ -8,6 +8,7 @@ To automate updating your Strava activity descriptions with your running stats, 
 🏅 fastest 10k in a month
 🏅 best performance in a month
 🍺 Beers Earned: 5.1
+🏋️ 49 | 💦 54 | 🗿 -10% | 🦾 Optimal
 ❤️‍🔥 Vo2Max: 50.0
 
 7️⃣ Week:
