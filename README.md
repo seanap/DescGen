@@ -1,5 +1,5 @@
 # Auto-Strava-Stat-Description
-Automatically set your strava description with fun stats from Strava, Garmin, Smashrun, and WeatherAPI.  
+Automatically set your strava description with fun stats from Strava, Garmin, Smashrun, Intervals.icu, and WeatherAPI.  
 To automate updating your Strava activity descriptions with your running stats, this will use the Strava API and Python. Below is a step-by-step guide.
 ```
 🏆 214 days in a row
@@ -34,8 +34,9 @@ pip install requests garminconnect pytz logging dateutil
 ```
 ### 3. Prepare the Python Script:
 * Download this repo locally `C:/scripts/`
-* Replace 'your_client_id', 'your_client_secret', 'your_access_token', and 'your_refresh_token' with your actual Strava API credentials in the stat_modules
+* Replace 'your_client_id', 'your_client_secret', 'your_access_token', and 'your_refresh_token' with your actual Strava API credentials in the main script & stat_modules
 * Get USER LEVEL AUTHENTICATION from smashrun: https://api.smashrun.com/v1/documentation and replce with your access token in `notables.py`
+* Get your Intervals.icu API key and Athlete ID from your Settings page, and modify `intervals_data.py`
 * Get a free WeatherAPI access https://www.weatherapi.com/ and replace you API Key in `misery_index.py`
 
 ### 4. Run the Script:
@@ -74,7 +75,6 @@ To schedule your script to run every 10 minutes between 4 AM and 10 PM on Window
 ```
 
 ## Intervals.icu
-* Get your API key and Athlete ID from your Settings page.
 * This will grab today's Fitness, Fatigue, and Form values
 ```
 # Fitness | Fatigue | Form | Form Class
