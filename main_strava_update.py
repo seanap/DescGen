@@ -8,6 +8,7 @@ from stat_modules.misery_index import get_misery_index
 from stat_modules import streak, beers_earned, vo2max, week_stats
 from strava_utils import refresh_access_token, get_recent_activities, get_activity_details
 from stat_modules.smashrun import get_notables
+from stat_modules.intervals_data import get_intervals_data
 import os
 
 # Configure logging
@@ -138,6 +139,8 @@ def main(force_update=False):
     week = week_stats.get_stats(client, seven_days_ago.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d"))
     month = week_stats.get_stats(client, thirty_days_ago.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d"))
     year = week_stats.get_stats(client, first_day_of_year.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d"))
+    icu = get_intervals_data()
+    logging.info(f"ICU Data: {icu}")  # Log the ICU data for debugging purposes 
 
     # Get notables from Smashrun
     notables = get_notables()
@@ -165,6 +168,7 @@ def main(force_update=False):
         f"{misery_index_formatted}\n"
         f"{notables_formatted}\n"
         f"🍺 Beers Earned: {beers:.1f}\n"
+        f"{icu}\n"
         f"❤️‍🔥 Vo2Max: {vo2}\n\n"
         f"7️⃣ Week:\n"
         f"🏃 {week['gap']} | 🗺️ {week['distance']:.1f} | 🏔️ {int(week['elevation'])}' | 🕓 {week['duration']} | 🍺 {week['beers_earned']:.0f}\n\n"
