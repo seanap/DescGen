@@ -72,3 +72,23 @@ To schedule your script to run every 10 minutes between 4 AM and 10 PM on Window
 😭Misery Index: {155-160} {😡 Miserable - Why??}
 😭Misery Index: {160+} {☠️⚠️ Un-doable due to a high risk of heat-exhaustion}
 ```
+
+## Intervals.icu
+* Get your API key and Athlete ID from your Settings page.
+* This will grab today's Fitness, Fatigue, and Form values
+```
+# Fitness | Fatigue | Form | Form Class
+  🏋️ 50 | 💦 65 | 🗿 -30% | 🦾 Optimal
+
+# Determine form_class based on form value
+if form < -30:
+    form_class = "⚠️ High Risk"
+elif -30 <= form <= -10:
+    form_class = "🦾 Optimal"
+elif -10 < form <= 5:
+    form_class = "⛔ Grey Zone"
+elif 5 < form <= 20:
+    form_class = "🏁 Fresh"
+else:
+    form_class = "❄️ Too Light"
+```
