@@ -66,8 +66,8 @@ To schedule your script to run every 10 minutes between 4 AM and 10 PM on Window
 * “Misery Index” = (temperature°F + ((dew-point°F * 2) + humidity) / 3) – (windspeed-mph * (1 – (%humidity / 100)))
 ```
 😭Misery Index: {less than 130} {😀 Perfect conditions for a run!}
-😭Misery Index: {130 - 140} {😅 Mildly Uncomfortable - Not too bad for a decent workout}
-😭Misery Index: {140 - 145} {😓 Moderately Uncomfortable}
+😭Misery Index: {130-140} {😅 Mildly Uncomfortable - Not too bad for a decent workout}
+😭Misery Index: {140-145} {😓 Moderately Uncomfortable}
 😭Misery Index: {145-150} {😰 Very Uncomfortable}
 😭Misery Index: {150-155} {🥵 Oppressive - Difficult to accomplish much}
 😭Misery Index: {155-160} {😡 Miserable - Why??}
@@ -81,14 +81,9 @@ To schedule your script to run every 10 minutes between 4 AM and 10 PM on Window
   🏋️ 50 | 💦 65 | 🗿 -30% | 🦾 Optimal
 
 # Determine form_class based on form value
-if form < -30:
-    form_class = "⚠️ High Risk"
-elif -30 <= form <= -10:
-    form_class = "🦾 Optimal"
-elif -10 < form <= 5:
-    form_class = "⛔ Grey Zone"
-elif 5 < form <= 20:
-    form_class = "🏁 Fresh"
-else:
-    form_class = "❄️ Too Light"
+Form {20+} {❄️ Too Light}
+Form {20 - 5} {🏁 Fresh}
+Form {5 - -10} {⛔ Grey Zone}
+Form {-10 - -30} {🦾 Optimal}
+Form {less than -30} {⚠️ High Risk}
 ```
