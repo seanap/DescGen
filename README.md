@@ -13,7 +13,7 @@ To automate updating your Strava activity descriptions with your running stats, 
 🏅 New best power: 317W for 1hr
 🏅 New best pace: 53m7s for 10km
 🍺 Beers Earned: 5.4
-🏋️ 59 | 💦 64 | 🗿 -9% | ⛔ Grey Zone
+🏋️ 59 | 💦 64 | 🗿 -10% | 🦾 Optimal
 ❤️‍🔥 53 | ⚡ 321W | 💼 1252 kJ | ⚡/❤️ 2.13
 
 7️⃣ Past 7 days:
