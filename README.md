@@ -10,26 +10,27 @@ To automate updating your Strava activity descriptions with your running stats, 
 🏅 coolest run in 3 months
 🏅 best performance in a month
 🏅 highest avg cadence in a month
+🏅 New best power: 317W for 1hr
+🏅 New best pace: 53m7s for 10km
 🍺 Beers Earned: 5.4
 🏋️ 59 | 💦 64 | 🗿 -9% | ⛔ Grey Zone
-❤️‍🔥 53.0 | ⚡ 321W | 💼 1252 kJ | ⚡/❤️ 2.13
+❤️‍🔥 53 | ⚡ 321W | 💼 1252 kJ | ⚡/❤️ 2.13
 
 7️⃣ Past 7 days:
 🏃 9:00 | 🗺️ 42.0 | 🏔️ 3418' | 🕓 6h:30m | 🍺 30
-
 📅 Past 30 days:
 🏃 9:23 | 🗺️ 186 | 🏔️ 16099' | 🕓 30h:01m | 🍺 139
-
-🌍 Year:
+🌍 This Year:
 🏃 9:48 | 🗺️ 918 | 🏔️ 80171' | 🕓 162h:51m | 🍺 726
 ```
 ### Data Sources
 ```
 [Smashrun Longest Streak] 
 [WeatherAPI calculation] : [preset range] 
-[Smashrun Noteables] 
+[Smashrun Noteables]
+[ICU Achievements]
 [Garmin Calories / 150] 
-[ICU Fitness | Fatigue | Form | Form % Description]
+[ICU: Fitness | Fatigue | Form | Form % Description]
 [Garmin vo2max] | [ICU Normalized Power] | [ICU Work] | [ICU Efficency (Power/HR)]
 
 [Garmin Historical Data: trailing 7day, trailing 30 days, current year to date]
