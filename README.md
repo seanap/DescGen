@@ -2,36 +2,47 @@
 Automatically set your strava description with fun stats from Strava, Garmin, Smashrun, Intervals.icu, and WeatherAPI.  
 To automate updating your Strava activity descriptions with your running stats, this will use the Strava API and Python. Below is a step-by-step guide.
 ```
-🏆 284 days in a row
-🌡️ Misery Index: 121.7 😀 Pleasant running conditions
-🏅 during sunrise
-🏅 fastest 7mi ever
-🏅 fastest 12k ever
-🏅 coolest run in 3 months
-🏅 best performance in a month
-🏅 highest avg cadence in a month
-🏅 New best power: 317W for 1hr
-🏅 New best pace: 53m7s for 10km
-🍺 Beers Earned: 5.4
-🏋️ 59 | 💦 64 | 🗿 -10% | 🦾 Optimal
-❤️‍🔥 53 | ⚡ 321W | 💼 1252 kJ | ⚡/❤️ 2.13
+🏆 446 days in a row
+🏅 fastest 6mi ever
+🏅 fastest 10k ever
+🏅 best performance ever
+🏅 fastest start in 6 months
+🏅 fastest run in a month
+🏅 highest calories/hour in a month
+🏅 flattest run in a month
+🏅 fastest finish in a month
+🏅 FTP has increased by 8w to 377w
+🏅 New best power: 382W for 30m 0s
+🏅 New best pace: 45m 0s for 10k
+🌤️🌡️ Misery Index: 73.9 😀 Pleasant | 🏭 AQI: 1😃
+🌤️🚦 Training Readiness: 1 💀 | 💗 53.0 | 💤 73
+👟🏃 7:14 | 🗺️ 6.24 | 🏔️ 121' | 🕓 45:10 | 🍺 4.3
+👟👣 179spm | 💼 1032 kJ | ⚡ 381W | 💓 166 | ⚙️2.3
+🚄 🟡 Maintaining | 4.3 : 0.0 - Lactate Threshold
+🚄 🏋️ 60 | 💦 68 | 🗿 -13% - Optimal 🟢
+🚄 🏋️ 1162 | 💦 1241 | 🗿 1.1 - Optimal 🟢
+❤️‍🔥 53.6 | ♾ Endur: 7027 | 🗻 Hill: 71
 
 7️⃣ Past 7 days:
-🏃 9:00 | 🗺️ 42.0 | 🏔️ 3418' | 🕓 6h:30m | 🍺 30
+🏃 8:24 | 🗺️ 43.7 | 🏔️ 3320' | 🕓 6h:13m | 🍺 32
 📅 Past 30 days:
-🏃 9:23 | 🗺️ 186 | 🏔️ 16099' | 🕓 30h:01m | 🍺 139
+🏃 8:41 | 🗺️ 154 | 🏔️ 13311' | 🕓 22h:31m | 🍺 114
 🌍 This Year:
-🏃 9:48 | 🗺️ 918 | 🏔️ 80171' | 🕓 162h:51m | 🍺 726
+🏃 8:55 | 🗺️ 418 | 🏔️ 36055' | 🕓 63h:05m | 🍺 314
 ```
 ### Data Sources
 ```
 [Smashrun Longest Streak] 
-[WeatherAPI calculation] : [preset range] 
 [Smashrun Noteables]
 [ICU Achievements]
-[Garmin Calories / 150] 
+[WeatherAPI calculation][Dynamic Emoji & Description] | [WeatherAPI Air Quality][Dynamic Emoji]
+[Garmin Training Readyness][Dynamic Emoji] | [Garmin Today's Resting HR] | [Garmin Sleep Score]
+[Garmin: GAP | Total Running Miles | Total Elevation | Total Time | Total Calories/150 ]
+[Garmin: Cadence | Total Work] | [ICU Avg Normalized Power] | [Garmin: Total Time | Total Calories/150] 
+[Garmin: Training Status | Training Effect (Aerobic:Anaerobic - Primary Benefit)]
 [ICU: Fitness | Fatigue | Form | Form % Description]
-[Garmin vo2max] | [ICU Normalized Power] | [ICU Work] | [ICU Efficency (Power/HR)]
+[Garmin: Fitness | Fatigue | Form | Form % Description]
+[Garmin: vo2max | Endurance Score | Hill Score]
 
 [Garmin Historical Data: trailing 7day, trailing 30 days, current year to date]
 [Garmin: GAP | Total Running Miles | Total Elevation | Total Time | Total Calories/150 ]
