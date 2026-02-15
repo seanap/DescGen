@@ -122,6 +122,7 @@ services:
     image: seanap/auto-stat-description:latest
     container_name: auto-stat-worker
     command: ["python", "worker.py"]
+    network_mode: bridge
     env_file:
       - .env
     volumes:
@@ -132,6 +133,7 @@ services:
     image: seanap/auto-stat-description:latest
     container_name: auto-stat-api
     command: ["python", "api_server.py"]
+    network_mode: bridge
     env_file:
       - .env
     volumes:
@@ -191,6 +193,12 @@ DOCKER_IMAGE=seanap/auto-stat-description:latest
 ```bash
 curl http://localhost:1609/health
 curl http://localhost:1609/latest
+```
+
+If Docker reports `all predefined address pools have been fully subnetted`, this compose avoids creating a new user-defined network by using `network_mode: bridge`. If your host still has stale networks from other stacks, run:
+
+```bash
+docker network prune -f
 ```
 
 ## API Endpoints

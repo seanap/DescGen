@@ -3,6 +3,7 @@ services:
     image: ${DOCKER_IMAGE:-seanap/auto-stat-description:latest}
     container_name: auto-stat-worker
     command: ["python", "worker.py"]
+    network_mode: bridge
     env_file:
       - .env
     volumes:
@@ -13,6 +14,7 @@ services:
     image: ${DOCKER_IMAGE:-seanap/auto-stat-description:latest}
     container_name: auto-stat-api
     command: ["python", "api_server.py"]
+    network_mode: bridge
     env_file:
       - .env
     volumes:
