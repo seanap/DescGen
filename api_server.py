@@ -4,6 +4,13 @@ from datetime import datetime, timezone
 
 from flask import Flask, request
 
+from description_template import (
+    build_context_schema,
+    get_active_template,
+    render_template_text,
+    save_active_template,
+    validate_template_text,
+)
 from main_strava_update import run_once
 
 from config import Settings
@@ -15,9 +22,23 @@ settings = Settings.from_env()
 settings.ensure_state_paths()
 
 
+def _latest_payload() -> dict | None:
+    return read_json(settings.latest_json_file)
+
+
+def _latest_template_context() -> dict | None:
+    payload = _latest_payload()
+    if not payload:
+        return None
+    context = payload.get("template_context")
+    if isinstance(context, dict):
+        return context
+    return None
+
+
 @app.get("/health")
 def health() -> tuple[dict, int]:
-    payload = read_json(settings.latest_json_file)
+    payload = _latest_payload()
     return (
         {
             "status": "ok",
@@ -30,10 +51,101 @@ def health() -> tuple[dict, int]:
 
 @app.get("/latest")
 def latest() -> tuple[dict, int]:
-    payload = read_json(settings.latest_json_file)
+    payload = _latest_payload()
     if payload is None:
         return {"error": "No activity payload has been written yet."}, 404
     return payload, 200
+
+
+@app.get("/editor/template")
+def editor_template_get() -> tuple[dict, int]:
+    active = get_active_template(settings)
+    return {
+        "status": "ok",
+        "template": active["template"],
+        "is_custom": active["is_custom"],
+        "template_path": active["path"],
+    }, 200
+
+
+@app.put("/editor/template")
+def editor_template_put() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    template_text = body.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        return {"status": "error", "error": "template must be a non-empty string."}, 400
+
+    context = _latest_template_context()
+    validation = validate_template_text(template_text, context)
+    if not validation["valid"]:
+        return {"status": "error", "validation": validation}, 400
+
+    path = save_active_template(settings, template_text)
+    return {
+        "status": "ok",
+        "template_path": str(path),
+        "validation": validation,
+    }, 200
+
+
+@app.post("/editor/validate")
+def editor_validate() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    template_text = body.get("template")
+    if template_text is None:
+        template_text = get_active_template(settings)["template"]
+    if not isinstance(template_text, str):
+        return {"status": "error", "error": "template must be a string."}, 400
+
+    context = _latest_template_context()
+    validation = validate_template_text(template_text, context)
+    return {
+        "status": "ok" if validation["valid"] else "error",
+        "has_context": context is not None,
+        "validation": validation,
+    }, 200 if validation["valid"] else 400
+
+
+@app.post("/editor/preview")
+def editor_preview() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    template_text = body.get("template")
+    if template_text is None:
+        template_text = get_active_template(settings)["template"]
+    if not isinstance(template_text, str):
+        return {"status": "error", "error": "template must be a string."}, 400
+
+    context = _latest_template_context()
+    if context is None:
+        return {
+            "status": "error",
+            "error": "No template context is available yet. Run one update cycle first.",
+        }, 404
+
+    result = render_template_text(template_text, context)
+    if not result["ok"]:
+        return {"status": "error", "error": result["error"]}, 400
+    return {
+        "status": "ok",
+        "preview": result["description"],
+        "length": len(result["description"]),
+    }, 200
+
+
+@app.get("/editor/schema")
+def editor_schema() -> tuple[dict, int]:
+    context = _latest_template_context()
+    if context is None:
+        return {
+            "status": "ok",
+            "has_context": False,
+            "schema": build_context_schema({}),
+        }, 200
+    return {
+        "status": "ok",
+        "has_context": True,
+        "schema": build_context_schema(context),
+    }, 200
 
 
 @app.post("/rerun/latest")
