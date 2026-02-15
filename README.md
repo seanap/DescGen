@@ -83,13 +83,19 @@ These are computed with the live algorithm in this repo.
 
 | Scenario | Temp (F) | Dew Point (F) | Humidity (%) | Wind (mph) | Conditions | MI | Bucket |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
-| Crisp ideal morning | 55 | 45 | 50 | 5 | Partly cloudy, dry | 100.0 | 😀 Perfect |
-| Cool windy and dry | 28 | 10 | 40 | 16 | Overcast | 31.4 | 🥶 Oppressively cold |
-| Cold snow run | 34 | 30 | 90 | 8 | Moderate snow, 0.12 in/hr | 33.6 | 🥶 Oppressively cold |
-| Warm with light drizzle | 72 | 64 | 84 | 4 | Light drizzle, 0.02 in/hr | 102.3 | 😀 Perfect |
-| Hot but breezy | 86 | 68 | 62 | 5 | Sunny breaks | 133.4 | 😕 Mild uncomfortable |
-| Hot humid, no breeze | 92 | 75 | 78 | 1 | Sunny, stagnant air | 202.5 | ☠️⚠️ High risk |
-| Extreme heat wave | 102 | 80 | 75 | 2 | Full sun, humid | 240.0 | ☠️⚠️ High risk |
+| High risk cold example | 23.0 | -6.6 | 27 | 14.5 | Clear, very dry, windy | 12.0 | ☠️⚠️ High risk (cold) |
+| Miserable cold example | 27.0 | 2.1 | 33 | 17.7 | Clear, dry, windy | 25.0 | 😡 Miserable (cold) |
+| Oppressively cold example | 28.3 | 25.7 | 94 | 17.1 | Partly cloudy, damp, windy | 35.0 | 🥶 Oppressively cold |
+| Very uncomfortable cold example | 32.4 | 6.0 | 31 | 16.8 | Clear, dry wind chill | 45.0 | 😰 Very uncomfortable (cold) |
+| Moderate uncomfortable cold example | 26.9 | 0.8 | 35 | 0.9 | Overcast, cold/dry air | 55.0 | 😓 Moderate uncomfortable (cold) |
+| Mild uncomfortable cold example | 37.1 | 25.9 | 65 | 13.5 | Partly cloudy, breezy | 65.0 | 😕 Mild uncomfortable (cold) |
+| Perfect example | 63.0 | 49.6 | 61 | 11.9 | Clear, comfortable | 100.0 | 😀 Perfect |
+| Mild uncomfortable heat example | 83.8 | 74.8 | 74 | 2.3 | Partly cloudy, muggy | 135.0 | 😕 Mild uncomfortable |
+| Moderate uncomfortable heat example | 83.6 | 80.7 | 87 | 2.3 | Overcast, very humid | 145.0 | 😓 Moderate uncomfortable |
+| Very uncomfortable heat example | 92.8 | 73.1 | 51 | 1.8 | Clear, hot, low breeze | 155.0 | 😰 Very uncomfortable |
+| Oppressive heat example | 93.2 | 76.9 | 58 | 16.9 | Partly cloudy, oppressive heat load | 165.0 | 🥵 Oppressive |
+| Miserable heat example | 89.7 | 81.9 | 76 | 6.5 | Partly cloudy, tropical humidity | 175.0 | 😡 Miserable |
+| High risk heat example | 89.5 | 82.5 | 83 | 2.1 | Partly cloudy, no cooling | 190.0 | ☠️⚠️ High risk |
 
 ## Emoji + Data Source Legend
 - `🏆`, `🏅`, `🏔️` totals (rolling periods): Smashrun
