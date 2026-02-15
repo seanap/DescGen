@@ -101,11 +101,47 @@ const SECTION_LIBRARY = [
   },
 ];
 
+const FALLBACK_SNIPPETS = [
+  {
+    id: "if-block",
+    category: "logic",
+    label: "If Present",
+    template: "{% if value %}\\n{{ value }}\\n{% endif %}",
+    description: "Render only if value is present.",
+  },
+  {
+    id: "for-loop",
+    category: "logic",
+    label: "For Loop",
+    template: "{% for item in items %}\\n- {{ item }}\\n{% endfor %}",
+    description: "Loop through a list.",
+  },
+  {
+    id: "default-filter",
+    category: "filters",
+    label: "Default",
+    template: "{{ value | default('N/A') }}",
+    description: "Fallback value.",
+  },
+  {
+    id: "round-filter",
+    category: "filters",
+    label: "Round",
+    template: "{{ value | round(1) }}",
+    description: "Round to one decimal.",
+  },
+];
+
 const state = {
   templateActive: "",
   templateDefault: "",
   schema: null,
+  schemaSource: null,
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
+  snippets: FALLBACK_SNIPPETS,
+  autoPreview: false,
+  autoPreviewTimer: null,
+  lastPreviewSignature: "",
 };
 
 const elements = {
@@ -117,7 +153,11 @@ const elements = {
   schemaList: document.getElementById("schemaList"),
   schemaMeta: document.getElementById("schemaMeta"),
   schemaSearch: document.getElementById("schemaSearch"),
+  schemaContextMode: document.getElementById("schemaContextMode"),
+  previewContextMode: document.getElementById("previewContextMode"),
   simpleSections: document.getElementById("simpleSections"),
+  snippetList: document.getElementById("snippetList"),
+  autoPreviewToggle: document.getElementById("autoPreviewToggle"),
 };
 
 function setStatus(text, tone = "neutral") {
@@ -126,13 +166,22 @@ function setStatus(text, tone = "neutral") {
 }
 
 async function requestJSON(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      payload: { error: `Network error: ${String(error)}` },
+    };
+  }
 
   const payload = await response.json().catch(() => ({}));
   return { ok: response.ok, status: response.status, payload };
@@ -144,6 +193,18 @@ function getEditorText() {
 
 function setEditorText(templateText) {
   elements.templateEditor.value = templateText || "";
+}
+
+function insertAtCursor(text) {
+  const editor = elements.templateEditor;
+  const start = editor.selectionStart || 0;
+  const end = editor.selectionEnd || 0;
+  const current = editor.value;
+  editor.value = current.slice(0, start) + text + current.slice(end);
+
+  const nextCursor = start + text.length;
+  editor.focus();
+  editor.setSelectionRange(nextCursor, nextCursor);
 }
 
 function updateValidationPane(result, ok) {
@@ -176,6 +237,9 @@ function updateValidationPane(result, ok) {
   if (Array.isArray(validation.undeclared_variables)) {
     lines.push(`Undeclared variables: ${validation.undeclared_variables.join(", ") || "none"}`);
   }
+  if (result.context_source) {
+    lines.push(`Context source: ${result.context_source}`);
+  }
 
   pane.textContent = lines.join("\n");
 }
@@ -185,7 +249,7 @@ function renderSchemaCatalog(filterText = "") {
   elements.schemaList.innerHTML = "";
 
   if (!schema || !Array.isArray(schema.groups) || schema.groups.length === 0) {
-    elements.schemaMeta.textContent = "No schema context yet. Run /rerun/latest once.";
+    elements.schemaMeta.textContent = "No schema fields available.";
     return;
   }
 
@@ -215,6 +279,7 @@ function renderSchemaCatalog(filterText = "") {
       const row = document.createElement("div");
       row.className = "field";
 
+      const body = document.createElement("div");
       const key = document.createElement("div");
       key.className = "field-key";
       key.textContent = `{{ ${field.path} }}`;
@@ -223,15 +288,53 @@ function renderSchemaCatalog(filterText = "") {
       type.className = "field-type";
       type.textContent = `${field.type} | sample: ${JSON.stringify(field.sample)}`;
 
-      row.appendChild(key);
-      row.appendChild(type);
+      body.appendChild(key);
+      body.appendChild(type);
+
+      const insertBtn = document.createElement("button");
+      insertBtn.className = "field-insert";
+      insertBtn.textContent = "Insert";
+      insertBtn.title = "Insert into advanced template";
+      insertBtn.addEventListener("click", () => {
+        insertAtCursor(`{{ ${field.path} }}`);
+        setStatus(`Inserted ${field.path}`, "ok");
+        queueAutoPreview();
+      });
+
+      row.appendChild(body);
+      row.appendChild(insertBtn);
+      row.addEventListener("dblclick", () => {
+        insertAtCursor(`{{ ${field.path} }}`);
+        setStatus(`Inserted ${field.path}`, "ok");
+        queueAutoPreview();
+      });
+
       card.appendChild(row);
     }
 
     elements.schemaList.appendChild(card);
   }
 
-  elements.schemaMeta.textContent = `${visibleFields} fields shown`;
+  const sourceText = state.schemaSource ? ` | source: ${state.schemaSource}` : "";
+  elements.schemaMeta.textContent = `${visibleFields} fields shown${sourceText}`;
+}
+
+function renderSnippets() {
+  elements.snippetList.innerHTML = "";
+
+  for (const snippet of state.snippets) {
+    const btn = document.createElement("button");
+    btn.className = "snippet-btn";
+    btn.type = "button";
+    btn.title = `${snippet.category || "snippet"}: ${snippet.description || ""}`;
+    btn.textContent = snippet.label;
+    btn.addEventListener("click", () => {
+      insertAtCursor(snippet.template || "");
+      setStatus(`Inserted snippet: ${snippet.label}`, "ok");
+      queueAutoPreview();
+    });
+    elements.snippetList.appendChild(btn);
+  }
 }
 
 function moveSection(fromIndex, toIndex) {
@@ -299,6 +402,14 @@ function buildTemplateFromSimple() {
     .trim();
 }
 
+function formatTemplateText(input) {
+  return String(input || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.tab === name);
@@ -308,59 +419,111 @@ function switchTab(name) {
   });
 }
 
+async function loadSchema(mode) {
+  const query = new URLSearchParams({ context_mode: mode || "latest_or_sample" });
+  const res = await requestJSON(`/editor/schema?${query.toString()}`);
+  if (!res.ok) {
+    setStatus("Failed to load data catalog", "error");
+    return;
+  }
+
+  state.schema = res.payload.schema || null;
+  state.schemaSource = res.payload.context_source || null;
+  renderSchemaCatalog(elements.schemaSearch.value || "");
+}
+
 async function loadEditorBootstrap() {
   setStatus("Loading editor data...");
-  const [activeRes, defaultRes, schemaRes] = await Promise.all([
+
+  const schemaMode = elements.schemaContextMode.value || "latest_or_sample";
+  const [activeRes, defaultRes, schemaRes, snippetRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
-    requestJSON("/editor/schema"),
+    requestJSON(`/editor/schema?context_mode=${encodeURIComponent(schemaMode)}`),
+    requestJSON("/editor/snippets"),
   ]);
 
-  if (!activeRes.ok || !defaultRes.ok || !schemaRes.ok) {
-    setStatus("Failed to load editor data", "error");
+  if (!activeRes.ok || !defaultRes.ok) {
+    setStatus("Failed to load templates", "error");
     return;
   }
 
   state.templateActive = activeRes.payload.template || "";
   state.templateDefault = defaultRes.payload.template || "";
-  state.schema = schemaRes.payload.schema || null;
 
   setEditorText(state.templateActive);
+
+  if (schemaRes.ok) {
+    state.schema = schemaRes.payload.schema || null;
+    state.schemaSource = schemaRes.payload.context_source || null;
+  }
+
+  if (snippetRes.ok && Array.isArray(snippetRes.payload.snippets)) {
+    state.snippets = snippetRes.payload.snippets;
+  }
+
   renderSchemaCatalog("");
   renderSimpleSections();
+  renderSnippets();
 
   const isCustom = Boolean(activeRes.payload.is_custom);
-  setStatus(isCustom ? "Loaded custom template" : "Loaded default template", "ok");
+  const sourceLabel = state.schemaSource ? ` | schema: ${state.schemaSource}` : "";
+  setStatus((isCustom ? "Loaded custom template" : "Loaded default template") + sourceLabel, "ok");
 }
 
 async function validateTemplate() {
   const template = getEditorText();
+  const contextMode = elements.previewContextMode.value || "latest_or_sample";
   const res = await requestJSON("/editor/validate", {
     method: "POST",
-    body: JSON.stringify({ template }),
+    body: JSON.stringify({ template, context_mode: contextMode }),
   });
 
   updateValidationPane(res.payload, res.ok);
   setStatus(res.ok ? "Validation passed" : "Validation failed", res.ok ? "ok" : "error");
 }
 
-async function previewTemplate() {
+async function previewTemplate(options = {}) {
+  const { force = false } = options;
   const template = getEditorText();
+  const contextMode = elements.previewContextMode.value || "latest_or_sample";
+  const signature = `${contextMode}::${template}`;
+
+  if (!force && state.lastPreviewSignature === signature) {
+    return;
+  }
+
   const res = await requestJSON("/editor/preview", {
     method: "POST",
-    body: JSON.stringify({ template }),
+    body: JSON.stringify({ template, context_mode: contextMode }),
   });
 
   if (!res.ok) {
     elements.previewMeta.textContent = res.payload.error || "Preview failed";
-    elements.previewText.textContent = "";
-    setStatus("Preview failed", "error");
+    if (force) {
+      elements.previewText.textContent = "";
+      setStatus("Preview failed", "error");
+    }
     return;
   }
 
+  state.lastPreviewSignature = signature;
   elements.previewText.textContent = res.payload.preview || "";
-  elements.previewMeta.textContent = `Rendered length: ${res.payload.length} chars`;
+  const source = res.payload.context_source || "latest";
+  elements.previewMeta.textContent = `Rendered length: ${res.payload.length} chars | context: ${source}`;
   setStatus("Preview updated", "ok");
+}
+
+function queueAutoPreview() {
+  if (!state.autoPreview) {
+    return;
+  }
+  if (state.autoPreviewTimer) {
+    clearTimeout(state.autoPreviewTimer);
+  }
+  state.autoPreviewTimer = setTimeout(() => {
+    previewTemplate({ force: false });
+  }, 650);
 }
 
 async function saveTemplate() {
@@ -377,6 +540,7 @@ async function saveTemplate() {
   }
 
   updateValidationPane(res.payload, true);
+  state.templateActive = template;
   setStatus("Template saved", "ok");
 }
 
@@ -403,15 +567,23 @@ function bindUI() {
   document.getElementById("btnLoadActive").addEventListener("click", () => {
     setEditorText(state.templateActive);
     setStatus("Loaded active template", "ok");
+    queueAutoPreview();
   });
 
   document.getElementById("btnLoadDefault").addEventListener("click", () => {
     setEditorText(state.templateDefault);
     setStatus("Loaded default template", "ok");
+    queueAutoPreview();
+  });
+
+  document.getElementById("btnFormatTemplate").addEventListener("click", () => {
+    setEditorText(formatTemplateText(getEditorText()));
+    setStatus("Template formatted", "ok");
+    queueAutoPreview();
   });
 
   document.getElementById("btnValidate").addEventListener("click", validateTemplate);
-  document.getElementById("btnPreview").addEventListener("click", previewTemplate);
+  document.getElementById("btnPreview").addEventListener("click", () => previewTemplate({ force: true }));
   document.getElementById("btnSave").addEventListener("click", saveTemplate);
   document.getElementById("btnCopyPreview").addEventListener("click", copyPreview);
 
@@ -419,6 +591,7 @@ function bindUI() {
     setEditorText(buildTemplateFromSimple());
     switchTab("advanced");
     setStatus("Builder output applied to advanced editor", "ok");
+    queueAutoPreview();
   });
 
   document.getElementById("btnSimpleReset").addEventListener("click", () => {
@@ -429,6 +602,35 @@ function bindUI() {
 
   elements.schemaSearch.addEventListener("input", (event) => {
     renderSchemaCatalog(event.target.value || "");
+  });
+
+  elements.schemaContextMode.addEventListener("change", async () => {
+    await loadSchema(elements.schemaContextMode.value || "latest_or_sample");
+    setStatus("Catalog source changed", "ok");
+  });
+
+  elements.previewContextMode.addEventListener("change", () => {
+    state.lastPreviewSignature = "";
+    queueAutoPreview();
+  });
+
+  elements.autoPreviewToggle.addEventListener("change", () => {
+    state.autoPreview = elements.autoPreviewToggle.checked;
+    setStatus(state.autoPreview ? "Auto-preview enabled" : "Auto-preview disabled", "ok");
+    if (state.autoPreview) {
+      queueAutoPreview();
+    }
+  });
+
+  elements.templateEditor.addEventListener("input", () => {
+    queueAutoPreview();
+  });
+
+  elements.templateEditor.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      previewTemplate({ force: true });
+    }
   });
 }
 

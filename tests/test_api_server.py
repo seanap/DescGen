@@ -42,6 +42,28 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
 
+    def test_editor_schema_sample_context_endpoint(self) -> None:
+        response = self.client.get("/editor/schema?context_mode=sample")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["has_context"])
+        self.assertEqual(payload["context_source"], "sample")
+
+    def test_editor_snippets_endpoint(self) -> None:
+        response = self.client.get("/editor/snippets")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("snippets", payload)
+
+    def test_editor_sample_context_endpoint(self) -> None:
+        response = self.client.get("/editor/context/sample")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("context", payload)
+
     def test_editor_page_endpoint(self) -> None:
         response = self.client.get("/editor")
         self.assertEqual(response.status_code, 200)
@@ -60,6 +82,28 @@ class TestApiServer(unittest.TestCase):
         )
         # Can be 200 if context exists, 400 if strict validation fails due missing context vars.
         self.assertIn(response.status_code, {200, 400})
+
+    def test_editor_preview_sample_context(self) -> None:
+        response = self.client.post(
+            "/editor/preview",
+            json={
+                "context_mode": "sample",
+                "template": "Miles {{ activity.distance_miles }}",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["context_source"], "sample")
+
+    def test_editor_preview_invalid_context_mode(self) -> None:
+        response = self.client.post(
+            "/editor/preview",
+            json={"context_mode": "nope", "template": "{{ streak_days }}"},
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "error")
 
 
 if __name__ == "__main__":

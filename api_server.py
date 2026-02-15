@@ -6,8 +6,10 @@ from flask import Flask, render_template, request
 
 from description_template import (
     build_context_schema,
+    get_editor_snippets,
     get_default_template,
     get_active_template,
+    get_sample_template_context,
     render_template_text,
     save_active_template,
     validate_template_text,
@@ -35,6 +37,25 @@ def _latest_template_context() -> dict | None:
     if isinstance(context, dict):
         return context
     return None
+
+
+def _resolve_context_mode(raw_mode: str | None) -> str:
+    mode = (raw_mode or "latest").strip().lower()
+    if mode not in {"latest", "sample", "latest_or_sample"}:
+        raise ValueError("context_mode must be one of: latest, sample, latest_or_sample.")
+    return mode
+
+
+def _context_for_mode(mode: str) -> tuple[dict | None, str]:
+    if mode == "latest":
+        return _latest_template_context(), "latest"
+    if mode == "sample":
+        return get_sample_template_context(), "sample"
+
+    latest = _latest_template_context()
+    if latest is not None:
+        return latest, "latest"
+    return get_sample_template_context(), "sample"
 
 
 @app.get("/health")
@@ -82,6 +103,25 @@ def editor_template_default_get() -> tuple[dict, int]:
     }, 200
 
 
+@app.get("/editor/snippets")
+def editor_snippets_get() -> tuple[dict, int]:
+    return {
+        "status": "ok",
+        "snippets": get_editor_snippets(),
+        "context_modes": ["latest", "sample", "latest_or_sample"],
+    }, 200
+
+
+@app.get("/editor/context/sample")
+def editor_sample_context_get() -> tuple[dict, int]:
+    context = get_sample_template_context()
+    return {
+        "status": "ok",
+        "context": context,
+        "schema": build_context_schema(context),
+    }, 200
+
+
 @app.put("/editor/template")
 def editor_template_put() -> tuple[dict, int]:
     body = request.get_json(silent=True) or {}
@@ -111,11 +151,17 @@ def editor_validate() -> tuple[dict, int]:
     if not isinstance(template_text, str):
         return {"status": "error", "error": "template must be a string."}, 400
 
-    context = _latest_template_context()
+    try:
+        context_mode = _resolve_context_mode(body.get("context_mode"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(context_mode)
     validation = validate_template_text(template_text, context)
     return {
         "status": "ok" if validation["valid"] else "error",
         "has_context": context is not None,
+        "context_source": context_source if context is not None else None,
         "validation": validation,
     }, 200 if validation["valid"] else 400
 
@@ -129,7 +175,12 @@ def editor_preview() -> tuple[dict, int]:
     if not isinstance(template_text, str):
         return {"status": "error", "error": "template must be a string."}, 400
 
-    context = _latest_template_context()
+    try:
+        context_mode = _resolve_context_mode(body.get("context_mode"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(context_mode)
     if context is None:
         return {
             "status": "error",
@@ -141,6 +192,7 @@ def editor_preview() -> tuple[dict, int]:
         return {"status": "error", "error": result["error"]}, 400
     return {
         "status": "ok",
+        "context_source": context_source,
         "preview": result["description"],
         "length": len(result["description"]),
     }, 200
@@ -148,16 +200,24 @@ def editor_preview() -> tuple[dict, int]:
 
 @app.get("/editor/schema")
 def editor_schema() -> tuple[dict, int]:
-    context = _latest_template_context()
+    raw_mode = request.args.get("context_mode")
+    try:
+        context_mode = _resolve_context_mode(raw_mode)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(context_mode)
     if context is None:
         return {
             "status": "ok",
             "has_context": False,
+            "context_source": None,
             "schema": build_context_schema({}),
         }, 200
     return {
         "status": "ok",
         "has_context": True,
+        "context_source": context_source,
         "schema": build_context_schema(context),
     }, 200
 

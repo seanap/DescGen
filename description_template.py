@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,144 @@ DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
 🏃 {{ periods.year.gap }} | 🗺️ {{ periods.year.distance_miles }} | 🏔️ {{ periods.year.elevation_feet }}' | 🕓 {{ periods.year.duration }} | 🍺 {{ periods.year.beers }}"""
 
 
+EDITOR_SNIPPETS: list[dict[str, str]] = [
+    {
+        "id": "if-block",
+        "category": "logic",
+        "label": "If Present Block",
+        "template": "{% if value %}\n{{ value }}\n{% endif %}",
+        "description": "Render a line only when a value exists.",
+    },
+    {
+        "id": "for-loop",
+        "category": "logic",
+        "label": "Simple For Loop",
+        "template": "{% for item in items %}\n- {{ item }}\n{% endfor %}",
+        "description": "Loop over a list.",
+    },
+    {
+        "id": "default-filter",
+        "category": "filters",
+        "label": "Default Fallback",
+        "template": "{{ value | default('N/A') }}",
+        "description": "Provide a fallback when a value is missing.",
+    },
+    {
+        "id": "round-filter",
+        "category": "filters",
+        "label": "Round Number",
+        "template": "{{ value | round(1) }}",
+        "description": "Round to one decimal place.",
+    },
+    {
+        "id": "join-filter",
+        "category": "filters",
+        "label": "Join List",
+        "template": "{{ items | join(', ') }}",
+        "description": "Join list items into one line.",
+    },
+    {
+        "id": "line-break",
+        "category": "layout",
+        "label": "Blank Line",
+        "template": "\n",
+        "description": "Insert an empty line.",
+    },
+]
+
+
+SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
+    "streak_days": 412,
+    "notables": [
+        "Longest run in 90 days",
+        "2nd best GAP pace this month",
+    ],
+    "achievements": [],
+    "crono": {
+        "line": "🔥 7d avg daily Energy Balance:-1131 kcal (deficit) | 🥩:182g | 🍞:216g",
+    },
+    "weather": {
+        "misery_index": 104.3,
+        "misery_description": "😀 Perfect",
+        "aqi": 22,
+        "aqi_description": " Good",
+        "details": {
+            "temperature_f": 63.0,
+            "dew_point_f": 49.6,
+            "humidity_percent": 61,
+            "wind_mph": 11.9,
+            "condition_text": "Clear",
+        },
+    },
+    "training": {
+        "readiness_score": 83,
+        "readiness_emoji": "🟢",
+        "resting_hr": 47,
+        "sleep_score": 86,
+        "status_emoji": "🟢",
+        "status_key": "Productive",
+        "aerobic_te": 4.1,
+        "anaerobic_te": 0.1,
+        "te_label": "Tempo",
+        "chronic_load": 72,
+        "acute_load": 78,
+        "load_ratio": 1.1,
+        "acwr_status": "Optimal",
+        "acwr_status_emoji": "🟢",
+        "vo2": 57.2,
+        "endurance_score": 7312,
+        "hill_score": 102,
+    },
+    "activity": {
+        "gap_pace": "7:18/mi",
+        "distance_miles": "8.02",
+        "elevation_feet": 612,
+        "time": "58:39",
+        "beers": "5.1",
+        "cadence_spm": 176,
+        "work": "914 kJ",
+        "norm_power": "271 W",
+        "average_hr": 149,
+        "efficiency": "1.03",
+    },
+    "intervals": {
+        "summary": "CTL 72 | ATL 78 | Form -6",
+    },
+    "periods": {
+        "week": {
+            "gap": "7:44/mi",
+            "distance_miles": "41.6",
+            "elevation_feet": 3904,
+            "duration": "5:21:08",
+            "beers": "27",
+        },
+        "month": {
+            "gap": "7:58/mi",
+            "distance_miles": "156",
+            "elevation_feet": 14902,
+            "duration": "20:04:51",
+            "beers": "101",
+        },
+        "year": {
+            "gap": "8:05/mi",
+            "distance_miles": "284",
+            "elevation_feet": 24117,
+            "duration": "36:40:27",
+            "beers": "184",
+        },
+    },
+    "raw": {
+        "activity": {"id": 1234567890},
+        "training": {},
+        "intervals": {},
+        "week": {},
+        "month": {},
+        "year": {},
+        "weather": {},
+    },
+}
+
+
 def _template_environment() -> SandboxedEnvironment:
     return SandboxedEnvironment(
         autoescape=False,
@@ -52,6 +191,14 @@ def _normalize_rendered_text(rendered: str) -> str:
 
 def get_default_template() -> str:
     return DEFAULT_DESCRIPTION_TEMPLATE
+
+
+def get_editor_snippets() -> list[dict[str, str]]:
+    return deepcopy(EDITOR_SNIPPETS)
+
+
+def get_sample_template_context() -> dict[str, Any]:
+    return deepcopy(SAMPLE_TEMPLATE_CONTEXT)
 
 
 def _template_path(settings: Settings) -> Path:

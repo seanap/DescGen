@@ -5,8 +5,10 @@ from types import SimpleNamespace
 
 from description_template import (
     build_context_schema,
+    get_editor_snippets,
     get_active_template,
     get_default_template,
+    get_sample_template_context,
     render_template_text,
     render_with_active_template,
     save_active_template,
@@ -138,6 +140,21 @@ class TestDescriptionTemplate(unittest.TestCase):
         schema = build_context_schema(context)
         self.assertEqual(schema["group_count"], 2)
         self.assertGreaterEqual(schema["field_count"], 2)
+
+    def test_sample_context_shape(self) -> None:
+        context = get_sample_template_context()
+        self.assertIn("activity", context)
+        self.assertIn("training", context)
+        self.assertIn("weather", context)
+        self.assertIn("periods", context)
+
+    def test_editor_snippets_shape(self) -> None:
+        snippets = get_editor_snippets()
+        self.assertGreater(len(snippets), 0)
+        first = snippets[0]
+        self.assertIn("id", first)
+        self.assertIn("label", first)
+        self.assertIn("template", first)
 
 
 if __name__ == "__main__":

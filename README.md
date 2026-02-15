@@ -199,24 +199,29 @@ curl http://localhost:1609/latest
 - `POST /rerun/latest` (rerun most recent activity)
 - `POST /rerun/activity/<activity_id>` (rerun specific Strava activity)
 - `POST /rerun` with optional JSON body: `{ "activity_id": 1234567890 }`
-- `GET /editor/schema` (available template data keys from latest run context)
+- `GET /editor/schema?context_mode=latest_or_sample` (available template data keys)
 - `GET /editor/template` (active template, default or custom)
+- `GET /editor/template/default` (factory template)
+- `GET /editor/snippets` (quick insert snippets for the web editor)
+- `GET /editor/context/sample` (sample context payload for testing)
 - `PUT /editor/template` (save custom template)
-- `POST /editor/validate` (validate a template string)
-- `POST /editor/preview` (render preview from latest run context)
+- `POST /editor/validate` (validate a template string; optional `context_mode`)
+- `POST /editor/preview` (render preview; optional `context_mode`)
 
 Editor UI:
-- `GET /editor` (web UI for Simple + Advanced template editing)
+- `GET /editor` (web UI with builder, snippet palette, click-to-insert fields, and preview context switcher)
 
 Examples:
 ```bash
 curl -X POST http://localhost:1609/rerun/latest
 curl -X POST http://localhost:1609/rerun/activity/1234567890
 curl -X POST http://localhost:1609/rerun -H "Content-Type: application/json" -d '{"activity_id":1234567890}'
-curl http://localhost:1609/editor/schema
+curl "http://localhost:1609/editor/schema?context_mode=latest_or_sample"
 curl http://localhost:1609/editor/template
-curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
-curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
+curl http://localhost:1609/editor/snippets
+curl http://localhost:1609/editor/context/sample
+curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"context_mode":"sample","template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
+curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"context_mode":"sample","template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
 open http://localhost:1609/editor
 ```
 

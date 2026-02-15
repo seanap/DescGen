@@ -22,16 +22,27 @@
     <section class="actions card">
       <button id="btnLoadActive" class="btn">Load Active</button>
       <button id="btnLoadDefault" class="btn btn-ghost">Load Default</button>
+      <button id="btnFormatTemplate" class="btn btn-ghost">Format</button>
       <button id="btnValidate" class="btn btn-secondary">Validate</button>
       <button id="btnPreview" class="btn btn-secondary">Preview</button>
       <button id="btnSave" class="btn btn-primary">Save + Publish</button>
       <button id="btnCopyPreview" class="btn btn-ghost">Copy Preview</button>
+      <label class="toggle-inline" for="autoPreviewToggle">
+        <input id="autoPreviewToggle" type="checkbox">
+        Auto-preview
+      </label>
     </section>
 
     <main class="layout">
       <aside class="panel card reveal" style="--delay:0.03s">
         <h2>Available Data</h2>
-        <p class="subtext">Use these keys in Advanced mode.</p>
+        <p class="subtext">Click any field to insert it into the advanced editor.</p>
+        <label class="stack-label" for="schemaContextMode">Catalog Source</label>
+        <select id="schemaContextMode" class="search">
+          <option value="latest_or_sample">Latest or Sample</option>
+          <option value="latest">Latest Only</option>
+          <option value="sample">Sample Only</option>
+        </select>
         <input id="schemaSearch" class="search" type="search" placeholder="Search fields...">
         <div id="schemaMeta" class="meta"></div>
         <div id="schemaList" class="catalog"></div>
@@ -53,8 +64,23 @@
         </div>
 
         <div id="tabAdvanced" class="tabpanel">
+          <div class="advanced-toolbar">
+            <label for="previewContextMode">Preview Context</label>
+            <select id="previewContextMode">
+              <option value="latest_or_sample">Latest or Sample</option>
+              <option value="latest">Latest Only</option>
+              <option value="sample">Sample Only</option>
+            </select>
+          </div>
           <label for="templateEditor">Jinja Template</label>
           <textarea id="templateEditor" spellcheck="false"></textarea>
+          <div class="snippet-shell">
+            <div class="snippet-head">
+              <h3>Snippet Palette</h3>
+              <p class="subtext">Tap to insert starter blocks at your cursor.</p>
+            </div>
+            <div id="snippetList" class="snippets"></div>
+          </div>
           <div id="validationPane" class="validation"></div>
         </div>
       </section>

@@ -126,6 +126,22 @@ h2 {
   flex-wrap: wrap;
 }
 
+.toggle-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 8px 11px;
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.toggle-inline input {
+  margin: 0;
+}
+
 .btn {
   border: 1px solid transparent;
   border-radius: 11px;
@@ -178,6 +194,16 @@ h2 {
   font: inherit;
 }
 
+.stack-label {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
 .meta {
   margin-top: 8px;
   color: var(--muted);
@@ -208,6 +234,10 @@ h2 {
 .field {
   padding: 4px 0;
   border-top: 1px dashed #e2e9e4;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .field:first-of-type {
@@ -222,6 +252,17 @@ h2 {
 .field-type {
   color: var(--muted);
   font-size: 0.73rem;
+}
+
+.field-insert {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fbf8;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 6px 8px;
+  color: var(--secondary);
 }
 
 .tabbar {
@@ -300,6 +341,28 @@ h2 {
   flex-wrap: wrap;
 }
 
+.advanced-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.advanced-toolbar label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.advanced-toolbar select {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 0.84rem;
+  background: #fff;
+}
+
 label[for="templateEditor"] {
   display: block;
   margin-bottom: 6px;
@@ -322,6 +385,42 @@ label[for="templateEditor"] {
   resize: vertical;
   background: #ffffff;
   color: #1a2721;
+}
+
+.snippet-shell {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #f9fcfa;
+}
+
+.snippet-head h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.snippets {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.snippet-btn {
+  border: 1px solid color-mix(in srgb, var(--secondary) 30%, var(--line));
+  border-radius: 999px;
+  background: #fff;
+  color: var(--secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.snippet-btn small {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .validation {
@@ -389,5 +488,10 @@ label[for="templateEditor"] {
   #templateEditor {
     max-height: 360px;
     min-height: 260px;
+  }
+
+  .advanced-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
