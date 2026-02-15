@@ -36,7 +36,9 @@ Turn every Strava activity into a rich, auto-generated training report.
 ```
 
 ## Misery Index v2 (Mirrored Scale)
-`MI = 100 + hot_penalties - cold_penalties`
+`MI = 100 + hot_penalties - cold_penalties` (display-bounded to `[-40, 240]`)
+
+The model is intentionally smooth (no abrupt jumps at exact temp/wind/rain thresholds).
 
 - `<20`: `☠️⚠️ High risk (cold)`
 - `20-30`: `😡 Miserable (cold)`
@@ -65,7 +67,7 @@ Turn every Strava activity into a rich, auto-generated training report.
 - Wind behavior:
   - Stagnant air on hot/humid days increases MI.
   - Cooling breeze can slightly reduce hot stress.
-  - Strong wind in cold increases cold penalty.
+  - Severe wind in cold adds extra exposure penalty.
 - Precipitation and snow:
   - Light drizzle is minor.
   - Heavy rain/downpour adds significant discomfort.
@@ -73,6 +75,8 @@ Turn every Strava activity into a rich, auto-generated training report.
 - Cloud and sun load:
   - Full sun can raise heat burden.
   - Heavy overcast can add slight cold penalty in cold weather.
+- Transparency:
+  - `/latest` includes `weather.misery_components` with per-factor contributions.
 
 ### Example Scenarios
 These are computed with the live algorithm in this repo.
@@ -80,11 +84,12 @@ These are computed with the live algorithm in this repo.
 | Scenario | Temp (F) | Dew Point (F) | Humidity (%) | Wind (mph) | Conditions | MI | Bucket |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
 | Crisp ideal morning | 55 | 45 | 50 | 5 | Partly cloudy, dry | 100.0 | 😀 Perfect |
-| Cool windy and dry | 28 | 10 | 40 | 16 | Overcast | 39.1 | 🥶 Oppressively cold |
-| Cold snow run | 34 | 30 | 90 | 8 | Moderate snow, 0.12 in/hr | 24.9 | 😡 Miserable (cold) |
-| Warm with light drizzle | 72 | 64 | 84 | 4 | Light drizzle, 0.02 in/hr | 101.0 | 😀 Perfect |
-| Hot humid, no breeze | 92 | 75 | 78 | 1 | Sunny, stagnant air | 171.2 | 😡 Miserable |
-| Extreme heat wave | 102 | 80 | 75 | 2 | Full sun, humid | 216.1 | ☠️⚠️ High risk |
+| Cool windy and dry | 28 | 10 | 40 | 16 | Overcast | 31.4 | 🥶 Oppressively cold |
+| Cold snow run | 34 | 30 | 90 | 8 | Moderate snow, 0.12 in/hr | 33.6 | 🥶 Oppressively cold |
+| Warm with light drizzle | 72 | 64 | 84 | 4 | Light drizzle, 0.02 in/hr | 102.3 | 😀 Perfect |
+| Hot but breezy | 86 | 68 | 62 | 5 | Sunny breaks | 133.4 | 😕 Mild uncomfortable |
+| Hot humid, no breeze | 92 | 75 | 78 | 1 | Sunny, stagnant air | 202.5 | ☠️⚠️ High risk |
+| Extreme heat wave | 102 | 80 | 75 | 2 | Full sun, humid | 240.0 | ☠️⚠️ High risk |
 
 ## Emoji + Data Source Legend
 - `🏆`, `🏅`, `🏔️` totals (rolling periods): Smashrun
