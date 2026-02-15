@@ -44,6 +44,7 @@ def _default_metrics() -> dict[str, Any]:
         "resting_hr": "N/A",
         "sleep_score": "N/A",
         "fitness_age": "N/A",
+        "avg_grade_adjusted_speed": "N/A",
     }
 
 
@@ -126,6 +127,11 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
     metrics["aerobic_training_effect"] = round(float(aerobic_te), 1) if isinstance(aerobic_te, (int, float)) else "N/A"
     metrics["anaerobic_training_effect"] = round(float(anaerobic_te), 1) if isinstance(anaerobic_te, (int, float)) else "N/A"
     metrics["training_effect_label"] = effect_label
+    metrics["avg_grade_adjusted_speed"] = (
+        float(last_activity.get("avgGradeAdjustedSpeed"))
+        if isinstance(last_activity.get("avgGradeAdjustedSpeed"), (int, float))
+        else "N/A"
+    )
 
     try:
         resting_hr_data = client.get_rhr_day(start_date)

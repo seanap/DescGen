@@ -17,8 +17,8 @@ from stat_modules.misery_index import (
 )
 from stat_modules.smashrun import (
     aggregate_elevation_totals,
+    get_activity_elevation_feet,
     get_activities as get_smashrun_activities,
-    get_latest_elevation_feet,
     get_longest_streak,
     get_notables,
 )
@@ -58,6 +58,7 @@ def _default_garmin_metrics() -> dict[str, Any]:
         "resting_hr": "N/A",
         "sleep_score": "N/A",
         "fitness_age": "N/A",
+        "avg_grade_adjusted_speed": "N/A",
     }
 
 
@@ -102,18 +103,28 @@ def _build_treadmill_payload(activity: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _get_garmin_metrics(settings: Settings) -> dict[str, Any]:
+def _get_garmin_client(settings: Settings) -> Any | None:
     if not settings.enable_garmin:
-        return _default_garmin_metrics()
+        return None
     if not settings.garmin_email or not settings.garmin_password:
         logger.warning("Garmin is enabled but credentials are missing. Using N/A values.")
-        return _default_garmin_metrics()
+        return None
 
     try:
         from garminconnect import Garmin
 
         client = Garmin(settings.garmin_email, settings.garmin_password)
         client.login()
+        return client
+    except Exception as exc:
+        logger.error("Garmin login failed: %s", exc)
+        return None
+
+
+def _get_garmin_metrics(client: Any | None) -> dict[str, Any]:
+    if client is None:
+        return _default_garmin_metrics()
+    try:
         return fetch_training_status_and_scores(client)
     except Exception as exc:
         logger.error("Garmin data fetch failed: %s", exc)
@@ -167,6 +178,14 @@ def _build_description(
     beers = beers_earned.calculate_beers(detailed_activity)
 
     gap_speed = get_gap_speed_mps(detailed_activity)
+    if gap_speed is None:
+        garmin_gap_speed = training.get("avg_grade_adjusted_speed")
+        if isinstance(garmin_gap_speed, (int, float)) and garmin_gap_speed > 0:
+            gap_speed = float(garmin_gap_speed)
+    if gap_speed is None:
+        average_speed = detailed_activity.get("average_speed")
+        if isinstance(average_speed, (int, float)) and average_speed > 0:
+            gap_speed = float(average_speed)
     gap_pace = mps_to_pace(gap_speed)
 
     elevation_feet = latest_elevation_feet
@@ -489,7 +508,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
 
     if settings.enable_smashrun and settings.smashrun_access_token:
         smashrun_activities = get_smashrun_activities(settings.smashrun_access_token)
-        latest_elevation_feet = get_latest_elevation_feet(smashrun_activities)
+        latest_elevation_feet = get_activity_elevation_feet(smashrun_activities, detailed_activity)
         smashrun_elevation_totals = aggregate_elevation_totals(
             smashrun_activities,
             now_utc,
@@ -507,14 +526,21 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         else:
             logger.info("Skipping Smashrun notables because selected activity is not latest.")
 
+    garmin_client = _get_garmin_client(settings)
+    training = _get_garmin_metrics(garmin_client)
+    garmin_period_fallback = week_stats.get_garmin_period_fallback(
+        garmin_client,
+        now_utc=now_utc,
+        timezone_name=settings.timezone,
+    )
+
     period_stats = week_stats.get_period_stats(
         strava_activities,
         smashrun_elevation_totals,
         now_utc,
         timezone_name=settings.timezone,
+        garmin_period_fallback=garmin_period_fallback,
     )
-
-    training = _get_garmin_metrics(settings)
 
     intervals_payload = None
     if settings.enable_intervals:
