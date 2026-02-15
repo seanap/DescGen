@@ -279,16 +279,16 @@ def get_misery_index_description(misery_index: float) -> str:
     if 70 <= misery_index < 130:
         return "😀 Perfect"
     if 130 <= misery_index < 140:
-        return "😅 Mild"
-    if 140 <= misery_index < 145:
-        return "😓 Moderate"
-    if 145 <= misery_index < 150:
-        return "😰 Very"
-    if 150 <= misery_index < 155:
+        return "😕 Mild uncomfortable"
+    if 140 <= misery_index < 150:
+        return "😓 Moderate uncomfortable"
+    if 150 <= misery_index < 160:
+        return "😰 Very uncomfortable"
+    if 160 <= misery_index < 170:
         return "🥵 Oppressive"
-    if 155 <= misery_index < 160:
+    if 170 <= misery_index < 180:
         return "😡 Miserable"
-    if misery_index >= 160:
+    if misery_index >= 180:
         return "☠️⚠️ High risk"
     return "😀 Perfect"
 

@@ -13,8 +13,12 @@ class TestMiseryIndex(unittest.TestCase):
         self.assertEqual(get_misery_index_description(35), "🥶 Oppressively cold")
         self.assertEqual(get_misery_index_description(65), "😕 Mild uncomfortable (cold)")
         self.assertEqual(get_misery_index_description(95), "😀 Perfect")
-        self.assertEqual(get_misery_index_description(135), "😅 Mild")
-        self.assertEqual(get_misery_index_description(170), "☠️⚠️ High risk")
+        self.assertEqual(get_misery_index_description(135), "😕 Mild uncomfortable")
+        self.assertEqual(get_misery_index_description(145), "😓 Moderate uncomfortable")
+        self.assertEqual(get_misery_index_description(155), "😰 Very uncomfortable")
+        self.assertEqual(get_misery_index_description(165), "🥵 Oppressive")
+        self.assertEqual(get_misery_index_description(175), "😡 Miserable")
+        self.assertEqual(get_misery_index_description(185), "☠️⚠️ High risk")
 
     def test_cold_dry_windy_is_low_score(self) -> None:
         score = calculate_misery_index(
