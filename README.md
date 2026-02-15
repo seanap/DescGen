@@ -35,6 +35,57 @@ Turn every Strava activity into a rich, auto-generated training report.
 🏃 8:05/mi | 🗺️ 284 | 🏔️ 24,117' | 🕓 36:40:27 | 🍺 184
 ```
 
+## Misery Index v2 (Mirrored Scale)
+`MI = 100 + hot_penalties - cold_penalties`
+
+- `<20`: `☠️⚠️ High risk (cold)`
+- `20-30`: `😡 Miserable (cold)`
+- `30-40`: `🥶 Oppressively cold`
+- `40-50`: `😰 Very uncomfortable (cold)`
+- `50-60`: `😓 Moderate uncomfortable (cold)`
+- `60-70`: `😕 Mild uncomfortable (cold)`
+- `70-130`: `😀 Perfect`
+- `130-140`: `😕 Mild uncomfortable`
+- `140-150`: `😓 Moderate uncomfortable`
+- `150-160`: `😰 Very uncomfortable`
+- `160-170`: `🥵 Oppressive`
+- `170-180`: `😡 Miserable`
+- `>=180`: `☠️⚠️ High risk`
+
+### Contributing Factors
+- Apparent temperature core:
+  - Uses Heat Index when hot.
+  - Uses Wind Chill when cold.
+- Dew point stress:
+  - High dew point adds heat strain.
+  - Very low dew point adds cold/dry strain.
+- Humidity extremes:
+  - Very humid hot air increases stress.
+  - Very dry cold air increases irritation penalty.
+- Wind behavior:
+  - Stagnant air on hot/humid days increases MI.
+  - Cooling breeze can slightly reduce hot stress.
+  - Strong wind in cold increases cold penalty.
+- Precipitation and snow:
+  - Light drizzle is minor.
+  - Heavy rain/downpour adds significant discomfort.
+  - Snow/sleet/freezing conditions add strong cold penalties.
+- Cloud and sun load:
+  - Full sun can raise heat burden.
+  - Heavy overcast can add slight cold penalty in cold weather.
+
+### Example Scenarios
+These are computed with the live algorithm in this repo.
+
+| Scenario | Temp (F) | Dew Point (F) | Humidity (%) | Wind (mph) | Conditions | MI | Bucket |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
+| Crisp ideal morning | 55 | 45 | 50 | 5 | Partly cloudy, dry | 100.0 | 😀 Perfect |
+| Cool windy and dry | 28 | 10 | 40 | 16 | Overcast | 39.1 | 🥶 Oppressively cold |
+| Cold snow run | 34 | 30 | 90 | 8 | Moderate snow, 0.12 in/hr | 24.9 | 😡 Miserable (cold) |
+| Warm with light drizzle | 72 | 64 | 84 | 4 | Light drizzle, 0.02 in/hr | 101.0 | 😀 Perfect |
+| Hot humid, no breeze | 92 | 75 | 78 | 1 | Sunny, stagnant air | 171.2 | 😡 Miserable |
+| Extreme heat wave | 102 | 80 | 75 | 2 | Full sun, humid | 216.1 | ☠️⚠️ High risk |
+
 ## Emoji + Data Source Legend
 - `🏆`, `🏅`, `🏔️` totals (rolling periods): Smashrun
 - `👟🏃` GAP pace, `🗺️`, `🕓`, latest activity core metrics: Strava
