@@ -11,6 +11,22 @@ logger = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 30
 
 
+def _normalize_activities_payload(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        activities = payload.get("activities")
+        if isinstance(activities, list):
+            return [item for item in activities if isinstance(item, dict)]
+    return []
+
+
+def _normalize_achievements_payload(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
 def format_time(seconds: float | int | None) -> str:
     if seconds is None:
         return "N/A"
@@ -72,11 +88,11 @@ def get_intervals_activity_data(
     try:
         list_response = requests.get(list_url, auth=auth, timeout=TIMEOUT_SECONDS)
         list_response.raise_for_status()
-        activities = list_response.json()
+        activities = _normalize_activities_payload(list_response.json())
         if not activities:
             return None
 
-        activity_id = activities[0].get("id")
+        activity_id = activities[0].get("id") or activities[0].get("activity_id")
         if activity_id is None:
             return None
 
@@ -87,12 +103,13 @@ def get_intervals_activity_data(
             timeout=TIMEOUT_SECONDS,
         )
         detail_response.raise_for_status()
-        data = detail_response.json()
+        detail_payload = detail_response.json()
+        data = detail_payload if isinstance(detail_payload, dict) else {}
     except requests.RequestException as exc:
         logger.error("Intervals.icu request failed: %s", exc)
         return None
 
-    achievements_raw = data.get("icu_achievements", [])
+    achievements_raw = _normalize_achievements_payload(data.get("icu_achievements"))
     achievements: list[str] = []
     for achievement in achievements_raw:
         achievement_type = achievement.get("type")
