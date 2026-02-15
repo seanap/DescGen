@@ -241,9 +241,6 @@ python api_server.py
 - Never commit your real `.env` file.
 - Rotate any API keys/tokens if they were ever committed or shared.
 
-## Next Steps
-- See `REFACTOR_PLAN.md` for the phased hardening roadmap.
-
 ## CI/CD
 A GitHub Actions workflow is included at `.github/workflows/ci-cd.yml`:
 - Runs unit tests on PRs and pushes to `main`.

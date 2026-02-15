@@ -8,3 +8,4 @@ stat_modules/__pycache__/
 .venv/
 
 processed_activities.log
+REFACTOR_PLAN.md
