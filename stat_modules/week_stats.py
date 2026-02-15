@@ -32,6 +32,26 @@ def _is_run(activity: dict[str, Any]) -> bool:
     return sport_type in {"run", "virtualrun"} or activity_type in {"run", "virtualrun"}
 
 
+def _estimate_calories(distance_meters: float, moving_time_seconds: int) -> float:
+    if distance_meters <= 0 or moving_time_seconds <= 0:
+        return 0.0
+    # Practical fallback when Strava summary payload omits calories.
+    # Approximation: ~100 kcal per mile for running.
+    return (distance_meters / 1609.34) * 100.0
+
+
+def _calories_for_activity(activity: dict[str, Any], distance_meters: float, moving_time_seconds: int) -> float:
+    calories = activity.get("calories")
+    if isinstance(calories, (int, float)) and calories > 0:
+        return float(calories)
+
+    kilojoules = activity.get("kilojoules")
+    if isinstance(kilojoules, (int, float)) and kilojoules > 0:
+        return float(kilojoules)
+
+    return _estimate_calories(distance_meters, moving_time_seconds)
+
+
 def summarize_period(
     activities: list[dict[str, Any]],
     start_utc: datetime,
@@ -56,10 +76,11 @@ def summarize_period(
         ):
             continue
 
-        distance_meters += float(activity.get("distance", 0) or 0)
+        distance = float(activity.get("distance", 0) or 0)
+        distance_meters += distance
         moving_time = int(activity.get("moving_time", 0) or 0)
         duration_seconds += moving_time
-        calories += float(activity.get("calories", 0) or 0)
+        calories += _calories_for_activity(activity, distance, moving_time)
 
         speed = get_gap_speed_mps(activity)
         if speed and moving_time > 0:

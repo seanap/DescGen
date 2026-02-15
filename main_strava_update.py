@@ -16,8 +16,8 @@ from stat_modules.misery_index import (
 )
 from stat_modules.smashrun import (
     aggregate_elevation_totals,
+    get_activity_elevation_feet,
     get_activities as get_smashrun_activities,
-    get_latest_elevation_feet,
     get_longest_streak,
     get_notables,
 )
@@ -350,7 +350,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
 
     if settings.enable_smashrun and settings.smashrun_access_token:
         smashrun_activities = get_smashrun_activities(settings.smashrun_access_token)
-        latest_elevation_feet = get_latest_elevation_feet(smashrun_activities)
+        latest_elevation_feet = get_activity_elevation_feet(smashrun_activities, detailed_activity)
         smashrun_elevation_totals = aggregate_elevation_totals(
             smashrun_activities,
             now_utc,
