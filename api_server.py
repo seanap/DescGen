@@ -40,7 +40,7 @@ def _latest_template_context() -> dict | None:
 
 
 def _resolve_context_mode(raw_mode: str | None) -> str:
-    mode = (raw_mode or "latest").strip().lower()
+    mode = (raw_mode or "sample").strip().lower()
     if mode not in {"latest", "sample", "latest_or_sample"}:
         raise ValueError("context_mode must be one of: latest, sample, latest_or_sample.")
     return mode

@@ -22,14 +22,20 @@
     <section class="actions card">
       <button id="btnLoadActive" class="btn">Load Active</button>
       <button id="btnLoadDefault" class="btn btn-ghost">Load Default</button>
-      <button id="btnFormatTemplate" class="btn btn-ghost">Format</button>
+      <button id="btnLoadDraft" class="btn btn-ghost" title="Load your locally saved browser draft">Load Draft</button>
+      <button id="btnSaveDraft" class="btn btn-ghost" title="Save current editor content locally in your browser">Save Draft</button>
+      <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
       <button id="btnValidate" class="btn btn-secondary">Validate</button>
       <button id="btnPreview" class="btn btn-secondary">Preview</button>
       <button id="btnSave" class="btn btn-primary">Save + Publish</button>
       <button id="btnCopyPreview" class="btn btn-ghost">Copy Preview</button>
       <label class="toggle-inline" for="autoPreviewToggle">
-        <input id="autoPreviewToggle" type="checkbox">
+        <input id="autoPreviewToggle" type="checkbox" checked>
         Auto-preview
+      </label>
+      <label class="toggle-inline" for="themeToggle">
+        <input id="themeToggle" type="checkbox" checked>
+        Dark Mode
       </label>
     </section>
 
@@ -37,11 +43,15 @@
       <aside class="panel card reveal" style="--delay:0.03s">
         <h2>Available Data</h2>
         <p class="subtext">Click any field to insert it into the advanced editor.</p>
-        <label class="stack-label" for="schemaContextMode">Catalog Source</label>
+        <label class="stack-label" for="schemaContextMode">Catalog Context</label>
         <select id="schemaContextMode" class="search">
-          <option value="latest_or_sample">Latest or Sample</option>
+          <option value="sample" selected>Sample Only</option>
           <option value="latest">Latest Only</option>
-          <option value="sample">Sample Only</option>
+          <option value="latest_or_sample">Latest or Sample</option>
+        </select>
+        <label class="stack-label" for="schemaSourceFilter">Source Filter</label>
+        <select id="schemaSourceFilter" class="search">
+          <option value="all" selected>All Sources</option>
         </select>
         <input id="schemaSearch" class="search" type="search" placeholder="Search fields...">
         <div id="schemaMeta" class="meta"></div>
@@ -67,9 +77,9 @@
           <div class="advanced-toolbar">
             <label for="previewContextMode">Preview Context</label>
             <select id="previewContextMode">
+              <option value="sample" selected>Sample Only</option>
               <option value="latest_or_sample">Latest or Sample</option>
               <option value="latest">Latest Only</option>
-              <option value="sample">Sample Only</option>
             </select>
           </div>
           <label for="templateEditor">Jinja Template</label>
@@ -87,7 +97,7 @@
 
       <section class="panel card reveal" style="--delay:0.1s">
         <h2>Preview</h2>
-        <p class="subtext">Rendered using latest activity context from <code>/latest</code>.</p>
+        <p class="subtext">Rendered from selected context mode. Sample mode does not call upstream services.</p>
         <div class="meta" id="previewMeta">No preview yet.</div>
         <pre id="previewText" class="preview"></pre>
       </section>
