@@ -17,7 +17,7 @@ Turn every Strava activity into a rich, auto-generated training report.
 🏆 412 days in a row
 🏅 Longest run in 90 days
 🏅 2nd best GAP pace this month
-🌤️🌡️ Misery Index: 3.1 Comfortable | 🏭 AQI: 22 Good
+🌤️🌡️ Misery Index: 104.3 😀 Perfect | 🏭 AQI: 22 Good
 🔥 7d avg daily Energy Balance:-1131 kcal (deficit) | 🥩:182g | 🍞:216g
 🌤️🚦 Training Readiness: 83 🟢 | 💗 47 | 💤 86
 👟🏃 7:18/mi | 🗺️ 8.02 | 🏔️ 612' | 🕓 58:39 | 🍺 5.1
