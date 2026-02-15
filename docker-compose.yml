@@ -1,0 +1,22 @@
+services:
+  auto-stat-worker:
+    image: ${DOCKER_IMAGE:-yourdockerhubusername/auto-stat-description:latest}
+    container_name: auto-stat-worker
+    command: ["python", "worker.py"]
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/state
+    restart: unless-stopped
+
+  auto-stat-api:
+    image: ${DOCKER_IMAGE:-yourdockerhubusername/auto-stat-description:latest}
+    container_name: auto-stat-api
+    command: ["python", "api_server.py"]
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/state
+    ports:
+      - "${API_PORT:-8080}:8080"
+    restart: unless-stopped

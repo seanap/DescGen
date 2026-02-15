@@ -1,115 +1,254 @@
-# Auto-Strava-Stat-Description
-Automatically set your strava description with fun stats from Strava, Garmin, Smashrun, Intervals.icu, and WeatherAPI.  
-To automate updating your Strava activity descriptions with your running stats, this will use the Strava API and Python. Below is a step-by-step guide.
-```
-🏆 446 days in a row
-🏅 fastest 6mi ever
-🏅 fastest 10k ever
-🏅 best performance ever
-🏅 fastest start in 6 months
-🏅 fastest run in a month
-🏅 highest calories/hour in a month
-🏅 flattest run in a month
-🏅 fastest finish in a month
-🏅 FTP has increased by 8w to 377w
-🏅 New best power: 382W for 30m 0s
-🏅 New best pace: 45m 0s for 10k
-🌤️🌡️ Misery Index: 73.9 😀 Pleasant | 🏭 AQI: 1😃
-🌤️🚦 Training Readiness: 1 💀 | 💗 53.0 | 💤 73
-👟🏃 7:14 | 🗺️ 6.24 | 🏔️ 121' | 🕓 45:10 | 🍺 4.3
-👟👣 179spm | 💼 1032 kJ | ⚡ 381W | 💓 166 | ⚙️2.3
-🚄 🟡 Maintaining | 4.3 : 0.0 - Lactate Threshold
-🚄 🏋️ 60 | 💦 68 | 🗿 -13% - Optimal 🟢
-🚄 🏋️ 1162 | 💦 1241 | 🗿 1.1 - Optimal 🟢
-❤️‍🔥 53.6 | ♾ Endur: 7027 | 🗻 Hill: 71
+# Auto-Stat-Description
+Automatically updates the description of your latest Strava activity with stats pulled from Strava, Smashrun, Garmin, Intervals.icu, and WeatherAPI.
 
-7️⃣ Past 7 days:
-🏃 8:24 | 🗺️ 43.7 | 🏔️ 3320' | 🕓 6h:13m | 🍺 32
-📅 Past 30 days:
-🏃 8:41 | 🗺️ 154 | 🏔️ 13311' | 🕓 22h:31m | 🍺 114
-🌍 This Year:
-🏃 8:55 | 🗺️ 418 | 🏔️ 36055' | 🕓 63h:05m | 🍺 314
-```
-### Data Sources
-```
-[Smashrun Longest Streak] 
-[Smashrun Noteables]
-[ICU Achievements]
-[WeatherAPI calculation][Dynamic Emoji & Description] | [WeatherAPI Air Quality][Dynamic Emoji]
-[Garmin Training Readyness][Dynamic Emoji] | [Garmin Today's Resting HR] | [Garmin Sleep Score]
-[Garmin: GAP | Total Running Miles | Total Elevation | Total Time | Total Calories/150 ]
-[Garmin: Cadence | Total Work] | [ICU Avg Normalized Power] | [Garmin: Total Time | Total Calories/150] 
-[Garmin: Training Status | Training Effect (Aerobic:Anaerobic - Primary Benefit)]
-[ICU: Fitness | Fatigue | Form | Form % Description]
-[Garmin: Fitness | Fatigue | Form | Form % Description]
-[Garmin: vo2max | Endurance Score | Hill Score]
+This repo is now designed to run cleanly on a Docker server with a worker loop and a local JSON API endpoint.
 
-[Garmin Historical Data: trailing 7day, trailing 30 days, current year to date]
-[Garmin: GAP | Total Running Miles | Total Elevation | Total Time | Total Calories/150 ]
-```
-## Step-by-Step Guide:
-### 1. Set Up Strava API Access: 
-* Create a Strava API application https://www.strava.com/settings/api
-* Set up AUTHORIZATION CALL BACK DOMAAIN
-  * use localhost if you are just testing locally. For example: http://localhost:5000.
-* Note down your Client ID, Client Secret, and Access Token.
+## What Changed
+- Credentials are read from environment variables (`.env`) instead of hardcoded values.
+- Heartbeat polling is optimized for 5-minute intervals (`POLL_INTERVAL_SECONDS=300` default).
+- Quiet hours can pause polling between midnight and 4 AM local time.
+- Local JSON endpoint added for dashboards (`/latest`).
+- Stat source rules updated:
+- Elevation stats are sourced from Smashrun.
+- GAP pace stats are sourced from Strava activity data.
+- 7-day / 30-day / year summaries use local calendar-day boundaries from `TZ`.
 
-### 2. Install Required Python Libraries:
-``` bash
-pip install requests garminconnect pytz logging dateutil
-```
-### 3. Prepare the Python Script:
-* Download this repo locally `C:/scripts/`
-* Replace 'your_client_id', 'your_client_secret', 'your_access_token', and 'your_refresh_token' with your actual Strava API credentials in the main script & stat_modules
-* Get USER LEVEL AUTHENTICATION from smashrun: https://api.smashrun.com/v1/documentation and replce with your access token in `notables.py`
-* Get your Intervals.icu API key and Athlete ID from your Settings page, and modify `intervals_data.py`
-* Get a free WeatherAPI access https://www.weatherapi.com/ and replace you API Key in `misery_index.py`
+## Data Sources
+- Smashrun:
+  - Longest streak
+  - Notables
+  - Elevation totals (latest activity, 7d, 30d, YTD)
+- Strava:
+  - Latest activity detection and description update
+  - GAP pace values (latest + trailing periods)
+  - Distance/time/calories for trailing stats
+- Garmin:
+  - VO2max, training status, training readiness, resting HR, endurance/hill score
+- Intervals.icu:
+  - CTL/ATL/Form summary
+  - Latest achievements, NP, work, efficiency
+- WeatherAPI:
+  - Misery index
+  - AQI
+- Crono API:
+  - Activity-day protein and carbs
+  - 7-day average daily energy balance (deficit/surplus)
 
-### 4. Run the Script:
-To schedule your script to run every 10 minutes between 4 AM and 10 PM on Windows 11, you can use the Task Scheduler. Here’s how to set it up:
-#### Step 1: Open Task Scheduler
-  * Press Win + S to open the search bar, type "Task Scheduler," and hit Enter.
-  * In the Task Scheduler window, click on "Create Task" on the right-hand side.
-#### Step 2: Create a New Basic Task
-  * Name the Task: Give your task a name, like "Run Strava Script."
-  * Description: (Optional) Provide a description, like "Runs the Strava update script every 10 minutes."
-#### Step 3: Trigger the Task
-  * Trigger: Select "Daily" and click "Next."
-  * Start Date: Set the date and time to start at 4:00 AM.
-  * Repeat: On the "Daily" trigger screen, check "Repeat task every" and set it to 10 minutes. Set the "for a duration of" option to 18 hours (from 4:00 AM to 10:00 PM).
-  * Advanced Settings: Ensure the task is set to expire at 10:00 PM by specifying the duration of 18 hours.
-#### Step 4: Action
-  * Action: Select "Start a program" and click "Next."
-  * Program/Script: Browse to your Python executable (python.exe).
-  * Add Arguments: Add the path to your script, like C:\scripts\main_strava_update.py.
-  * Start in: Enter the directory where your script is located (e.g., C:\scripts).
-#### Step 5: Finish and Save
-  * Review the settings, then click "Finish" to save the task.
-  * If prompted, enter your Windows account password to allow the task to run.
+## Runtime Model
+- `worker.py`: polls Strava on interval and updates description only when a new activity appears.
+- `api_server.py`: serves the latest generated payload from `state/latest_activity.json`.
 
-## Misery Index
-* https://wildstar84.wordpress.com/2013/06/30/the-misery-index-calculating-how-miserable-your-summer-workout-will-be/
-* “Misery Index” = (temperature°F + ((dew-point°F * 2) + humidity) / 3) – (windspeed-mph * (1 – (%humidity / 100)))
-```
-😭Misery Index: {less than 130} {😀 Perfect conditions for a run!}
-😭Misery Index: {130-140} {😅 Mildly Uncomfortable - Not too bad for a decent workout}
-😭Misery Index: {140-145} {😓 Moderately Uncomfortable}
-😭Misery Index: {145-150} {😰 Very Uncomfortable}
-😭Misery Index: {150-155} {🥵 Oppressive - Difficult to accomplish much}
-😭Misery Index: {155-160} {😡 Miserable - Why??}
-😭Misery Index: {160+} {☠️⚠️ Un-doable due to a high risk of heat-exhaustion}
+## API Endpoints
+- `GET /health`
+- `GET /latest`
+- `POST /rerun/latest` (force rerun on latest Strava activity)
+- `POST /rerun/activity/<activity_id>` (force rerun on a specific Strava activity)
+- `POST /rerun` with optional JSON body `{ "activity_id": 123456789 }`
+
+Example:
+```bash
+curl http://localhost:8080/latest
 ```
 
-## Intervals.icu
-* This will grab today's Fitness, Fatigue, and Form values
+Rerun examples:
+```bash
+curl -X POST http://localhost:8080/rerun/latest
+curl -X POST http://localhost:8080/rerun/activity/1234567890
+curl -X POST http://localhost:8080/rerun \
+  -H "Content-Type: application/json" \
+  -d '{"activity_id":1234567890}'
 ```
-# Fitness | Fatigue | Form | Form Class
-  🏋️ 50 | 💦 65 | 🗿 -30% | 🦾 Optimal
 
-# Determine form_class based on form value
-Form {20+} {❄️ Too Light}
-Form {20 - 5} {🏁 Fresh}
-Form {5 - -10} {⛔ Grey Zone}
-Form {-10 - -30} {🦾 Optimal}
-Form {less than -30} {⚠️ High Risk}
+## Docker Compose (Dockge Friendly)
+1. Copy `.env.example` to `.env` and fill values.
+2. Use this stack as-is in Dockge:
+
+```yaml
+services:
+  auto-stat-worker:
+    image: yourdockerhubusername/auto-stat-description:latest
+    command: ["python", "worker.py"]
+    env_file: [.env]
+    volumes:
+      - ./data:/app/state
+    restart: unless-stopped
+
+  auto-stat-api:
+    image: yourdockerhubusername/auto-stat-description:latest
+    command: ["python", "api_server.py"]
+    env_file: [.env]
+    volumes:
+      - ./data:/app/state
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
 ```
+
+A ready-to-use file is also included at `docker-compose.yml`.
+
+## Build and Push to Docker Hub
+```bash
+docker build -t yourdockerhubusername/auto-stat-description:latest .
+docker push yourdockerhubusername/auto-stat-description:latest
+```
+
+If you want version tags:
+```bash
+docker tag yourdockerhubusername/auto-stat-description:latest yourdockerhubusername/auto-stat-description:v1.0.0
+docker push yourdockerhubusername/auto-stat-description:v1.0.0
+```
+
+## Environment Variables
+Use `.env.example` as the template. Required keys:
+- `CLIENT_ID`
+- `CLIENT_SECRET`
+- `REFRESH_TOKEN`
+
+Optional integrations can be disabled with flags:
+- `ENABLE_GARMIN`
+- `ENABLE_INTERVALS`
+- `ENABLE_WEATHER`
+- `ENABLE_SMASHRUN`
+- `ENABLE_CRONO_API`
+- `ENABLE_QUIET_HOURS`
+
+Crono integration settings:
+- `CRONO_API_BASE_URL` (example: `http://192.168.1.9:8777`)
+- `CRONO_API_KEY` (optional if your crono-api allows no key)
+
+Token cache file (written automatically):
+- `STRAVA_TOKEN_FILE` (default `strava_tokens.json` under state dir)
+
+Quiet hours settings:
+- `QUIET_HOURS_START` (0-23, default `0`)
+- `QUIET_HOURS_END` (0-23, default `4`)
+- `TZ` controls local-time interpretation (for example, `America/New_York`)
+
+## Step-by-Step API Key Setup (Beginner Friendly)
+This section is written for first-time users. If you only do one thing first, do this:
+1. Copy `.env.example` to `.env`.
+2. Fill values provider by provider using the steps below.
+
+### 1) Strava (most confusing, do this carefully)
+1. Log in to Strava and open your API app page: `https://www.strava.com/settings/api`.
+2. Create an app if you do not already have one.
+3. On the app page, set `Authorization Callback Domain` to `localhost` while setting up.
+4. Copy these values into `.env`:
+- `CLIENT_ID`
+- `CLIENT_SECRET`
+5. Open this URL in a browser (replace `YOUR_CLIENT_ID`):
+
+```text
+https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost/exchange_token&approval_prompt=force&scope=read,activity:read_all,activity:write
+```
+
+6. Click `Authorize`.
+7. Browser may show a localhost error page. That is expected. Copy the `code` value from the URL.
+8. Exchange `code` for tokens:
+
+```bash
+curl -X POST https://www.strava.com/oauth/token \
+  -d client_id=YOUR_CLIENT_ID \
+  -d client_secret=YOUR_CLIENT_SECRET \
+  -d code=THE_CODE_FROM_URL \
+  -d grant_type=authorization_code
+```
+
+9. Put these into `.env`:
+- `REFRESH_TOKEN` = `refresh_token` from the response
+- `ACCESS_TOKEN` = `access_token` from the response (optional but useful)
+
+Strava troubleshooting:
+- `invalid redirect_uri` means callback domain and redirect URL do not match. Use `localhost`.
+- If you do not see `code=` in the URL, authorization was denied.
+- If activity updates fail, confirm scope included `activity:write`.
+- Strava refresh tokens can rotate; this app stores latest token values in your state folder (`STRAVA_TOKEN_FILE`).
+
+### 2) Intervals.icu
+1. Log in to Intervals.icu.
+2. Open Settings and scroll to `Developer Settings` near the bottom.
+3. Copy your API key and athlete ID.
+4. Put into `.env`:
+- `INTERVALS_API_KEY`
+- `USER_ID`
+
+Quick test:
+
+```bash
+curl -u API_KEY:YOUR_INTERVALS_API_KEY \
+  "https://intervals.icu/api/v1/athlete/YOUR_ATHLETE_ID/activities?oldest=2026-01-01"
+```
+
+Note: For many endpoints, Intervals.icu allows athlete id `0` to mean “the athlete associated with this API key”.
+
+### 3) Weather API (this project uses WeatherAPI.com, not weather.com)
+1. Sign up: `https://www.weatherapi.com/signup.aspx`
+2. After login, copy your API key from your WeatherAPI account/dashboard.
+3. Put into `.env`:
+- `WEATHER_API_KEY`
+
+Quick test:
+
+```bash
+curl "https://api.weatherapi.com/v1/current.json?key=YOUR_WEATHER_API_KEY&q=New+York&aqi=yes"
+```
+
+### 4) Smashrun
+For personal use, the fastest path is user-level auth token:
+1. Open Smashrun API docs: `https://api.smashrun.com/v1/documentation`
+2. Open `API Explorer`.
+3. Enter `client` as the client id and connect.
+4. Copy the bearer access token.
+5. Put into `.env`:
+- `SMASHRUN_ACCESS_TOKEN`
+
+Quick test:
+
+```bash
+curl -H "Authorization: Bearer YOUR_SMASHRUN_ACCESS_TOKEN" \
+  "https://api.smashrun.com/v1/my/stats"
+```
+
+Smashrun note:
+- User-level tokens are rate-limited and reauthentication is periodically required.
+
+### Provider-to-ENV mapping recap
+- Strava: `CLIENT_ID`, `CLIENT_SECRET`, `REFRESH_TOKEN`, `ACCESS_TOKEN`
+- Intervals.icu: `INTERVALS_API_KEY`, `USER_ID`
+- WeatherAPI.com: `WEATHER_API_KEY`
+- Smashrun: `SMASHRUN_ACCESS_TOKEN`
+- Crono API: `ENABLE_CRONO_API`, `CRONO_API_BASE_URL`, `CRONO_API_KEY`
+
+## Polling and API Usage
+The worker minimizes calls by doing this each cycle:
+1. `GET /athlete/activities?per_page=5`
+2. Pick the first unprocessed activity from that short list.
+3. Exit immediately if all of those are already processed.
+4. Only for an unprocessed activity, fetch full details and secondary provider stats.
+
+This keeps idle-cycle API usage low enough for a 5-minute heartbeat in a homelab setup.
+
+## Local Dev
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main_strava_update.py --force
+python api_server.py
+```
+
+## Notes
+- Never commit your real `.env` file.
+- Rotate any API keys/tokens if they were ever committed or shared.
+
+## Next Steps
+- See `REFACTOR_PLAN.md` for the phased hardening roadmap.
+
+## CI/CD
+A GitHub Actions workflow is included at `.github/workflows/ci-cd.yml`:
+- Runs unit tests on PRs and pushes to `main`.
+- Builds and pushes Docker images to `seanap/auto-stat-description` on push events.
+
+Required GitHub repository secrets:
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
