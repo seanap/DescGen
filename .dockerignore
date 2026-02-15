@@ -1,0 +1,10 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+.env
+state/
+data/
+stat_modules/__pycache__/
+.venv/

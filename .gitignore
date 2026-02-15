@@ -1,0 +1,10 @@
+.env
+data/
+state/
+__pycache__/
+*.pyc
+*.pyo
+stat_modules/__pycache__/
+.venv/
+
+processed_activities.log

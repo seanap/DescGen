@@ -1,90 +1,52 @@
-import requests
-from datetime import datetime, timedelta
+from __future__ import annotations
 
-# Strava API credentials
-CLIENT_ID = 'your_id'
-CLIENT_SECRET = 'your_secret'
-REFRESH_TOKEN = 'your_token'
-ACCESS_TOKEN = 'your_token'
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
-# Function to refresh the Strava access token
-def refresh_access_token():
-    global ACCESS_TOKEN
-    response = requests.post(
-        'https://www.strava.com/oauth/token',
-        data={
-            'client_id': CLIENT_ID,
-            'client_secret': CLIENT_SECRET,
-            'refresh_token': REFRESH_TOKEN,
-            'grant_type': 'refresh_token'
-        }
-    )
-    response_data = response.json()
-    if response.status_code == 200:
-        ACCESS_TOKEN = response_data['access_token']
-        print("Access token refreshed successfully")
-    else:
-        print(f"Error refreshing access token: {response_data}")
+from config import Settings
+from strava_utils import StravaClient
 
-# Function to fetch activities from Strava
-def get_activities(access_token, after_date=None):
-    url = "https://www.strava.com/api/v3/athlete/activities"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    
-    params = {
-        "per_page": 100,  # fetch 100 activities at a time
-        "page": 1
-    }
 
-    if after_date:
-        after_timestamp = int(after_date.timestamp())
-        params["after"] = after_timestamp
+def _parse_date(activity: dict[str, Any]) -> datetime.date | None:
+    raw = activity.get("start_date")
+    if not isinstance(raw, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).date()
 
-    activities = []
-    while True:
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code != 200:
-            print(f"Failed to get data: {response.status_code}")
-            return None
-        
-        data = response.json()
-        if not data:
-            break
-        activities.extend(data)
-        params["page"] += 1
 
-    return activities
+def get_streak(lookback_days: int = 366) -> int | None:
+    settings = Settings.from_env()
+    settings.validate()
+    client = StravaClient(settings)
+    start_dt = datetime.now(timezone.utc) - timedelta(days=lookback_days)
+    activities = client.get_activities_after(start_dt)
 
-# Function to calculate the current streak
-def get_streak(access_token):
-    # Define the start date to fetch activities from (e.g., start of 2024)
-    start_date = datetime(2024, 1, 1)
-    
-    activities = get_activities(access_token, after_date=start_date)
-    if not activities:
+    run_days = set()
+    for activity in activities:
+        sport_type = str(activity.get("sport_type", "")).lower()
+        activity_type = str(activity.get("type", "")).lower()
+        if sport_type not in {"run", "virtualrun"} and activity_type not in {"run", "virtualrun"}:
+            continue
+        activity_day = _parse_date(activity)
+        if activity_day:
+            run_days.add(activity_day)
+
+    if not run_days:
         return None
 
     streak = 0
-    current_date = datetime.now().date()
-
-    days_with_activities = set()
-
-    for activity in activities:
-        activity_date = datetime.strptime(activity['start_date_local'], "%Y-%m-%dT%H:%M:%S%z").date()
-        days_with_activities.add(activity_date)
-
-    # Start the streak calculation from the most recent activity date
-    last_activity_date = max(days_with_activities)
-    
-    # Check for consecutive days starting from the most recent activity date
-    while last_activity_date in days_with_activities:
+    day_cursor = max(run_days)
+    while day_cursor in run_days:
         streak += 1
-        last_activity_date -= timedelta(days=1)
-
+        day_cursor -= timedelta(days=1)
     return streak
 
+
 if __name__ == "__main__":
-    refresh_access_token()  # Refresh the access token first
-    
-    current_streak = get_streak(ACCESS_TOKEN)
-    print(f"Current streak: {current_streak} days")
+    print(f"Current streak: {get_streak()}")

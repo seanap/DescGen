@@ -1,0 +1,4 @@
+Flask==3.1.0
+garminconnect==0.2.28
+python-dotenv==1.0.1
+requests==2.32.3
