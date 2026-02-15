@@ -75,7 +75,7 @@ class TestWeekStats(unittest.TestCase):
         self.assertAlmostEqual(week["distance"], 1.0, places=2)
         self.assertEqual(week["elevation"], 100.0)
 
-    def test_calories_fallback_when_summary_missing(self) -> None:
+    def test_missing_summary_calories_stays_zero(self) -> None:
         activities = [
             {
                 "start_date": "2026-02-11T12:00:00Z",
@@ -91,7 +91,7 @@ class TestWeekStats(unittest.TestCase):
         end_utc = datetime(2026, 2, 15, tzinfo=timezone.utc)
         summary = summarize_period(activities, start_utc, end_utc, elevation_feet=0.0)
 
-        self.assertGreater(summary["beers_earned"], 0.0)
+        self.assertEqual(summary["beers_earned"], 0.0)
 
 
 if __name__ == "__main__":

@@ -154,7 +154,7 @@ def mps_to_pace(speed_mps: float | int | None) -> str:
 
 
 def get_gap_speed_mps(activity: dict[str, Any]) -> float | None:
-    for key in ("average_grade_adjusted_speed", "avgGradeAdjustedSpeed"):
+    for key in ("average_grade_adjusted_speed", "avgGradeAdjustedSpeed", "average_speed"):
         value = activity.get(key)
         if isinstance(value, (int, float)) and value > 0:
             return float(value)

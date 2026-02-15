@@ -19,9 +19,9 @@ class TestStravaUtils(unittest.TestCase):
         }
         self.assertEqual(get_gap_speed_mps(activity), 4.2)
 
-    def test_get_gap_speed_does_not_fallback_to_average_speed(self) -> None:
+    def test_get_gap_speed_falls_back_to_average_speed(self) -> None:
         activity = {"average_speed": 4.0}
-        self.assertIsNone(get_gap_speed_mps(activity))
+        self.assertEqual(get_gap_speed_mps(activity), 4.0)
 
 
 if __name__ == "__main__":
