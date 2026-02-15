@@ -13,6 +13,19 @@
   --shadow: 0 16px 40px rgba(19, 39, 32, 0.12);
 }
 
+body[data-theme="dark"] {
+  --bg: #0f1715;
+  --panel: #16221d;
+  --ink: #dce9e2;
+  --muted: #91aaa0;
+  --line: #2b3b35;
+  --primary: #38aa79;
+  --primary-ink: #f3fff8;
+  --secondary: #3f98a8;
+  --accent: #e4924c;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -23,6 +36,10 @@ body {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   background: radial-gradient(circle at 10% 0%, #ecf4ee 0%, #f5f8f5 45%, #eef3ef 100%);
   color: var(--ink);
+}
+
+body[data-theme="dark"] {
+  background: radial-gradient(circle at 10% 0%, #1a2822 0%, #111917 45%, #0f1715 100%);
 }
 
 .bg-shape {
@@ -192,6 +209,8 @@ h2 {
   border-radius: 10px;
   padding: 9px 11px;
   font: inherit;
+  background: #fff;
+  color: var(--ink);
 }
 
 .stack-label {
@@ -254,6 +273,12 @@ h2 {
   font-size: 0.73rem;
 }
 
+.field-source {
+  color: var(--secondary);
+  font-size: 0.72rem;
+  margin-top: 2px;
+}
+
 .field-insert {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -263,6 +288,10 @@ h2 {
   font-weight: 700;
   padding: 6px 8px;
   color: var(--secondary);
+}
+
+body[data-theme="dark"] .field-insert {
+  background: #192923;
 }
 
 .tabbar {
@@ -361,6 +390,7 @@ h2 {
   font: inherit;
   font-size: 0.84rem;
   background: #fff;
+  color: var(--ink);
 }
 
 label[for="templateEditor"] {
@@ -384,7 +414,7 @@ label[for="templateEditor"] {
   line-height: 1.42;
   resize: vertical;
   background: #ffffff;
-  color: #1a2721;
+  color: var(--ink);
 }
 
 .snippet-shell {
@@ -416,6 +446,10 @@ label[for="templateEditor"] {
   font-weight: 700;
   padding: 6px 10px;
   cursor: pointer;
+}
+
+body[data-theme="dark"] .snippet-btn {
+  background: #1a2a24;
 }
 
 .snippet-btn small {
@@ -457,6 +491,25 @@ label[for="templateEditor"] {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+body[data-theme="dark"] .card,
+body[data-theme="dark"] .catalog-group,
+body[data-theme="dark"] .section-row,
+body[data-theme="dark"] .snippet-shell,
+body[data-theme="dark"] .preview,
+body[data-theme="dark"] #templateEditor,
+body[data-theme="dark"] .btn-ghost,
+body[data-theme="dark"] .search,
+body[data-theme="dark"] .advanced-toolbar select,
+body[data-theme="dark"] .toggle-inline,
+body[data-theme="dark"] .validation,
+body[data-theme="dark"] .tab {
+  background: #16221d;
+}
+
+body[data-theme="dark"] .tab.active {
+  background: #1a2a24;
 }
 
 .reveal {

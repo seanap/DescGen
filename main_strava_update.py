@@ -298,6 +298,7 @@ def _build_description_context(
     air_quality_index: int | None,
     aqi_description: str | None,
     crono_line: str | None = None,
+    crono_summary: dict[str, Any] | None = None,
     weather_details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     achievements = intervals_payload.get("achievements", []) if intervals_payload else []
@@ -316,6 +317,14 @@ def _build_description_context(
     beers = beers_earned.calculate_beers(detailed_activity)
 
     gap_speed = get_gap_speed_mps(detailed_activity)
+    if gap_speed is None:
+        garmin_gap_speed = training.get("avg_grade_adjusted_speed")
+        if isinstance(garmin_gap_speed, (int, float)) and garmin_gap_speed > 0:
+            gap_speed = float(garmin_gap_speed)
+    if gap_speed is None:
+        average_speed = detailed_activity.get("average_speed")
+        if isinstance(average_speed, (int, float)) and average_speed > 0:
+            gap_speed = float(average_speed)
     gap_pace = mps_to_pace(gap_speed)
 
     elevation_feet = latest_elevation_feet
@@ -340,12 +349,20 @@ def _build_description_context(
 
     vo2_value = training.get("vo2max")
     vo2_display = _display_number(vo2_value, decimals=1) if isinstance(vo2_value, (int, float)) else str(vo2_value)
+    crono_summary = crono_summary or {}
 
     return {
         "streak_days": longest_streak if longest_streak is not None else "N/A",
         "notables": notables,
         "achievements": achievements,
-        "crono": {"line": crono_line},
+        "crono": {
+            "line": crono_line,
+            "date": crono_summary.get("date"),
+            "average_net_kcal_per_day": crono_summary.get("average_net_kcal_per_day"),
+            "average_status": crono_summary.get("average_status"),
+            "protein_g": crono_summary.get("protein_g"),
+            "carbs_g": crono_summary.get("carbs_g"),
+        },
         "weather": {
             "misery_index": misery_display,
             "misery_description": misery_desc_display,
@@ -568,6 +585,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             )
 
     crono_line = None
+    crono_summary = None
     if settings.enable_crono_api:
         crono_summary = get_crono_summary_for_activity(
             activity=detailed_activity,
@@ -593,6 +611,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         air_quality_index=aqi,
         aqi_description=aqi_desc,
         crono_line=crono_line,
+        crono_summary=crono_summary,
         weather_details=weather_details,
     )
 

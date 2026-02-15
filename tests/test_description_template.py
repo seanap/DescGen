@@ -140,6 +140,11 @@ class TestDescriptionTemplate(unittest.TestCase):
         schema = build_context_schema(context)
         self.assertEqual(schema["group_count"], 2)
         self.assertGreaterEqual(schema["field_count"], 2)
+        activity_group = next(group for group in schema["groups"] if group["group"] == "activity")
+        self.assertIn("source", activity_group)
+        first_field = activity_group["fields"][0]
+        self.assertIn("source", first_field)
+        self.assertIn("source_note", first_field)
 
     def test_sample_context_shape(self) -> None:
         context = get_sample_template_context()
@@ -147,6 +152,8 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("training", context)
         self.assertIn("weather", context)
         self.assertIn("periods", context)
+        self.assertIn("crono", context)
+        self.assertIn("average_net_kcal_per_day", context["crono"])
 
     def test_editor_snippets_shape(self) -> None:
         snippets = get_editor_snippets()

@@ -9,13 +9,13 @@ const SECTION_LIBRARY = [
     id: "notables",
     label: "Smashrun Notables",
     enabled: true,
-    template: "{% for notable in notables %}🏅 {{ notable }}\\n{% endfor %}",
+    template: "{% for notable in notables %}🏅 {{ notable }}\n{% endfor %}",
   },
   {
     id: "achievements",
     label: "Intervals Achievements",
     enabled: true,
-    template: "{% for achievement in achievements %}🏅 {{ achievement }}\\n{% endfor %}",
+    template: "{% for achievement in achievements %}🏅 {{ achievement }}\n{% endfor %}",
   },
   {
     id: "weather",
@@ -28,7 +28,8 @@ const SECTION_LIBRARY = [
     id: "crono",
     label: "Fuel / Energy",
     enabled: true,
-    template: "{% if crono.line %}{{ crono.line }}{% endif %}",
+    template:
+      "{% if crono.average_net_kcal_per_day is defined and crono.average_net_kcal_per_day is not none %}🔥 7d avg daily Energy Balance:{{ '%+.0f'|format(crono.average_net_kcal_per_day) }} kcal{% if crono.average_status %} ({{ crono.average_status }}){% endif %}{% if crono.protein_g and crono.protein_g > 0 %} | 🥩:{{ crono.protein_g|round|int }}g{% endif %}{% if crono.carbs_g and crono.carbs_g > 0 %} | 🍞:{{ crono.carbs_g|round|int }}g{% endif %}{% elif crono.line %}{{ crono.line }}{% endif %}",
   },
   {
     id: "readiness",
@@ -83,21 +84,21 @@ const SECTION_LIBRARY = [
     label: "7-Day Summary",
     enabled: true,
     template:
-      "7️⃣ Past 7 days:\\n🏃 {{ periods.week.gap }} | 🗺️ {{ periods.week.distance_miles }} | 🏔️ {{ periods.week.elevation_feet }}' | 🕓 {{ periods.week.duration }} | 🍺 {{ periods.week.beers }}",
+      "7️⃣ Past 7 days:\n🏃 {{ periods.week.gap }} | 🗺️ {{ periods.week.distance_miles }} | 🏔️ {{ periods.week.elevation_feet }}' | 🕓 {{ periods.week.duration }} | 🍺 {{ periods.week.beers }}",
   },
   {
     id: "month",
     label: "30-Day Summary",
     enabled: true,
     template:
-      "📅 Past 30 days:\\n🏃 {{ periods.month.gap }} | 🗺️ {{ periods.month.distance_miles }} | 🏔️ {{ periods.month.elevation_feet }}' | 🕓 {{ periods.month.duration }} | 🍺 {{ periods.month.beers }}",
+      "📅 Past 30 days:\n🏃 {{ periods.month.gap }} | 🗺️ {{ periods.month.distance_miles }} | 🏔️ {{ periods.month.elevation_feet }}' | 🕓 {{ periods.month.duration }} | 🍺 {{ periods.month.beers }}",
   },
   {
     id: "year",
     label: "Year Summary",
     enabled: true,
     template:
-      "🌍 This Year:\\n🏃 {{ periods.year.gap }} | 🗺️ {{ periods.year.distance_miles }} | 🏔️ {{ periods.year.elevation_feet }}' | 🕓 {{ periods.year.duration }} | 🍺 {{ periods.year.beers }}",
+      "🌍 This Year:\n🏃 {{ periods.year.gap }} | 🗺️ {{ periods.year.distance_miles }} | 🏔️ {{ periods.year.elevation_feet }}' | 🕓 {{ periods.year.duration }} | 🍺 {{ periods.year.beers }}",
   },
 ];
 
@@ -106,14 +107,14 @@ const FALLBACK_SNIPPETS = [
     id: "if-block",
     category: "logic",
     label: "If Present",
-    template: "{% if value %}\\n{{ value }}\\n{% endif %}",
+    template: "{% if value %}\n{{ value }}\n{% endif %}",
     description: "Render only if value is present.",
   },
   {
     id: "for-loop",
     category: "logic",
     label: "For Loop",
-    template: "{% for item in items %}\\n- {{ item }}\\n{% endfor %}",
+    template: "{% for item in items %}\n- {{ item }}\n{% endfor %}",
     description: "Loop through a list.",
   },
   {
@@ -132,6 +133,9 @@ const FALLBACK_SNIPPETS = [
   },
 ];
 
+const DRAFT_KEY = "auto_stat_description_editor_draft";
+const THEME_KEY = "auto_stat_description_editor_theme";
+
 const state = {
   templateActive: "",
   templateDefault: "",
@@ -139,9 +143,10 @@ const state = {
   schemaSource: null,
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
   snippets: FALLBACK_SNIPPETS,
-  autoPreview: false,
+  autoPreview: true,
   autoPreviewTimer: null,
-  lastPreviewSignature: "",
+  previewRequestId: 0,
+  editorTouched: false,
 };
 
 const elements = {
@@ -154,10 +159,12 @@ const elements = {
   schemaMeta: document.getElementById("schemaMeta"),
   schemaSearch: document.getElementById("schemaSearch"),
   schemaContextMode: document.getElementById("schemaContextMode"),
+  schemaSourceFilter: document.getElementById("schemaSourceFilter"),
   previewContextMode: document.getElementById("previewContextMode"),
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
   autoPreviewToggle: document.getElementById("autoPreviewToggle"),
+  themeToggle: document.getElementById("themeToggle"),
 };
 
 function setStatus(text, tone = "neutral") {
@@ -187,12 +194,16 @@ async function requestJSON(url, options = {}) {
   return { ok: response.ok, status: response.status, payload };
 }
 
+function decodeEscapedNewlines(text) {
+  return String(text || "").replace(/\\n/g, "\n");
+}
+
 function getEditorText() {
   return elements.templateEditor.value;
 }
 
 function setEditorText(templateText) {
-  elements.templateEditor.value = templateText || "";
+  elements.templateEditor.value = decodeEscapedNewlines(templateText || "");
 }
 
 function insertAtCursor(text) {
@@ -244,6 +255,41 @@ function updateValidationPane(result, ok) {
   pane.textContent = lines.join("\n");
 }
 
+function refreshSourceFilterOptions() {
+  const select = elements.schemaSourceFilter;
+  const previous = select.value || "all";
+
+  const sourceSet = new Set();
+  if (state.schema && Array.isArray(state.schema.groups)) {
+    for (const group of state.schema.groups) {
+      for (const field of group.fields || []) {
+        const source = String(field.source || group.source || "Unknown");
+        sourceSet.add(source);
+      }
+    }
+  }
+
+  select.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "All Sources";
+  select.appendChild(allOption);
+
+  const sortedSources = Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
+  for (const source of sortedSources) {
+    const option = document.createElement("option");
+    option.value = source;
+    option.textContent = source;
+    select.appendChild(option);
+  }
+
+  if (sortedSources.includes(previous)) {
+    select.value = previous;
+  } else {
+    select.value = "all";
+  }
+}
+
 function renderSchemaCatalog(filterText = "") {
   const schema = state.schema;
   elements.schemaList.innerHTML = "";
@@ -254,14 +300,21 @@ function renderSchemaCatalog(filterText = "") {
   }
 
   const q = filterText.trim().toLowerCase();
+  const sourceFilter = elements.schemaSourceFilter.value || "all";
   let visibleFields = 0;
 
   for (const group of schema.groups) {
     const fields = (group.fields || []).filter((field) => {
+      const fieldSource = String(field.source || group.source || "Unknown");
+      if (sourceFilter !== "all" && fieldSource !== sourceFilter) {
+        return false;
+      }
       if (!q) return true;
       return (
         String(field.path || "").toLowerCase().includes(q) ||
-        String(field.type || "").toLowerCase().includes(q)
+        String(field.type || "").toLowerCase().includes(q) ||
+        fieldSource.toLowerCase().includes(q) ||
+        String(field.source_note || "").toLowerCase().includes(q)
       );
     });
 
@@ -271,8 +324,9 @@ function renderSchemaCatalog(filterText = "") {
     const card = document.createElement("section");
     card.className = "catalog-group";
 
+    const groupSource = group.source ? ` | ${group.source}` : "";
     const h = document.createElement("h3");
-    h.textContent = `${group.group} (${fields.length})`;
+    h.textContent = `${group.group} (${fields.length})${groupSource}`;
     card.appendChild(h);
 
     for (const field of fields) {
@@ -288,8 +342,15 @@ function renderSchemaCatalog(filterText = "") {
       type.className = "field-type";
       type.textContent = `${field.type} | sample: ${JSON.stringify(field.sample)}`;
 
+      const source = document.createElement("div");
+      source.className = "field-source";
+      source.textContent = field.source_note
+        ? `Source: ${field.source} (${field.source_note})`
+        : `Source: ${field.source || "Unknown"}`;
+
       body.appendChild(key);
       body.appendChild(type);
+      body.appendChild(source);
 
       const insertBtn = document.createElement("button");
       insertBtn.className = "field-insert";
@@ -315,7 +376,7 @@ function renderSchemaCatalog(filterText = "") {
     elements.schemaList.appendChild(card);
   }
 
-  const sourceText = state.schemaSource ? ` | source: ${state.schemaSource}` : "";
+  const sourceText = state.schemaSource ? ` | context: ${state.schemaSource}` : "";
   elements.schemaMeta.textContent = `${visibleFields} fields shown${sourceText}`;
 }
 
@@ -329,7 +390,7 @@ function renderSnippets() {
     btn.title = `${snippet.category || "snippet"}: ${snippet.description || ""}`;
     btn.textContent = snippet.label;
     btn.addEventListener("click", () => {
-      insertAtCursor(snippet.template || "");
+      insertAtCursor(decodeEscapedNewlines(snippet.template || ""));
       setStatus(`Inserted snippet: ${snippet.label}`, "ok");
       queueAutoPreview();
     });
@@ -390,7 +451,7 @@ function renderSimpleSections() {
 function buildTemplateFromSimple() {
   const chunks = state.sections
     .filter((section) => section.enabled)
-    .map((section) => section.template)
+    .map((section) => decodeEscapedNewlines(section.template))
     .filter(Boolean);
 
   if (chunks.length === 0) {
@@ -420,7 +481,7 @@ function switchTab(name) {
 }
 
 async function loadSchema(mode) {
-  const query = new URLSearchParams({ context_mode: mode || "latest_or_sample" });
+  const query = new URLSearchParams({ context_mode: mode || "sample" });
   const res = await requestJSON(`/editor/schema?${query.toString()}`);
   if (!res.ok) {
     setStatus("Failed to load data catalog", "error");
@@ -429,13 +490,61 @@ async function loadSchema(mode) {
 
   state.schema = res.payload.schema || null;
   state.schemaSource = res.payload.context_source || null;
+  refreshSourceFilterOptions();
   renderSchemaCatalog(elements.schemaSearch.value || "");
+}
+
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, getEditorText());
+    setStatus("Draft saved locally", "ok");
+  } catch (_err) {
+    setStatus("Draft save failed", "error");
+  }
+}
+
+function loadDraft() {
+  try {
+    const draft = localStorage.getItem(DRAFT_KEY);
+    if (!draft) {
+      setStatus("No local draft found", "error");
+      return;
+    }
+    setEditorText(draft);
+    setStatus("Loaded local draft", "ok");
+    queueAutoPreview();
+  } catch (_err) {
+    setStatus("Draft load failed", "error");
+  }
+}
+
+function applyTheme(theme) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  document.body.dataset.theme = nextTheme;
+  elements.themeToggle.checked = nextTheme === "dark";
+  try {
+    localStorage.setItem(THEME_KEY, nextTheme);
+  } catch (_err) {
+    // Ignore localStorage failures.
+  }
+}
+
+function loadThemePreference() {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+  } catch (_err) {
+    // Ignore localStorage failures.
+  }
+  return "dark";
 }
 
 async function loadEditorBootstrap() {
   setStatus("Loading editor data...");
 
-  const schemaMode = elements.schemaContextMode.value || "latest_or_sample";
+  const schemaMode = elements.schemaContextMode.value || "sample";
   const [activeRes, defaultRes, schemaRes, snippetRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
@@ -448,8 +557,8 @@ async function loadEditorBootstrap() {
     return;
   }
 
-  state.templateActive = activeRes.payload.template || "";
-  state.templateDefault = defaultRes.payload.template || "";
+  state.templateActive = decodeEscapedNewlines(activeRes.payload.template || "");
+  state.templateDefault = decodeEscapedNewlines(defaultRes.payload.template || "");
 
   setEditorText(state.templateActive);
 
@@ -462,18 +571,24 @@ async function loadEditorBootstrap() {
     state.snippets = snippetRes.payload.snippets;
   }
 
+  refreshSourceFilterOptions();
   renderSchemaCatalog("");
   renderSimpleSections();
   renderSnippets();
 
+  state.autoPreview = true;
+  elements.autoPreviewToggle.checked = true;
+
   const isCustom = Boolean(activeRes.payload.is_custom);
   const sourceLabel = state.schemaSource ? ` | schema: ${state.schemaSource}` : "";
   setStatus((isCustom ? "Loaded custom template" : "Loaded default template") + sourceLabel, "ok");
+
+  await previewTemplate({ force: true });
 }
 
 async function validateTemplate() {
   const template = getEditorText();
-  const contextMode = elements.previewContextMode.value || "latest_or_sample";
+  const contextMode = elements.previewContextMode.value || "sample";
   const res = await requestJSON("/editor/validate", {
     method: "POST",
     body: JSON.stringify({ template, context_mode: contextMode }),
@@ -486,30 +601,29 @@ async function validateTemplate() {
 async function previewTemplate(options = {}) {
   const { force = false } = options;
   const template = getEditorText();
-  const contextMode = elements.previewContextMode.value || "latest_or_sample";
-  const signature = `${contextMode}::${template}`;
+  const contextMode = elements.previewContextMode.value || "sample";
 
-  if (!force && state.lastPreviewSignature === signature) {
-    return;
-  }
-
+  const requestId = ++state.previewRequestId;
   const res = await requestJSON("/editor/preview", {
     method: "POST",
     body: JSON.stringify({ template, context_mode: contextMode }),
   });
 
+  if (requestId !== state.previewRequestId) {
+    return;
+  }
+
   if (!res.ok) {
     elements.previewMeta.textContent = res.payload.error || "Preview failed";
     if (force) {
       elements.previewText.textContent = "";
-      setStatus("Preview failed", "error");
     }
+    setStatus("Preview failed", "error");
     return;
   }
 
-  state.lastPreviewSignature = signature;
   elements.previewText.textContent = res.payload.preview || "";
-  const source = res.payload.context_source || "latest";
+  const source = res.payload.context_source || "sample";
   elements.previewMeta.textContent = `Rendered length: ${res.payload.length} chars | context: ${source}`;
   setStatus("Preview updated", "ok");
 }
@@ -523,7 +637,7 @@ function queueAutoPreview() {
   }
   state.autoPreviewTimer = setTimeout(() => {
     previewTemplate({ force: false });
-  }, 650);
+  }, 450);
 }
 
 async function saveTemplate() {
@@ -541,7 +655,7 @@ async function saveTemplate() {
 
   updateValidationPane(res.payload, true);
   state.templateActive = template;
-  setStatus("Template saved", "ok");
+  setStatus("Template saved + published", "ok");
 }
 
 async function copyPreview() {
@@ -576,9 +690,12 @@ function bindUI() {
     queueAutoPreview();
   });
 
+  document.getElementById("btnSaveDraft").addEventListener("click", saveDraft);
+  document.getElementById("btnLoadDraft").addEventListener("click", loadDraft);
+
   document.getElementById("btnFormatTemplate").addEventListener("click", () => {
     setEditorText(formatTemplateText(getEditorText()));
-    setStatus("Template formatted", "ok");
+    setStatus("Formatted: normalized whitespace and blank lines", "ok");
     queueAutoPreview();
   });
 
@@ -604,13 +721,16 @@ function bindUI() {
     renderSchemaCatalog(event.target.value || "");
   });
 
+  elements.schemaSourceFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+
   elements.schemaContextMode.addEventListener("change", async () => {
-    await loadSchema(elements.schemaContextMode.value || "latest_or_sample");
-    setStatus("Catalog source changed", "ok");
+    await loadSchema(elements.schemaContextMode.value || "sample");
+    setStatus("Catalog context changed", "ok");
   });
 
   elements.previewContextMode.addEventListener("change", () => {
-    state.lastPreviewSignature = "";
     queueAutoPreview();
   });
 
@@ -622,7 +742,13 @@ function bindUI() {
     }
   });
 
+  elements.themeToggle.addEventListener("change", () => {
+    applyTheme(elements.themeToggle.checked ? "dark" : "light");
+    setStatus(elements.themeToggle.checked ? "Dark mode enabled" : "Light mode enabled", "ok");
+  });
+
   elements.templateEditor.addEventListener("input", () => {
+    state.editorTouched = true;
     queueAutoPreview();
   });
 
@@ -636,6 +762,7 @@ function bindUI() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   bindUI();
+  applyTheme(loadThemePreference());
   updateValidationPane(null, true);
   await loadEditorBootstrap();
 });

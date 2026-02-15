@@ -15,7 +15,8 @@ DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
 {% for notable in notables %}🏅 {{ notable }}
 {% endfor %}{% for achievement in achievements %}🏅 {{ achievement }}
 {% endfor %}🌤️🌡️ Misery Index: {{ weather.misery_index }} {{ weather.misery_description }} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
-{% if crono.line %}{{ crono.line }}
+{% if crono.average_net_kcal_per_day is defined and crono.average_net_kcal_per_day is not none %}🔥 7d avg daily Energy Balance:{{ "%+.0f"|format(crono.average_net_kcal_per_day) }} kcal{% if crono.average_status %} ({{ crono.average_status }}){% endif %}{% if crono.protein_g and crono.protein_g > 0 %} | 🥩:{{ crono.protein_g|round|int }}g{% endif %}{% if crono.carbs_g and crono.carbs_g > 0 %} | 🍞:{{ crono.carbs_g|round|int }}g{% endif %}
+{% elif crono.line %}{{ crono.line }}
 {% endif %}🌤️🚦 Training Readiness: {{ training.readiness_score }} {{ training.readiness_emoji }} | 💗 {{ training.resting_hr }} | 💤 {{ training.sleep_score }}
 👟🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }} | 🍺 {{ activity.beers }}
 👟👣 {{ activity.cadence_spm }}spm | 💼 {{ activity.work }} | ⚡ {{ activity.norm_power }} | 💓 {{ activity.average_hr }} | ⚙️{{ activity.efficiency }}
@@ -87,6 +88,11 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
     "achievements": [],
     "crono": {
         "line": "🔥 7d avg daily Energy Balance:-1131 kcal (deficit) | 🥩:182g | 🍞:216g",
+        "date": "2026-02-15",
+        "average_net_kcal_per_day": -1131.0,
+        "average_status": "deficit",
+        "protein_g": 182.0,
+        "carbs_g": 216.0,
     },
     "weather": {
         "misery_index": 104.3,
@@ -344,6 +350,71 @@ def _type_name(value: Any) -> str:
     return type(value).__name__
 
 
+_GROUP_SOURCE_MAP: dict[str, tuple[str, str]] = {
+    "achievements": ("Intervals.icu", "Achievement badges from Intervals activity payload."),
+    "activity": ("Strava", "Latest activity metrics. Elevation can be overridden by Smashrun."),
+    "crono": ("crono-api", "Local nutrition/energy balance API values."),
+    "intervals": ("Intervals.icu", "Intervals.icu rollup metrics."),
+    "notables": ("Smashrun", "Smashrun notable badges for latest run."),
+    "periods": ("Strava+Smashrun+Garmin", "Aggregated rolling summaries by period."),
+    "raw": ("Mixed", "Raw and derived payloads from all enabled services."),
+    "streak_days": ("Smashrun", "Current run streak length from Smashrun."),
+    "training": ("Garmin+Strava", "Garmin metrics with Strava fallback for missing HR/cadence."),
+    "weather": ("Weather.com", "Weather + AQI conditions for activity time."),
+}
+
+
+_FIELD_SOURCE_EXACT_MAP: dict[str, tuple[str, str]] = {
+    "activity.elevation_feet": ("Smashrun", "Per-activity elevation from Smashrun; Strava fallback."),
+    "activity.gap_pace": ("Strava+Garmin", "Strava GAP pace when available; Garmin/average-speed fallback."),
+    "activity.beers": ("Strava", "Calories from Strava converted to beers."),
+    "crono.line": ("crono-api", "Legacy preformatted line for backward compatibility."),
+    "crono.average_net_kcal_per_day": ("crono-api", "Trailing completed-day average net calories."),
+    "crono.average_status": ("crono-api", "Energy trend label (deficit/surplus)."),
+    "crono.protein_g": ("crono-api", "Protein grams for activity day."),
+    "crono.carbs_g": ("crono-api", "Carb grams for activity day."),
+    "crono.date": ("crono-api", "Resolved local date used for Crono lookup."),
+    "periods.week.elevation_feet": ("Smashrun", "7-day elevation total from Smashrun."),
+    "periods.month.elevation_feet": ("Smashrun", "30-day elevation total from Smashrun."),
+    "periods.year.elevation_feet": ("Smashrun", "YTD elevation total from Smashrun."),
+    "periods.week.gap": ("Strava+Garmin", "Average GAP from Strava runs; Garmin fallback."),
+    "periods.month.gap": ("Strava+Garmin", "Average GAP from Strava runs; Garmin fallback."),
+    "periods.year.gap": ("Strava+Garmin", "Average GAP from Strava runs; Garmin fallback."),
+    "periods.week.beers": ("Strava+Garmin", "Calories-derived beers from Strava; Garmin fallback."),
+    "periods.month.beers": ("Strava+Garmin", "Calories-derived beers from Strava; Garmin fallback."),
+    "periods.year.beers": ("Strava+Garmin", "Calories-derived beers from Strava; Garmin fallback."),
+    "raw.activity": ("Strava", "Raw activity detail payload."),
+    "raw.training": ("Garmin", "Raw Garmin-derived training payload."),
+    "raw.intervals": ("Intervals.icu", "Raw Intervals payload."),
+    "raw.weather": ("Weather.com", "Raw weather payload."),
+    "raw.week": ("Derived", "Computed 7-day aggregate from source activities."),
+    "raw.month": ("Derived", "Computed 30-day aggregate from source activities."),
+    "raw.year": ("Derived", "Computed YTD aggregate from source activities."),
+}
+
+
+def _source_for_path(path: str) -> tuple[str, str]:
+    exact = _FIELD_SOURCE_EXACT_MAP.get(path)
+    if exact:
+        return exact
+
+    for prefix, details in (
+        ("raw.activity.", ("Strava", "Raw activity detail payload.")),
+        ("raw.training.", ("Garmin", "Raw Garmin-derived training payload.")),
+        ("raw.intervals.", ("Intervals.icu", "Raw Intervals payload.")),
+        ("raw.weather.", ("Weather.com", "Raw weather payload.")),
+        ("raw.week.", ("Derived", "Computed 7-day aggregate from source activities.")),
+        ("raw.month.", ("Derived", "Computed 30-day aggregate from source activities.")),
+        ("raw.year.", ("Derived", "Computed YTD aggregate from source activities.")),
+        ("weather.details.", ("Weather.com", "Detailed weather conditions for activity time.")),
+    ):
+        if path.startswith(prefix):
+            return details
+
+    top_key = path.split(".", 1)[0].split("[", 1)[0]
+    return _GROUP_SOURCE_MAP.get(top_key, ("Unknown", "No source mapping available."))
+
+
 def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, Any]]) -> None:
     if isinstance(value, dict):
         for key, nested in sorted(value.items()):
@@ -352,11 +423,14 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
         return
 
     if isinstance(value, list):
+        source, source_note = _source_for_path(path_prefix)
         fields.append(
             {
                 "path": path_prefix,
                 "type": _type_name(value),
                 "sample": _sample_value(value),
+                "source": source,
+                "source_note": source_note,
             }
         )
         if value and isinstance(value[0], dict):
@@ -364,11 +438,14 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
                 _collect_schema_fields(f"{path_prefix}[0].{key}", nested, fields)
         return
 
+    source, source_note = _source_for_path(path_prefix)
     fields.append(
         {
             "path": path_prefix,
             "type": _type_name(value),
             "sample": _sample_value(value),
+            "source": source,
+            "source_note": source_note,
         }
     )
 
@@ -387,10 +464,15 @@ def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
             _collect_schema_fields(top_key, value, fields)
 
         total_fields += len(fields)
+        group_source, group_source_note = _GROUP_SOURCE_MAP.get(
+            top_key, ("Unknown", "No source mapping available.")
+        )
         groups.append(
             {
                 "group": top_key,
                 "field_count": len(fields),
+                "source": group_source,
+                "source_note": group_source_note,
                 "fields": fields,
             }
         )
