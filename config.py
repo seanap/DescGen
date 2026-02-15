@@ -54,6 +54,7 @@ class Settings:
     poll_interval_seconds: int
     log_level: str
     timezone: str
+    api_port: int
 
     state_dir: Path
     processed_log_file: Path
@@ -86,6 +87,14 @@ class Settings:
         except ValueError:
             poll_interval_seconds = 300
 
+        api_port_raw = os.getenv("API_PORT", "1609")
+        try:
+            api_port = int(api_port_raw)
+            if not (1 <= api_port <= 65535):
+                api_port = 1609
+        except ValueError:
+            api_port = 1609
+
         return cls(
             strava_client_id=os.getenv("CLIENT_ID", "").strip(),
             strava_client_secret=os.getenv("CLIENT_SECRET", "").strip(),
@@ -102,6 +111,7 @@ class Settings:
             poll_interval_seconds=poll_interval_seconds,
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
             timezone=os.getenv("TZ", "UTC"),
+            api_port=api_port,
             state_dir=state_dir,
             processed_log_file=processed_log_file,
             latest_json_file=latest_json_file,

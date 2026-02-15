@@ -1,6 +1,6 @@
 services:
   auto-stat-worker:
-    image: ${DOCKER_IMAGE:-yourdockerhubusername/auto-stat-description:latest}
+    image: ${DOCKER_IMAGE:-seanap/auto-stat-description:latest}
     container_name: auto-stat-worker
     command: ["python", "worker.py"]
     env_file:
@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
 
   auto-stat-api:
-    image: ${DOCKER_IMAGE:-yourdockerhubusername/auto-stat-description:latest}
+    image: ${DOCKER_IMAGE:-seanap/auto-stat-description:latest}
     container_name: auto-stat-api
     command: ["python", "api_server.py"]
     env_file:
@@ -18,5 +18,5 @@ services:
     volumes:
       - ./data:/app/state
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "${API_PORT:-1609}:${API_PORT:-1609}"
     restart: unless-stopped
