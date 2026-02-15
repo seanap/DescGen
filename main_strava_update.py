@@ -10,7 +10,10 @@ from config import Settings
 from stat_modules import beers_earned, week_stats
 from stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
 from stat_modules.intervals_data import get_intervals_activity_data
-from stat_modules.misery_index import get_misery_index_for_activity
+from stat_modules.misery_index import (
+    get_misery_index_details_for_activity,
+    get_misery_index_for_activity,
+)
 from stat_modules.smashrun import (
     aggregate_elevation_totals,
     get_activities as get_smashrun_activities,
@@ -382,10 +385,22 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         )
 
     misery_index = misery_desc = aqi = aqi_desc = None
+    weather_details = None
     if settings.enable_weather:
-        misery_index, misery_desc, aqi, aqi_desc = get_misery_index_for_activity(
-            detailed_activity, settings.weather_api_key
+        weather_details = get_misery_index_details_for_activity(
+            detailed_activity,
+            settings.weather_api_key,
         )
+        if weather_details:
+            misery_index = weather_details.get("misery_index")
+            misery_desc = weather_details.get("misery_description")
+            aqi = weather_details.get("aqi")
+            aqi_desc = weather_details.get("aqi_description")
+        else:
+            misery_index, misery_desc, aqi, aqi_desc = get_misery_index_for_activity(
+                detailed_activity,
+                settings.weather_api_key,
+            )
 
     crono_line = None
     if settings.enable_crono_api:
@@ -424,6 +439,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         "description": description,
         "source": "standard",
         "period_stats": period_stats,
+        "weather": weather_details,
     }
     mark_activity_processed(settings.processed_log_file, selected_activity_id)
     write_json(settings.latest_json_file, payload)
