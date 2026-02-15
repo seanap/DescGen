@@ -60,6 +60,7 @@ class Settings:
     processed_log_file: Path
     latest_json_file: Path
     strava_token_file: Path
+    description_template_file: Path
 
     enable_garmin: bool
     enable_intervals: bool
@@ -80,6 +81,10 @@ class Settings:
             "LATEST_JSON_FILE", "latest_activity.json"
         )
         strava_token_file = state_dir / os.getenv("STRAVA_TOKEN_FILE", "strava_tokens.json")
+        description_template_file = state_dir / os.getenv(
+            "DESCRIPTION_TEMPLATE_FILE",
+            "description_template.j2",
+        )
 
         poll_interval_raw = os.getenv("POLL_INTERVAL_SECONDS", "300")
         try:
@@ -116,6 +121,7 @@ class Settings:
             processed_log_file=processed_log_file,
             latest_json_file=latest_json_file,
             strava_token_file=strava_token_file,
+            description_template_file=description_template_file,
             enable_garmin=_bool_env("ENABLE_GARMIN", True),
             enable_intervals=_bool_env("ENABLE_INTERVALS", True),
             enable_weather=_bool_env("ENABLE_WEATHER", True),

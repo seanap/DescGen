@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config import Settings
+from description_template import render_with_active_template
 from stat_modules import beers_earned, week_stats
 from stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
 from stat_modules.intervals_data import get_intervals_activity_data
@@ -262,6 +263,144 @@ def _build_description(
     return description
 
 
+def _build_description_context(
+    *,
+    detailed_activity: dict[str, Any],
+    training: dict[str, Any],
+    intervals_payload: dict[str, Any] | None,
+    week: dict[str, Any],
+    month: dict[str, Any],
+    year: dict[str, Any],
+    longest_streak: int | None,
+    notables: list[str],
+    latest_elevation_feet: float | None,
+    misery_index: float | None,
+    misery_index_description: str | None,
+    air_quality_index: int | None,
+    aqi_description: str | None,
+    crono_line: str | None = None,
+    weather_details: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    achievements = intervals_payload.get("achievements", []) if intervals_payload else []
+    norm_power = intervals_payload.get("norm_power", "N/A") if intervals_payload else "N/A"
+    work = intervals_payload.get("work", "N/A") if intervals_payload else "N/A"
+    efficiency = intervals_payload.get("efficiency", "N/A") if intervals_payload else "N/A"
+    icu_summary = intervals_payload.get("icu_summary", "N/A") if intervals_payload else "N/A"
+
+    distance_miles = round(float(detailed_activity.get("distance", 0) or 0) / 1609.34, 2)
+    elapsed_seconds = int(
+        detailed_activity.get("moving_time")
+        or detailed_activity.get("elapsed_time")
+        or 0
+    )
+    activity_time = _format_activity_time(elapsed_seconds)
+    beers = beers_earned.calculate_beers(detailed_activity)
+
+    gap_speed = get_gap_speed_mps(detailed_activity)
+    gap_pace = mps_to_pace(gap_speed)
+
+    elevation_feet = latest_elevation_feet
+    if elevation_feet is None:
+        strava_elevation_m = detailed_activity.get("total_elevation_gain")
+        if isinstance(strava_elevation_m, (int, float)):
+            elevation_feet = float(strava_elevation_m) * 3.28084
+
+    average_hr, running_cadence = _merge_hr_cadence_from_strava(training, detailed_activity)
+
+    chronic_load = training.get("chronic_load")
+    acute_load = training.get("acute_load")
+    if isinstance(chronic_load, (int, float)) and isinstance(acute_load, (int, float)) and chronic_load != 0:
+        load_ratio = round(acute_load / chronic_load, 1)
+    else:
+        load_ratio = "N/A"
+
+    misery_display = misery_index if misery_index is not None else "N/A"
+    misery_desc_display = misery_index_description or ""
+    aqi_display = air_quality_index if air_quality_index is not None else "N/A"
+    aqi_desc_display = aqi_description or ""
+
+    vo2_value = training.get("vo2max")
+    vo2_display = _display_number(vo2_value, decimals=1) if isinstance(vo2_value, (int, float)) else str(vo2_value)
+
+    return {
+        "streak_days": longest_streak if longest_streak is not None else "N/A",
+        "notables": notables,
+        "achievements": achievements,
+        "crono": {"line": crono_line},
+        "weather": {
+            "misery_index": misery_display,
+            "misery_description": misery_desc_display,
+            "aqi": aqi_display,
+            "aqi_description": aqi_desc_display,
+            "details": weather_details or {},
+        },
+        "training": {
+            "readiness_score": training.get("training_readiness_score", "N/A"),
+            "readiness_emoji": training.get("training_readiness_emoji", "⚪"),
+            "resting_hr": training.get("resting_hr", "N/A"),
+            "sleep_score": training.get("sleep_score", "N/A"),
+            "status_emoji": training.get("training_status_emoji", "⚪"),
+            "status_key": training.get("training_status_key", "N/A"),
+            "aerobic_te": training.get("aerobic_training_effect", "N/A"),
+            "anaerobic_te": training.get("anaerobic_training_effect", "N/A"),
+            "te_label": training.get("training_effect_label", "N/A"),
+            "chronic_load": training.get("chronic_load", "N/A"),
+            "acute_load": training.get("acute_load", "N/A"),
+            "load_ratio": load_ratio,
+            "acwr_status": training.get("acwr_status", "N/A"),
+            "acwr_status_emoji": training.get("acwr_status_emoji", "⚪"),
+            "vo2": vo2_display,
+            "endurance_score": training.get("endurance_overall_score", "N/A"),
+            "hill_score": training.get("hill_overall_score", "N/A"),
+        },
+        "activity": {
+            "gap_pace": gap_pace,
+            "distance_miles": f"{distance_miles:.2f}",
+            "elevation_feet": int(round(elevation_feet)) if elevation_feet is not None else "N/A",
+            "time": activity_time,
+            "beers": f"{beers:.1f}",
+            "cadence_spm": running_cadence if running_cadence != "N/A" else "N/A",
+            "work": work,
+            "norm_power": norm_power,
+            "average_hr": average_hr if average_hr != "N/A" else "N/A",
+            "efficiency": efficiency,
+        },
+        "intervals": {"summary": icu_summary},
+        "periods": {
+            "week": {
+                "gap": week["gap"],
+                "distance_miles": f"{week['distance']:.1f}",
+                "elevation_feet": int(round(week["elevation"])),
+                "duration": week["duration"],
+                "beers": f"{week['beers_earned']:.0f}",
+            },
+            "month": {
+                "gap": month["gap"],
+                "distance_miles": f"{month['distance']:.0f}",
+                "elevation_feet": int(round(month["elevation"])),
+                "duration": month["duration"],
+                "beers": f"{month['beers_earned']:.0f}",
+            },
+            "year": {
+                "gap": year["gap"],
+                "distance_miles": f"{year['distance']:.0f}",
+                "elevation_feet": int(round(year["elevation"])),
+                "duration": year["duration"],
+                "beers": f"{year['beers_earned']:.0f}",
+            },
+        },
+        "raw": {
+            "activity": detailed_activity,
+            "training": training,
+            "intervals": intervals_payload or {},
+            "week": week,
+            "month": month,
+            "year": year,
+            "weather": weather_details or {},
+        },
+    }
+
+
 def run_once(force_update: bool = False, activity_id: int | None = None) -> dict[str, Any]:
     settings = Settings.from_env()
     settings.validate()
@@ -413,7 +552,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         )
         crono_line = format_crono_line(crono_summary)
 
-    description = _build_description(
+    description_context = _build_description_context(
         detailed_activity=detailed_activity,
         training=training,
         intervals_payload=intervals_payload,
@@ -428,7 +567,30 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         air_quality_index=aqi,
         aqi_description=aqi_desc,
         crono_line=crono_line,
+        weather_details=weather_details,
     )
+
+    render_result = render_with_active_template(settings, description_context)
+    if render_result["ok"]:
+        description = str(render_result["description"])
+    else:
+        logger.error("Template render failed: %s", render_result.get("error"))
+        description = _build_description(
+            detailed_activity=detailed_activity,
+            training=training,
+            intervals_payload=intervals_payload,
+            week=period_stats["week"],
+            month=period_stats["month"],
+            year=period_stats["year"],
+            longest_streak=longest_streak,
+            notables=notables,
+            latest_elevation_feet=latest_elevation_feet,
+            misery_index=misery_index,
+            misery_index_description=misery_desc,
+            air_quality_index=aqi,
+            aqi_description=aqi_desc,
+            crono_line=crono_line,
+        )
 
     strava_client.update_activity(selected_activity_id, {"description": description})
 
@@ -440,6 +602,15 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         "source": "standard",
         "period_stats": period_stats,
         "weather": weather_details,
+        "template_context": description_context,
+        "template_render": {
+            "ok": render_result.get("ok"),
+            "is_custom_template": render_result.get("is_custom_template"),
+            "fallback_used": render_result.get("fallback_used"),
+            "template_path": render_result.get("template_path"),
+            "error": render_result.get("error"),
+            "fallback_reason": render_result.get("fallback_reason"),
+        },
     }
     mark_activity_processed(settings.processed_log_file, selected_activity_id)
     write_json(settings.latest_json_file, payload)

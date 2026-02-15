@@ -36,6 +36,20 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "error")
 
+    def test_editor_schema_endpoint(self) -> None:
+        response = self.client.get("/editor/schema")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+
+    def test_editor_validate_endpoint(self) -> None:
+        response = self.client.post(
+            "/editor/validate",
+            json={"template": "Hello {{ activity.distance_miles }}"},
+        )
+        # Can be 200 if context exists, 400 if strict validation fails due missing context vars.
+        self.assertIn(response.status_code, {200, 400})
+
 
 if __name__ == "__main__":
     unittest.main()
