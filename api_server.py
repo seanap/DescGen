@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from flask import Flask, request
+from flask import Flask, render_template, request
 
 from description_template import (
     build_context_schema,
+    get_default_template,
     get_active_template,
     render_template_text,
     save_active_template,
@@ -57,6 +58,11 @@ def latest() -> tuple[dict, int]:
     return payload, 200
 
 
+@app.get("/editor")
+def editor_page() -> str:
+    return render_template("editor.html")
+
+
 @app.get("/editor/template")
 def editor_template_get() -> tuple[dict, int]:
     active = get_active_template(settings)
@@ -65,6 +71,14 @@ def editor_template_get() -> tuple[dict, int]:
         "template": active["template"],
         "is_custom": active["is_custom"],
         "template_path": active["path"],
+    }, 200
+
+
+@app.get("/editor/template/default")
+def editor_template_default_get() -> tuple[dict, int]:
+    return {
+        "status": "ok",
+        "template": get_default_template(),
     }, 200
 
 

@@ -205,6 +205,9 @@ curl http://localhost:1609/latest
 - `POST /editor/validate` (validate a template string)
 - `POST /editor/preview` (render preview from latest run context)
 
+Editor UI:
+- `GET /editor` (web UI for Simple + Advanced template editing)
+
 Examples:
 ```bash
 curl -X POST http://localhost:1609/rerun/latest
@@ -214,6 +217,7 @@ curl http://localhost:1609/editor/schema
 curl http://localhost:1609/editor/template
 curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
 curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
+open http://localhost:1609/editor
 ```
 
 ## Step-by-Step API Setup

@@ -42,6 +42,17 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
 
+    def test_editor_page_endpoint(self) -> None:
+        response = self.client.get("/editor")
+        self.assertEqual(response.status_code, 200)
+
+    def test_editor_default_template_endpoint(self) -> None:
+        response = self.client.get("/editor/template/default")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("template", payload)
+
     def test_editor_validate_endpoint(self) -> None:
         response = self.client.post(
             "/editor/validate",

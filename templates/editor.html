@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto Stat Description Editor</title>
+  <link rel="stylesheet" href="/static/editor.css">
+</head>
+<body>
+  <div class="bg-shape bg-shape-a"></div>
+  <div class="bg-shape bg-shape-b"></div>
+  <div class="app-shell">
+    <header class="topbar card">
+      <div>
+        <p class="eyebrow">Auto Stat Description</p>
+        <h1>Description Editor</h1>
+        <p class="subtext">Design your Strava description template with live preview.</p>
+      </div>
+      <div class="status-block" id="topStatus">Ready</div>
+    </header>
+
+    <section class="actions card">
+      <button id="btnLoadActive" class="btn">Load Active</button>
+      <button id="btnLoadDefault" class="btn btn-ghost">Load Default</button>
+      <button id="btnValidate" class="btn btn-secondary">Validate</button>
+      <button id="btnPreview" class="btn btn-secondary">Preview</button>
+      <button id="btnSave" class="btn btn-primary">Save + Publish</button>
+      <button id="btnCopyPreview" class="btn btn-ghost">Copy Preview</button>
+    </section>
+
+    <main class="layout">
+      <aside class="panel card reveal" style="--delay:0.03s">
+        <h2>Available Data</h2>
+        <p class="subtext">Use these keys in Advanced mode.</p>
+        <input id="schemaSearch" class="search" type="search" placeholder="Search fields...">
+        <div id="schemaMeta" class="meta"></div>
+        <div id="schemaList" class="catalog"></div>
+      </aside>
+
+      <section class="panel card reveal" style="--delay:0.07s">
+        <div class="tabbar">
+          <button class="tab active" data-tab="simple">Simple Builder</button>
+          <button class="tab" data-tab="advanced">Advanced Template</button>
+        </div>
+
+        <div id="tabSimple" class="tabpanel active">
+          <p class="subtext">Toggle sections, reorder them, then apply to the advanced editor.</p>
+          <div id="simpleSections" class="sections"></div>
+          <div class="inline-actions">
+            <button id="btnSimpleApply" class="btn btn-secondary">Apply To Advanced</button>
+            <button id="btnSimpleReset" class="btn btn-ghost">Reset Builder</button>
+          </div>
+        </div>
+
+        <div id="tabAdvanced" class="tabpanel">
+          <label for="templateEditor">Jinja Template</label>
+          <textarea id="templateEditor" spellcheck="false"></textarea>
+          <div id="validationPane" class="validation"></div>
+        </div>
+      </section>
+
+      <section class="panel card reveal" style="--delay:0.1s">
+        <h2>Preview</h2>
+        <p class="subtext">Rendered using latest activity context from <code>/latest</code>.</p>
+        <div class="meta" id="previewMeta">No preview yet.</div>
+        <pre id="previewText" class="preview"></pre>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/editor.js"></script>
+</body>
+</html>
