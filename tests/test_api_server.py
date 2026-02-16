@@ -83,6 +83,13 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertIn("template", payload)
 
+    def test_editor_fixtures_endpoint(self) -> None:
+        response = self.client.get("/editor/fixtures")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("fixtures", payload)
+
     def test_editor_validate_endpoint(self) -> None:
         response = self.client.post(
             "/editor/validate",
@@ -104,6 +111,20 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["context_source"], "sample")
 
+    def test_editor_preview_fixture_context(self) -> None:
+        response = self.client.post(
+            "/editor/preview",
+            json={
+                "context_mode": "fixture",
+                "fixture_name": "winter_grind",
+                "template": "MI {{ weather.misery_index }}",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(str(payload["context_source"]).startswith("sample:"))
+
     def test_editor_preview_invalid_context_mode(self) -> None:
         response = self.client.post(
             "/editor/preview",
@@ -112,6 +133,39 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         payload = response.get_json()
         self.assertEqual(payload["status"], "error")
+
+    def test_editor_template_versions_and_rollback_endpoints(self) -> None:
+        put_response = self.client.put(
+            "/editor/template",
+            json={
+                "template": "Miles {{ activity.distance_miles }}",
+                "author": "tester",
+                "name": "Unit Test Template",
+                "source": "test",
+            },
+        )
+        self.assertEqual(put_response.status_code, 200)
+
+        versions_response = self.client.get("/editor/template/versions")
+        self.assertEqual(versions_response.status_code, 200)
+        versions_payload = versions_response.get_json()
+        self.assertEqual(versions_payload["status"], "ok")
+        self.assertGreaterEqual(len(versions_payload["versions"]), 1)
+        version_id = versions_payload["versions"][0]["version_id"]
+
+        version_response = self.client.get(f"/editor/template/version/{version_id}")
+        self.assertEqual(version_response.status_code, 200)
+        version_payload = version_response.get_json()
+        self.assertEqual(version_payload["status"], "ok")
+        self.assertIn("template", version_payload["version"])
+
+        rollback_response = self.client.post(
+            "/editor/template/rollback",
+            json={"version_id": version_id, "author": "tester"},
+        )
+        self.assertEqual(rollback_response.status_code, 200)
+        rollback_payload = rollback_response.get_json()
+        self.assertEqual(rollback_payload["status"], "ok")
 
 
 if __name__ == "__main__":

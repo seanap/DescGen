@@ -393,6 +393,17 @@ body[data-theme="dark"] .field-insert {
   color: var(--ink);
 }
 
+.advanced-toolbar input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 0.84rem;
+  background: #fff;
+  color: var(--ink);
+  min-width: 160px;
+}
+
 label[for="templateEditor"] {
   display: block;
   margin-bottom: 6px;
@@ -428,6 +439,10 @@ label[for="templateEditor"] {
 .snippet-head h3 {
   margin: 0;
   font-size: 0.9rem;
+}
+
+.snippet-head .btn {
+  margin-top: 8px;
 }
 
 .snippets {
@@ -502,6 +517,7 @@ body[data-theme="dark"] #templateEditor,
 body[data-theme="dark"] .btn-ghost,
 body[data-theme="dark"] .search,
 body[data-theme="dark"] .advanced-toolbar select,
+body[data-theme="dark"] .advanced-toolbar input,
 body[data-theme="dark"] .toggle-inline,
 body[data-theme="dark"] .validation,
 body[data-theme="dark"] .tab {
