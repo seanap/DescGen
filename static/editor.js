@@ -135,6 +135,30 @@ const FALLBACK_SNIPPETS = [
 
 const DRAFT_KEY = "auto_stat_description_editor_draft";
 const THEME_KEY = "auto_stat_description_editor_theme";
+const TOUR_SEEN_KEY = "auto_stat_description_editor_tour_seen_v1";
+
+const TOUR_STEPS = [
+  {
+    title: "Pick Preview Context",
+    body:
+      "Use Preview Context to choose SAFE modes (sample/fixture) or LIVE modes (latest). SAFE is best for editing because it avoids live payload dependency.",
+  },
+  {
+    title: "Explore Available Data",
+    body:
+      "Use the Available Data catalog to search fields by source/group/tag. Click Insert or Insert As to add variables and filters directly into your template.",
+  },
+  {
+    title: "Use Starter Templates",
+    body:
+      "Choose a starter preset to instantly bootstrap a layout. Preview Starter lets you test without replacing your current editor content.",
+  },
+  {
+    title: "Publish With Confidence",
+    body:
+      "Save + Publish always opens a required confirmation modal with validation summary and line diff against the active template before publish.",
+  },
+];
 
 const state = {
   templateActive: "",
@@ -143,6 +167,7 @@ const state = {
   templateMeta: null,
   versions: [],
   fixtures: [],
+  starterTemplates: [],
   helperTransforms: [],
   schema: null,
   schemaSource: null,
@@ -153,6 +178,7 @@ const state = {
   previewRequestId: 0,
   editorTouched: false,
   publishModalValidationOk: false,
+  tourStep: 0,
 };
 
 const elements = {
@@ -174,6 +200,8 @@ const elements = {
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
   contextSafetyBanner: document.getElementById("contextSafetyBanner"),
+  starterTemplateSelect: document.getElementById("starterTemplateSelect"),
+  starterTemplateMeta: document.getElementById("starterTemplateMeta"),
   templateNameInput: document.getElementById("templateNameInput"),
   templateAuthorInput: document.getElementById("templateAuthorInput"),
   importTemplateFile: document.getElementById("importTemplateFile"),
@@ -193,6 +221,15 @@ const elements = {
   publishModeBanner: document.getElementById("publishModeBanner"),
   publishChecklistReviewed: document.getElementById("publishChecklistReviewed"),
   publishChecklistReplace: document.getElementById("publishChecklistReplace"),
+  tourModal: document.getElementById("tourModal"),
+  tourStepTitle: document.getElementById("tourStepTitle"),
+  tourStepBody: document.getElementById("tourStepBody"),
+  tourStepCounter: document.getElementById("tourStepCounter"),
+  btnTour: document.getElementById("btnTour"),
+  btnTourSkip: document.getElementById("btnTourSkip"),
+  btnTourPrev: document.getElementById("btnTourPrev"),
+  btnTourNext: document.getElementById("btnTourNext"),
+  btnTourDone: document.getElementById("btnTourDone"),
 };
 
 function setStatus(text, tone = "neutral") {
@@ -456,7 +493,9 @@ function renderSchemaCatalog(filterText = "") {
   elements.schemaList.innerHTML = "";
 
   if (!schema || !Array.isArray(schema.groups) || schema.groups.length === 0) {
-    elements.schemaMeta.textContent = "No schema fields available.";
+    const contextMode = elements.schemaContextMode.value || "sample";
+    elements.schemaMeta.textContent =
+      `No schema fields available. Try context mode '${contextMode}' or run one worker cycle to populate latest payload context.`;
     return;
   }
 
@@ -625,6 +664,21 @@ function renderSchemaCatalog(filterText = "") {
   }
 
   const sourceText = state.schemaSource ? ` | context: ${state.schemaSource}` : "";
+  if (visibleFields === 0) {
+    const activeFilters = [];
+    const sourceValue = elements.schemaSourceFilter.value || "all";
+    const groupValue = elements.schemaGroupFilter.value || "all";
+    const typeValue = elements.schemaTypeFilter.value || "all";
+    const tagValue = elements.schemaTagFilter.value || "all";
+    if (sourceValue !== "all") activeFilters.push(`source=${sourceValue}`);
+    if (groupValue !== "all") activeFilters.push(`group=${groupValue}`);
+    if (typeValue !== "all") activeFilters.push(`type=${typeValue}`);
+    if (tagValue !== "all") activeFilters.push(`tag=${tagValue}`);
+    if (elements.schemaCuratedOnly.checked) activeFilters.push("curated_only=true");
+    const filterTextLabel = activeFilters.length > 0 ? ` with filters (${activeFilters.join(", ")})` : "";
+    elements.schemaMeta.textContent = `No fields matched${filterTextLabel}${sourceText}.`;
+    return;
+  }
   elements.schemaMeta.textContent = `${visibleFields} fields shown${sourceText}`;
 }
 
@@ -1110,6 +1164,169 @@ function loadDraft() {
   }
 }
 
+function selectedStarterTemplate() {
+  const selectedId = String(elements.starterTemplateSelect?.value || "").trim();
+  if (!selectedId) return null;
+  return state.starterTemplates.find((item) => String(item.id) === selectedId) || null;
+}
+
+function renderStarterTemplateMeta() {
+  if (!elements.starterTemplateMeta) return;
+  const selected = selectedStarterTemplate();
+  if (!selected) {
+    elements.starterTemplateMeta.textContent = "No starter selected.";
+    return;
+  }
+  const lines = [];
+  lines.push(`${selected.label || selected.id}`);
+  if (selected.description) lines.push(selected.description);
+  const templateText = String(selected.template || "");
+  lines.push(`Template length: ${templateText.length} chars`);
+  elements.starterTemplateMeta.textContent = lines.join("\n");
+}
+
+function renderStarterTemplateOptions() {
+  if (!elements.starterTemplateSelect) return;
+  const select = elements.starterTemplateSelect;
+  const previous = String(select.value || "");
+  select.innerHTML = "";
+
+  if (!Array.isArray(state.starterTemplates) || state.starterTemplates.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No starters available";
+    select.appendChild(option);
+    select.value = "";
+    renderStarterTemplateMeta();
+    return;
+  }
+
+  for (const starter of state.starterTemplates) {
+    const option = document.createElement("option");
+    option.value = String(starter.id || "");
+    option.textContent = String(starter.label || starter.id || "Starter");
+    option.title = String(starter.description || starter.label || "");
+    select.appendChild(option);
+  }
+
+  const validPrevious = state.starterTemplates.some((item) => String(item.id || "") === previous);
+  select.value = validPrevious ? previous : String(state.starterTemplates[0].id || "");
+  renderStarterTemplateMeta();
+}
+
+async function previewSelectedStarterTemplate() {
+  const selected = selectedStarterTemplate();
+  if (!selected) {
+    setStatus("No starter template selected", "error");
+    return;
+  }
+  const contextMode = elements.previewContextMode.value || "sample";
+  const fixtureName = selectedFixtureName();
+  const res = await requestJSON("/editor/preview", {
+    method: "POST",
+    body: JSON.stringify({
+      template: String(selected.template || ""),
+      context_mode: contextMode,
+      fixture_name: fixtureName,
+    }),
+  });
+  if (!res.ok) {
+    elements.previewMeta.textContent = res.payload.error || "Starter preview failed";
+    elements.previewText.textContent = "";
+    setStatus("Starter preview failed", "error");
+    return;
+  }
+  elements.previewText.textContent = res.payload.preview || "";
+  elements.previewMeta.textContent = `Starter preview | ${selected.label} | context: ${res.payload.context_source || "sample"}`;
+  setStatus(`Starter preview rendered: ${selected.label}`, "ok");
+}
+
+function applySelectedStarterTemplate() {
+  const selected = selectedStarterTemplate();
+  if (!selected) {
+    setStatus("No starter template selected", "error");
+    return;
+  }
+  const incoming = decodeEscapedNewlines(String(selected.template || ""));
+  const current = getEditorText();
+  if (current.trim() && current.trim() !== incoming.trim()) {
+    const confirmed = window.confirm(`Replace current editor content with starter template "${selected.label}"?`);
+    if (!confirmed) return;
+  }
+  setEditorText(incoming);
+  switchTab("advanced");
+  setStatus(`Starter applied: ${selected.label}`, "ok");
+  queueAutoPreview();
+}
+
+async function loadStarterTemplates(startersPayload = null) {
+  if (startersPayload && Array.isArray(startersPayload)) {
+    state.starterTemplates = startersPayload;
+  } else {
+    const res = await requestJSON("/editor/starter-templates");
+    if (!res.ok || !Array.isArray(res.payload.starter_templates)) {
+      state.starterTemplates = [];
+      renderStarterTemplateOptions();
+      setStatus("Failed to load starter templates", "error");
+      return;
+    }
+    state.starterTemplates = res.payload.starter_templates;
+  }
+  renderStarterTemplateOptions();
+}
+
+function markTourSeen() {
+  try {
+    localStorage.setItem(TOUR_SEEN_KEY, "1");
+  } catch (_err) {
+    // Ignore localStorage failures.
+  }
+}
+
+function hasSeenTour() {
+  try {
+    return localStorage.getItem(TOUR_SEEN_KEY) === "1";
+  } catch (_err) {
+    return false;
+  }
+}
+
+function renderTourStep() {
+  const stepCount = TOUR_STEPS.length;
+  if (stepCount === 0) return;
+  const index = Math.max(0, Math.min(stepCount - 1, state.tourStep));
+  state.tourStep = index;
+  const step = TOUR_STEPS[index];
+
+  if (elements.tourStepTitle) elements.tourStepTitle.textContent = step.title;
+  if (elements.tourStepBody) elements.tourStepBody.textContent = step.body;
+  if (elements.tourStepCounter) elements.tourStepCounter.textContent = `Step ${index + 1} / ${stepCount}`;
+  if (elements.btnTourPrev) elements.btnTourPrev.disabled = index === 0;
+  if (elements.btnTourNext) elements.btnTourNext.hidden = index >= stepCount - 1;
+  if (elements.btnTourDone) elements.btnTourDone.hidden = index < stepCount - 1;
+}
+
+function openTour(startIndex = 0) {
+  if (!elements.tourModal) return;
+  state.tourStep = Math.max(0, Math.min(TOUR_STEPS.length - 1, startIndex));
+  renderTourStep();
+  elements.tourModal.classList.add("open");
+  elements.tourModal.setAttribute("aria-hidden", "false");
+}
+
+function closeTour(options = {}) {
+  const { markSeen = true } = options;
+  if (!elements.tourModal) return;
+  elements.tourModal.classList.remove("open");
+  elements.tourModal.setAttribute("aria-hidden", "true");
+  if (markSeen) markTourSeen();
+}
+
+function maybeOpenTourOnFirstRun() {
+  if (hasSeenTour()) return;
+  openTour(0);
+}
+
 function downloadTextFile(filename, text) {
   const blob = new Blob([text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -1225,11 +1442,12 @@ async function loadEditorBootstrap() {
 
   const schemaMode = elements.schemaContextMode.value || "sample";
   const fixtureName = selectedFixtureName();
-  const [activeRes, defaultRes, schemaRes, snippetRes, fixtureRes, versionsRes] = await Promise.all([
+  const [activeRes, defaultRes, schemaRes, snippetRes, starterRes, fixtureRes, versionsRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
     requestJSON(`/editor/catalog?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
     requestJSON("/editor/snippets"),
+    requestJSON("/editor/starter-templates"),
     requestJSON("/editor/fixtures"),
     requestJSON("/editor/template/versions?limit=40"),
   ]);
@@ -1260,6 +1478,11 @@ async function loadEditorBootstrap() {
 
   if (snippetRes.ok && Array.isArray(snippetRes.payload.snippets)) {
     state.snippets = snippetRes.payload.snippets;
+  }
+  if (starterRes.ok && Array.isArray(starterRes.payload.starter_templates)) {
+    await loadStarterTemplates(starterRes.payload.starter_templates);
+  } else {
+    await loadStarterTemplates([]);
   }
   if (fixtureRes.ok && Array.isArray(fixtureRes.payload.fixtures)) {
     await loadFixtures(fixtureRes.payload.fixtures);
@@ -1316,15 +1539,27 @@ async function previewTemplate(options = {}) {
   }
 
   if (!res.ok) {
-    elements.previewMeta.textContent = res.payload.error || "Preview failed";
+    const mode = elements.previewContextMode.value || "sample";
+    const errorText = res.payload.error || "Preview failed";
+    elements.previewMeta.textContent = `Preview failed (${mode}): ${errorText}`;
+    if (mode === "latest") {
+      elements.previewText.textContent = "No latest context available yet. Try Sample/Fixture mode or run one worker cycle.";
+    } else {
+      elements.previewText.textContent = "Validation/render issue. Check the Validation panel for details and hints.";
+    }
     if (force) {
-      elements.previewText.textContent = "";
+      // keep informative error text in preview pane on forced preview failures
     }
     setStatus("Preview failed", "error");
     return;
   }
 
-  elements.previewText.textContent = res.payload.preview || "";
+  const rendered = String(res.payload.preview || "");
+  if (rendered.trim()) {
+    elements.previewText.textContent = rendered;
+  } else {
+    elements.previewText.textContent = "Template rendered an empty output for this context.";
+  }
   const source = res.payload.context_source || "sample";
   elements.previewMeta.textContent = `Rendered length: ${res.payload.length} chars | context: ${source}`;
   setStatus("Preview updated", "ok");
@@ -1408,6 +1643,11 @@ function bindUI() {
   document.getElementById("btnLoadDraft").addEventListener("click", loadDraft);
   document.getElementById("btnExportTemplate").addEventListener("click", exportTemplateBundle);
   document.getElementById("btnImportTemplate").addEventListener("click", triggerImportTemplateFile);
+  if (elements.btnTour) {
+    elements.btnTour.addEventListener("click", () => {
+      openTour(0);
+    });
+  }
 
   document.getElementById("btnFormatTemplate").addEventListener("click", () => {
     setEditorText(formatTemplateText(getEditorText()));
@@ -1418,6 +1658,17 @@ function bindUI() {
   document.getElementById("btnValidate").addEventListener("click", validateTemplate);
   document.getElementById("btnPreview").addEventListener("click", () => previewTemplate({ force: true }));
   document.getElementById("btnSave").addEventListener("click", openPublishModal);
+  if (elements.starterTemplateSelect) {
+    elements.starterTemplateSelect.addEventListener("change", renderStarterTemplateMeta);
+  }
+  const starterPreviewBtn = document.getElementById("btnStarterPreview");
+  if (starterPreviewBtn) {
+    starterPreviewBtn.addEventListener("click", previewSelectedStarterTemplate);
+  }
+  const starterApplyBtn = document.getElementById("btnStarterApply");
+  if (starterApplyBtn) {
+    starterApplyBtn.addEventListener("click", applySelectedStarterTemplate);
+  }
   document.getElementById("btnCopyPreview").addEventListener("click", copyPreview);
   document.getElementById("btnRefreshHistory").addEventListener("click", async () => {
     await loadVersionHistory();
@@ -1532,9 +1783,38 @@ function bindUI() {
       }
     });
   }
+  if (elements.btnTourNext) {
+    elements.btnTourNext.addEventListener("click", () => {
+      state.tourStep = Math.min(TOUR_STEPS.length - 1, state.tourStep + 1);
+      renderTourStep();
+    });
+  }
+  if (elements.btnTourPrev) {
+    elements.btnTourPrev.addEventListener("click", () => {
+      state.tourStep = Math.max(0, state.tourStep - 1);
+      renderTourStep();
+    });
+  }
+  if (elements.btnTourDone) {
+    elements.btnTourDone.addEventListener("click", () => closeTour({ markSeen: true }));
+  }
+  if (elements.btnTourSkip) {
+    elements.btnTourSkip.addEventListener("click", () => closeTour({ markSeen: true }));
+  }
+  if (elements.tourModal) {
+    elements.tourModal.addEventListener("click", (event) => {
+      if (event.target === elements.tourModal) {
+        closeTour({ markSeen: true });
+      }
+    });
+  }
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && elements.publishModal?.classList.contains("open")) {
       closePublishModal();
+      return;
+    }
+    if (event.key === "Escape" && elements.tourModal?.classList.contains("open")) {
+      closeTour({ markSeen: true });
     }
   });
 
@@ -1552,4 +1832,5 @@ window.addEventListener("DOMContentLoaded", async () => {
   updateValidationPane(null, true);
   renderContextSafetyBanner();
   await loadEditorBootstrap();
+  maybeOpenTourOnFirstRun();
 });

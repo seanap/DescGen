@@ -511,6 +511,23 @@ label[for="templateEditor"] {
   flex-wrap: wrap;
 }
 
+.help-links {
+  margin-top: 10px;
+  display: grid;
+  gap: 7px;
+}
+
+.help-links a {
+  color: var(--secondary);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.help-links a:hover {
+  text-decoration: underline;
+}
+
 .snippet-btn {
   border: 1px solid color-mix(in srgb, var(--secondary) 30%, var(--line));
   border-radius: 999px;
@@ -603,6 +620,19 @@ body[data-theme="dark"] .snippet-btn {
   gap: 10px;
 }
 
+.tour-card {
+  width: min(640px, 96vw);
+}
+
+.tour-body {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbf9;
+  padding: 12px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 body[data-theme="dark"] .card,
 body[data-theme="dark"] .catalog-group,
 body[data-theme="dark"] .section-row,
@@ -627,6 +657,10 @@ body[data-theme="dark"] .tab.active {
 body[data-theme="dark"] .context-banner.live {
   background: #2d2412;
   color: #f2c87d;
+}
+
+body[data-theme="dark"] .tour-body {
+  background: #182521;
 }
 
 .reveal {

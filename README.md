@@ -16,6 +16,8 @@ Turn every Strava activity into a rich, auto-generated training report.
 - Export/import template bundles so you can move configs between instances.
 - Mandatory publish confirmation with checklist + diff before replacing active template.
 - Safe/Live context banner to make preview data mode explicit.
+- First-run guided tour for onboarding new users.
+- Starter template gallery + inline source/doc reference links.
 
 ## Sample Output (What Your Strava Description Can Look Like)
 ```text
@@ -248,6 +250,7 @@ docker network prune -f
 - `GET /editor/template/versions` (saved template version history)
 - `GET /editor/template/version/<version_id>` (specific saved template)
 - `GET /editor/snippets` (quick insert snippets for the web editor)
+- `GET /editor/starter-templates` (curated starter layouts for quick setup)
 - `GET /editor/context/sample` (sample context payload for testing)
 - `PUT /editor/template` (save custom template)
 - `POST /editor/template/import` (import and publish template from bundle JSON)
@@ -269,6 +272,7 @@ curl http://localhost:1609/editor/template
 curl http://localhost:1609/editor/template/export
 curl http://localhost:1609/editor/template/versions
 curl http://localhost:1609/editor/snippets
+curl http://localhost:1609/editor/starter-templates
 curl http://localhost:1609/editor/context/sample
 curl http://localhost:1609/editor/context/sample?fixture=winter_grind
 curl -X POST http://localhost:1609/editor/template/import -H "Content-Type: application/json" -d '{"bundle":{"template":"{{ activity.gap_pace }}","name":"Imported Template"},"author":"cli-user","context_mode":"sample"}'
