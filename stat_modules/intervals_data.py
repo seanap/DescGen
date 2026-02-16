@@ -47,6 +47,93 @@ def format_distance(distance_meters: float | int | None) -> str:
     return f"{float(distance_meters) / 1000:.0f}k"
 
 
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _seconds_to_hms(value: Any) -> str:
+    parsed = _as_float(value)
+    if parsed is None or parsed < 0:
+        return "N/A"
+    total_seconds = int(round(parsed))
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
+def _mps_to_pace(value: Any) -> str:
+    speed_mps = _as_float(value)
+    if speed_mps is None or speed_mps <= 0:
+        return "N/A"
+    pace_min_per_mile = (1609.34 / speed_mps) / 60.0
+    minutes = int(pace_min_per_mile)
+    seconds = int(round((pace_min_per_mile - minutes) * 60))
+    if seconds == 60:
+        minutes += 1
+        seconds = 0
+    return f"{minutes}:{seconds:02d}/mi"
+
+
+def _mps_to_mph(value: Any) -> str:
+    speed_mps = _as_float(value)
+    if speed_mps is None or speed_mps <= 0:
+        return "N/A"
+    return f"{speed_mps * 2.23694:.1f} mph"
+
+
+def _meters_to_miles(value: Any) -> str:
+    meters = _as_float(value)
+    if meters is None or meters < 0:
+        return "N/A"
+    return f"{meters / 1609.34:.2f} mi"
+
+
+def _meters_to_feet_int(value: Any) -> int | str:
+    meters = _as_float(value)
+    if meters is None:
+        return "N/A"
+    return int(round(meters * 3.28084))
+
+
+def _temperature_f(value: Any) -> str:
+    temp = _as_float(value)
+    if temp is None:
+        return "N/A"
+    return f"{temp:.1f}F"
+
+
+def _format_zone_summary(value: Any) -> str:
+    entries: list[tuple[int, int]] = []
+    if isinstance(value, list):
+        for idx, item in enumerate(value, start=1):
+            zone_id = idx
+            secs_value = None
+            if isinstance(item, dict):
+                zid = item.get("id")
+                if isinstance(zid, int) and zid > 0:
+                    zone_id = zid
+                secs_value = _as_float(item.get("secs"))
+            else:
+                secs_value = _as_float(item)
+            if secs_value is None or secs_value <= 0:
+                continue
+            entries.append((zone_id, int(round(secs_value))))
+    if not entries:
+        return "N/A"
+    parts = [f"Z{zone} {format_time(secs)}" for zone, secs in entries]
+    return " | ".join(parts)
+
+
 def _format_icu_summary(ctl: float | None, atl: float | None) -> str:
     if ctl is None or atl is None or ctl == 0:
         return "N/A"
@@ -131,6 +218,29 @@ def get_intervals_activity_data(
     efficiency = data.get("icu_efficiency_factor")
     ctl = data.get("icu_ctl")
     atl = data.get("icu_atl")
+    training_load = data.get("icu_training_load")
+    strain_score = data.get("strain_score")
+    pace_load = data.get("pace_load")
+    hr_load = data.get("hr_load")
+    power_load = data.get("power_load")
+
+    average_speed = data.get("average_speed")
+    max_speed = data.get("max_speed")
+    distance = data.get("distance")
+    moving_time = data.get("moving_time")
+    elapsed_time = data.get("elapsed_time")
+    average_hr = data.get("average_heartrate")
+    max_hr = data.get("max_heartrate")
+    total_elevation_gain = data.get("total_elevation_gain")
+    total_elevation_loss = data.get("total_elevation_loss")
+    average_temp = data.get("average_temp")
+    max_temp = data.get("max_temp")
+    min_temp = data.get("min_temp")
+
+    zone_summary = _format_zone_summary(data.get("icu_zone_times"))
+    hr_zone_summary = _format_zone_summary(data.get("icu_hr_zone_times"))
+    pace_zone_summary = _format_zone_summary(data.get("pace_zone_times"))
+    gap_zone_summary = _format_zone_summary(data.get("gap_zone_times"))
 
     return {
         "norm_power": f"{int(norm_power)}W" if isinstance(norm_power, (int, float)) else "N/A",
@@ -140,4 +250,28 @@ def get_intervals_activity_data(
         "icu_ctl": ctl,
         "icu_atl": atl,
         "icu_summary": _format_icu_summary(ctl, atl),
+        "ctl": int(round(float(ctl))) if isinstance(ctl, (int, float)) else "N/A",
+        "atl": int(round(float(atl))) if isinstance(atl, (int, float)) else "N/A",
+        "training_load": int(round(float(training_load))) if isinstance(training_load, (int, float)) else "N/A",
+        "strain_score": int(round(float(strain_score))) if isinstance(strain_score, (int, float)) else "N/A",
+        "pace_load": int(round(float(pace_load))) if isinstance(pace_load, (int, float)) else "N/A",
+        "hr_load": int(round(float(hr_load))) if isinstance(hr_load, (int, float)) else "N/A",
+        "power_load": int(round(float(power_load))) if isinstance(power_load, (int, float)) else "N/A",
+        "avg_pace": _mps_to_pace(average_speed),
+        "avg_speed_mph": _mps_to_mph(average_speed),
+        "max_speed_mph": _mps_to_mph(max_speed),
+        "distance_miles": _meters_to_miles(distance),
+        "moving_time": _seconds_to_hms(moving_time),
+        "elapsed_time": _seconds_to_hms(elapsed_time),
+        "average_hr": int(round(float(average_hr))) if isinstance(average_hr, (int, float)) else "N/A",
+        "max_hr": int(round(float(max_hr))) if isinstance(max_hr, (int, float)) else "N/A",
+        "elevation_gain_feet": _meters_to_feet_int(total_elevation_gain),
+        "elevation_loss_feet": _meters_to_feet_int(total_elevation_loss),
+        "average_temp_f": _temperature_f(average_temp),
+        "max_temp_f": _temperature_f(max_temp),
+        "min_temp_f": _temperature_f(min_temp),
+        "zone_summary": zone_summary,
+        "hr_zone_summary": hr_zone_summary,
+        "pace_zone_summary": pace_zone_summary,
+        "gap_zone_summary": gap_zone_summary,
     }
