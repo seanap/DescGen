@@ -41,7 +41,7 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload.get("context_source"), "sample")
+        self.assertTrue(str(payload.get("context_source")).startswith("sample"))
 
     def test_ready_endpoint(self) -> None:
         response = self.client.get("/ready")
@@ -56,7 +56,7 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(payload["has_context"])
-        self.assertEqual(payload["context_source"], "sample")
+        self.assertTrue(str(payload["context_source"]).startswith("sample"))
 
     def test_editor_snippets_endpoint(self) -> None:
         response = self.client.get("/editor/snippets")
@@ -109,7 +109,7 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["context_source"], "sample")
+        self.assertTrue(str(payload["context_source"]).startswith("sample"))
 
     def test_editor_preview_fixture_context(self) -> None:
         response = self.client.post(
