@@ -24,6 +24,8 @@
       <button id="btnLoadDefault" class="btn btn-ghost">Load Default</button>
       <button id="btnLoadDraft" class="btn btn-ghost" title="Load your locally saved browser draft">Load Draft</button>
       <button id="btnSaveDraft" class="btn btn-ghost" title="Save current editor content locally in your browser">Save Draft</button>
+      <button id="btnExportTemplate" class="btn btn-ghost" title="Download active template as JSON bundle">Export Template</button>
+      <button id="btnImportTemplate" class="btn btn-ghost" title="Import template from JSON bundle">Import Template</button>
       <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
       <button id="btnValidate" class="btn btn-secondary">Validate</button>
       <button id="btnPreview" class="btn btn-secondary">Preview</button>
@@ -37,6 +39,7 @@
         <input id="themeToggle" type="checkbox" checked>
         Dark Mode
       </label>
+      <input id="importTemplateFile" type="file" accept="application/json,.json" hidden>
     </section>
 
     <main class="layout">

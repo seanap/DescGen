@@ -181,12 +181,93 @@ def editor_template_versions_get() -> tuple[dict, int]:
     }, 200
 
 
+@app.get("/editor/template/export")
+def editor_template_export_get() -> tuple[dict, int]:
+    include_versions_raw = str(request.args.get("include_versions", "false")).strip().lower()
+    include_versions = include_versions_raw in {"1", "true", "yes", "on"}
+    limit_raw = request.args.get("limit", "30")
+    try:
+        limit = max(1, min(200, int(limit_raw)))
+    except ValueError:
+        limit = 30
+
+    active = get_active_template(settings)
+    payload = {
+        "status": "ok",
+        "bundle_version": 1,
+        "exported_at_utc": datetime.now(timezone.utc).isoformat(),
+        "template": active.get("template"),
+        "name": active.get("name"),
+        "is_custom": bool(active.get("is_custom")),
+        "metadata": active.get("metadata"),
+        "current_version": active.get("current_version"),
+    }
+    if include_versions:
+        payload["versions"] = list_template_versions(settings, limit=limit)
+    return payload, 200
+
+
 @app.get("/editor/template/version/<string:version_id>")
 def editor_template_version_get(version_id: str) -> tuple[dict, int]:
     record = get_template_version(settings, version_id)
     if not record:
         return {"status": "error", "error": "Unknown template version."}, 404
     return {"status": "ok", "version": record}, 200
+
+
+@app.post("/editor/template/import")
+def editor_template_import_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    bundle = body.get("bundle")
+    source_payload = bundle if isinstance(bundle, dict) else body
+
+    template_text = source_payload.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        return {"status": "error", "error": "template must be a non-empty string."}, 400
+
+    try:
+        context_mode = _resolve_context_mode(body.get("context_mode"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(
+        context_mode,
+        fixture_name=body.get("fixture_name"),
+    )
+    validation = validate_template_text(template_text, context)
+    if not validation["valid"]:
+        return {
+            "status": "error",
+            "context_source": context_source if context is not None else None,
+            "validation": validation,
+        }, 400
+
+    author = str(body.get("author") or "editor-user")
+    source = str(body.get("source") or "editor-import")
+    name = body.get("name")
+    if name is None:
+        name = source_payload.get("name")
+    notes = body.get("notes")
+    if notes is None:
+        exported_at = source_payload.get("exported_at_utc")
+        if isinstance(exported_at, str) and exported_at.strip():
+            notes = f"Imported from bundle exported at {exported_at.strip()}"
+    saved = save_active_template(
+        settings,
+        template_text,
+        name=str(name) if name is not None else None,
+        author=author,
+        source=source,
+        notes=str(notes) if notes is not None else None,
+    )
+    return {
+        "status": "ok",
+        "context_source": context_source if context is not None else None,
+        "template_path": str(saved.get("path")),
+        "saved_version": saved.get("saved_version"),
+        "active": saved,
+        "validation": validation,
+    }, 200
 
 
 @app.post("/editor/template/rollback")

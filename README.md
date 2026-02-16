@@ -13,6 +13,7 @@ Turn every Strava activity into a rich, auto-generated training report.
 - Local API endpoint to read latest output and force reruns.
 - Template editor now supports saved version history + rollback.
 - Fixture-based preview modes for safe template testing without live calls.
+- Export/import template bundles so you can move configs between instances.
 
 ## Sample Output (What Your Strava Description Can Look Like)
 ```text
@@ -241,11 +242,13 @@ docker network prune -f
 - `GET /editor/fixtures` (pinned sample fixtures for preview/testing)
 - `GET /editor/template` (active template, default or custom)
 - `GET /editor/template/default` (factory template)
+- `GET /editor/template/export` (downloadable JSON bundle of active template)
 - `GET /editor/template/versions` (saved template version history)
 - `GET /editor/template/version/<version_id>` (specific saved template)
 - `GET /editor/snippets` (quick insert snippets for the web editor)
 - `GET /editor/context/sample` (sample context payload for testing)
 - `PUT /editor/template` (save custom template)
+- `POST /editor/template/import` (import and publish template from bundle JSON)
 - `POST /editor/template/rollback` (rollback active template to a prior version)
 - `POST /editor/validate` (validate a template string; optional `context_mode`)
 - `POST /editor/preview` (render preview; optional `context_mode`)
@@ -261,10 +264,12 @@ curl -X POST http://localhost:1609/rerun -H "Content-Type: application/json" -d 
 curl "http://localhost:1609/editor/schema?context_mode=latest_or_sample"
 curl http://localhost:1609/editor/fixtures
 curl http://localhost:1609/editor/template
+curl http://localhost:1609/editor/template/export
 curl http://localhost:1609/editor/template/versions
 curl http://localhost:1609/editor/snippets
 curl http://localhost:1609/editor/context/sample
 curl http://localhost:1609/editor/context/sample?fixture=winter_grind
+curl -X POST http://localhost:1609/editor/template/import -H "Content-Type: application/json" -d '{"bundle":{"template":"{{ activity.gap_pace }}","name":"Imported Template"},"author":"cli-user","context_mode":"sample"}'
 curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"context_mode":"sample","template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
 curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"context_mode":"fixture","fixture_name":"humid_hammer","template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
 curl -X POST http://localhost:1609/editor/template/rollback -H "Content-Type: application/json" -d '{"version_id":"vYYYYMMDDTHHMMSSffffffZ-abcdef1234"}'
