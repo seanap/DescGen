@@ -88,6 +88,43 @@ EDITOR_SNIPPETS: list[dict[str, str]] = [
 ]
 
 
+STARTER_TEMPLATES: list[dict[str, str]] = [
+    {
+        "id": "minimal-core",
+        "label": "Minimal Core",
+        "description": "Short and clean: weather + latest activity + 7-day summary.",
+        "template": """🌤️ MI {{ weather.misery_index }} {{ weather.misery_description }} | AQI {{ weather.aqi }}
+👟 {{ activity.gap_pace }} | {{ activity.distance_miles }}mi | {{ activity.time }} | {{ activity.elevation_feet }}'
+7️⃣ {{ periods.week.gap }} | {{ periods.week.distance_miles }}mi | {{ periods.week.duration }} | 🍺 {{ periods.week.beers }}""",
+    },
+    {
+        "id": "race-day",
+        "label": "Race Day",
+        "description": "Spotlight the latest effort with readiness, pace, power, and effort context.",
+        "template": """🏆 {{ streak_days }} days in a row
+🌤️🚦 Readiness {{ training.readiness_score }} {{ training.readiness_emoji }} | RHR {{ training.resting_hr }} | Sleep {{ training.sleep_score }}
+👟🏃 {{ activity.gap_pace }} | {{ activity.distance_miles }} | {{ activity.time }} | 🏔️ {{ activity.elevation_feet }}' | 🍺 {{ activity.beers }}
+👟👣 {{ activity.cadence_spm }}spm | ⚡ {{ activity.norm_power }} | 💓 {{ activity.average_hr }} | ⚙️ {{ activity.efficiency }}
+🚄 {{ training.status_emoji }} {{ training.status_key }} | TE {{ training.aerobic_te }} : {{ training.anaerobic_te }} ({{ training.te_label }})""",
+    },
+    {
+        "id": "weather-watch",
+        "label": "Weather Watch",
+        "description": "Lead with conditions and keep training context concise.",
+        "template": """🌤️🌡️ Misery Index: {{ weather.misery_index }} {{ weather.misery_description }} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
+{% if weather.details is defined %}Temp {{ weather.details.temperature_f }}F | Dew {{ weather.details.dew_point_f }}F | Wind {{ weather.details.wind_mph }}mph | {{ weather.details.condition_text }}{% endif %}
+👟 {{ activity.gap_pace }} | {{ activity.distance_miles }}mi | {{ activity.time }} | 🏔️ {{ activity.elevation_feet }}'
+📅 30d {{ periods.month.gap }} | {{ periods.month.distance_miles }}mi | {{ periods.month.duration }}""",
+    },
+    {
+        "id": "full-data-rich",
+        "label": "Full Data Rich",
+        "description": "High-detail report with nutrition and rolling summaries.",
+        "template": DEFAULT_DESCRIPTION_TEMPLATE,
+    },
+]
+
+
 SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
     "streak_days": 412,
     "notables": [
@@ -280,6 +317,12 @@ def get_default_template() -> str:
 
 def get_editor_snippets() -> list[dict[str, str]]:
     return deepcopy(EDITOR_SNIPPETS)
+
+
+def get_starter_templates() -> list[dict[str, str]]:
+    templates = deepcopy(STARTER_TEMPLATES)
+    templates.sort(key=lambda item: str(item.get("label") or item.get("id") or ""))
+    return templates
 
 
 def list_sample_template_fixtures() -> list[dict[str, str]]:

@@ -7,6 +7,7 @@ from description_template import (
     build_context_schema,
     get_template_version,
     get_editor_snippets,
+    get_starter_templates,
     get_active_template,
     get_default_template,
     get_sample_template_context,
@@ -223,6 +224,15 @@ class TestDescriptionTemplate(unittest.TestCase):
         first = snippets[0]
         self.assertIn("id", first)
         self.assertIn("label", first)
+        self.assertIn("template", first)
+
+    def test_starter_templates_shape(self) -> None:
+        templates = get_starter_templates()
+        self.assertGreater(len(templates), 1)
+        first = templates[0]
+        self.assertIn("id", first)
+        self.assertIn("label", first)
+        self.assertIn("description", first)
         self.assertIn("template", first)
 
 

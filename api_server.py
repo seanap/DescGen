@@ -8,6 +8,7 @@ from flask import Flask, render_template, request
 from description_template import (
     build_context_schema,
     get_editor_snippets,
+    get_starter_templates,
     get_default_template,
     get_active_template,
     get_sample_template_context,
@@ -303,6 +304,16 @@ def editor_snippets_get() -> tuple[dict, int]:
         "status": "ok",
         "snippets": get_editor_snippets(),
         "context_modes": ["latest", "sample", "latest_or_sample", "fixture"],
+    }, 200
+
+
+@app.get("/editor/starter-templates")
+def editor_starter_templates_get() -> tuple[dict, int]:
+    templates = get_starter_templates()
+    return {
+        "status": "ok",
+        "starter_templates": templates,
+        "count": len(templates),
     }, 200
 
 

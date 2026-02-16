@@ -26,6 +26,7 @@
       <button id="btnSaveDraft" class="btn btn-ghost" title="Save current editor content locally in your browser">Save Draft</button>
       <button id="btnExportTemplate" class="btn btn-ghost" title="Download active template as JSON bundle">Export Template</button>
       <button id="btnImportTemplate" class="btn btn-ghost" title="Import template from JSON bundle">Import Template</button>
+      <button id="btnTour" class="btn btn-ghost" title="Open quick onboarding tour">Tour</button>
       <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
       <button id="btnValidate" class="btn btn-secondary">Validate</button>
       <button id="btnPreview" class="btn btn-secondary">Preview</button>
@@ -109,6 +110,21 @@
             </select>
           </div>
           <div id="contextSafetyBanner" class="context-banner safe">SAFE mode: sample/fixture preview with no live payload dependency.</div>
+          <div class="snippet-shell">
+            <div class="snippet-head">
+              <h3>Starter Templates</h3>
+              <p class="subtext">Start from a curated layout, then customize.</p>
+            </div>
+            <div class="advanced-toolbar">
+              <label for="starterTemplateSelect">Preset</label>
+              <select id="starterTemplateSelect">
+                <option value="" selected>Loading starters...</option>
+              </select>
+              <button id="btnStarterPreview" class="btn btn-secondary" type="button">Preview Starter</button>
+              <button id="btnStarterApply" class="btn btn-ghost" type="button">Apply Starter</button>
+            </div>
+            <div id="starterTemplateMeta" class="meta">No starter selected.</div>
+          </div>
           <div class="advanced-toolbar">
             <label for="templateNameInput">Template Name</label>
             <input id="templateNameInput" type="text" placeholder="Auto Stat Template">
@@ -125,6 +141,19 @@
             <div id="snippetList" class="snippets"></div>
           </div>
           <div id="validationPane" class="validation"></div>
+          <div class="snippet-shell">
+            <div class="snippet-head">
+              <h3>Reference Links</h3>
+              <p class="subtext">Quick links for data source docs and Jinja syntax.</p>
+            </div>
+            <div class="help-links">
+              <a href="https://developers.strava.com/docs/reference/" target="_blank" rel="noopener noreferrer">Strava API Docs</a>
+              <a href="https://intervals.icu/api-docs.html" target="_blank" rel="noopener noreferrer">Intervals.icu API</a>
+              <a href="https://www.weatherapi.com/docs/" target="_blank" rel="noopener noreferrer">WeatherAPI Docs</a>
+              <a href="https://api.smashrun.com/v1/documentation" target="_blank" rel="noopener noreferrer">Smashrun API Docs</a>
+              <a href="https://jinja.palletsprojects.com/en/stable/templates/" target="_blank" rel="noopener noreferrer">Jinja Template Reference</a>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -144,6 +173,22 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="tourModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card tour-card" role="dialog" aria-modal="true" aria-labelledby="tourStepTitle">
+      <div class="modal-head">
+        <h2 id="tourStepTitle">Welcome</h2>
+        <button id="btnTourSkip" class="btn btn-ghost" type="button">Skip</button>
+      </div>
+      <div id="tourStepCounter" class="meta">Step 1 / 4</div>
+      <div id="tourStepBody" class="tour-body">Use this editor to design and publish your activity description template.</div>
+      <div class="inline-actions">
+        <button id="btnTourPrev" class="btn btn-ghost" type="button">Back</button>
+        <button id="btnTourNext" class="btn btn-secondary" type="button">Next</button>
+        <button id="btnTourDone" class="btn btn-primary" type="button">Done</button>
+      </div>
+    </div>
   </div>
 
   <div id="publishModal" class="modal-shell" aria-hidden="true">

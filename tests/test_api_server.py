@@ -77,6 +77,15 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertIn("snippets", payload)
 
+    def test_editor_starter_templates_endpoint(self) -> None:
+        response = self.client.get("/editor/starter-templates")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("starter_templates", payload)
+        self.assertIn("count", payload)
+        self.assertGreaterEqual(payload["count"], 1)
+
     def test_editor_sample_context_endpoint(self) -> None:
         response = self.client.get("/editor/context/sample")
         self.assertEqual(response.status_code, 200)
