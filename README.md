@@ -127,12 +127,18 @@ services:
       - .env
     volumes:
       - ./data:/app/state
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,sys; from pathlib import Path; from storage import is_worker_healthy; state=Path(os.getenv('STATE_DIR','state')); log=state / os.getenv('PROCESSED_LOG_FILE','processed_activities.log'); age=int(os.getenv('WORKER_HEALTH_MAX_AGE_SECONDS','900')); sys.exit(0 if is_worker_healthy(log, age) else 1)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
     restart: unless-stopped
 
   auto-stat-api:
     image: seanap/auto-stat-description:latest
     container_name: auto-stat-api
-    command: ["python", "api_server.py"]
+    command: ["/bin/sh", "-c", "gunicorn --bind 0.0.0.0:${API_PORT:-1609} --workers ${API_WORKERS:-2} --threads ${API_THREADS:-4} --timeout ${API_TIMEOUT_SECONDS:-120} api_server:app"]
     network_mode: bridge
     env_file:
       - .env
@@ -140,6 +146,12 @@ services:
       - ./data:/app/state
     ports:
       - "1609:1609"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,sys,urllib.request; p=os.getenv('API_PORT','1609'); u='http://127.0.0.1:%s/ready' % p; r=urllib.request.urlopen(u, timeout=5); sys.exit(0 if getattr(r, 'status', 200) == 200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
 ```
 
@@ -173,6 +185,20 @@ STATE_DIR=state
 PROCESSED_LOG_FILE=processed_activities.log
 LATEST_JSON_FILE=latest_activity.json
 STRAVA_TOKEN_FILE=strava_tokens.json
+RUNTIME_DB_FILE=runtime_state.db
+
+# API runtime (gunicorn)
+API_WORKERS=2
+API_THREADS=4
+API_TIMEOUT_SECONDS=120
+
+# Hardening
+WORKER_HEALTH_MAX_AGE_SECONDS=900
+RUN_LOCK_TTL_SECONDS=900
+SERVICE_RETRY_COUNT=2
+SERVICE_RETRY_BACKOFF_SECONDS=2
+SERVICE_COOLDOWN_BASE_SECONDS=60
+SERVICE_COOLDOWN_MAX_SECONDS=1800
 
 # Feature flags
 ENABLE_GARMIN=true
@@ -192,6 +218,7 @@ DOCKER_IMAGE=seanap/auto-stat-description:latest
 
 ```bash
 curl http://localhost:1609/health
+curl http://localhost:1609/ready
 curl http://localhost:1609/latest
 ```
 
@@ -203,6 +230,7 @@ docker network prune -f
 
 ## API Endpoints
 - `GET /health`
+- `GET /ready`
 - `GET /latest`
 - `POST /rerun/latest` (rerun most recent activity)
 - `POST /rerun/activity/<activity_id>` (rerun specific Strava activity)

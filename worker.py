@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config import Settings
 from main_strava_update import run_once
+from storage import set_runtime_value, set_worker_heartbeat
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ def main() -> None:
         local_tz = ZoneInfo("UTC")
 
     logger.info("Worker started with poll interval: %ss", interval)
+    set_runtime_value(settings.processed_log_file, "worker.started_at_utc", datetime.now(timezone.utc).isoformat())
     if settings.enable_quiet_hours:
         logger.info(
             "Quiet hours enabled: %02d:00-%02d:00 (%s)",
@@ -70,6 +72,8 @@ def main() -> None:
         )
 
     while True:
+        now_utc = datetime.now(timezone.utc)
+        set_worker_heartbeat(settings.processed_log_file, now_utc)
         now_local = datetime.now(local_tz)
         if settings.enable_quiet_hours and _in_quiet_hours(
             now_local.hour,
@@ -86,14 +90,24 @@ def main() -> None:
                 now_local.isoformat(timespec="seconds"),
                 sleep_seconds,
             )
+            set_runtime_value(settings.processed_log_file, "worker.state", "quiet_hours")
+            set_runtime_value(settings.processed_log_file, "worker.next_wake_utc", (now_utc + timedelta(seconds=sleep_seconds)).isoformat())
             time.sleep(sleep_seconds)
             continue
 
         try:
+            set_runtime_value(settings.processed_log_file, "worker.state", "running_cycle")
             result = run_once(force_update=False)
+            set_runtime_value(settings.processed_log_file, "worker.last_cycle_result", result)
+            set_runtime_value(settings.processed_log_file, "worker.last_success_at_utc", datetime.now(timezone.utc).isoformat())
             logger.info("Cycle result: %s", result)
-        except Exception:
+        except Exception as exc:
+            set_runtime_value(settings.processed_log_file, "worker.last_error", str(exc))
+            set_runtime_value(settings.processed_log_file, "worker.last_error_at_utc", datetime.now(timezone.utc).isoformat())
             logger.exception("Worker cycle failed.")
+        finally:
+            set_runtime_value(settings.processed_log_file, "worker.state", "sleeping")
+            set_runtime_value(settings.processed_log_file, "worker.next_wake_utc", (datetime.now(timezone.utc) + timedelta(seconds=interval)).isoformat())
         time.sleep(interval)
 
 

@@ -43,6 +43,13 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload.get("context_source"), "sample")
 
+    def test_ready_endpoint(self) -> None:
+        response = self.client.get("/ready")
+        self.assertIn(response.status_code, {200, 503})
+        payload = response.get_json()
+        self.assertIn(payload["status"], {"ready", "not_ready"})
+        self.assertIn("checks", payload)
+
     def test_editor_schema_sample_context_endpoint(self) -> None:
         response = self.client.get("/editor/schema?context_mode=sample")
         self.assertEqual(response.status_code, 200)

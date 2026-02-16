@@ -34,6 +34,23 @@ def _hour_env(name: str, default: int) -> int:
     return default
 
 
+def _int_env(name: str, default: int, minimum: int | None = None, maximum: int | None = None) -> int:
+    value = os.getenv(name)
+    if value is None:
+        parsed = default
+    else:
+        try:
+            parsed = int(value.strip())
+        except ValueError:
+            parsed = default
+
+    if minimum is not None and parsed < minimum:
+        parsed = minimum
+    if maximum is not None and parsed > maximum:
+        parsed = maximum
+    return parsed
+
+
 @dataclass(frozen=True)
 class Settings:
     strava_client_id: str
@@ -55,12 +72,22 @@ class Settings:
     log_level: str
     timezone: str
     api_port: int
+    api_workers: int
+    api_threads: int
+    api_timeout_seconds: int
+    worker_health_max_age_seconds: int
+    run_lock_ttl_seconds: int
+    service_retry_count: int
+    service_retry_backoff_seconds: int
+    service_cooldown_base_seconds: int
+    service_cooldown_max_seconds: int
 
     state_dir: Path
     processed_log_file: Path
     latest_json_file: Path
     strava_token_file: Path
     description_template_file: Path
+    runtime_db_file: Path
 
     enable_garmin: bool
     enable_intervals: bool
@@ -85,6 +112,7 @@ class Settings:
             "DESCRIPTION_TEMPLATE_FILE",
             "description_template.j2",
         )
+        runtime_db_file = state_dir / os.getenv("RUNTIME_DB_FILE", "runtime_state.db")
 
         poll_interval_raw = os.getenv("POLL_INTERVAL_SECONDS", "300")
         try:
@@ -92,13 +120,7 @@ class Settings:
         except ValueError:
             poll_interval_seconds = 300
 
-        api_port_raw = os.getenv("API_PORT", "1609")
-        try:
-            api_port = int(api_port_raw)
-            if not (1 <= api_port <= 65535):
-                api_port = 1609
-        except ValueError:
-            api_port = 1609
+        api_port = _int_env("API_PORT", 1609, minimum=1, maximum=65535)
 
         return cls(
             strava_client_id=os.getenv("CLIENT_ID", "").strip(),
@@ -117,11 +139,21 @@ class Settings:
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
             timezone=os.getenv("TZ", "UTC"),
             api_port=api_port,
+            api_workers=_int_env("API_WORKERS", 2, minimum=1, maximum=8),
+            api_threads=_int_env("API_THREADS", 4, minimum=1, maximum=32),
+            api_timeout_seconds=_int_env("API_TIMEOUT_SECONDS", 120, minimum=30, maximum=600),
+            worker_health_max_age_seconds=_int_env("WORKER_HEALTH_MAX_AGE_SECONDS", 900, minimum=60, maximum=86400),
+            run_lock_ttl_seconds=_int_env("RUN_LOCK_TTL_SECONDS", 900, minimum=30, maximum=7200),
+            service_retry_count=_int_env("SERVICE_RETRY_COUNT", 2, minimum=0, maximum=5),
+            service_retry_backoff_seconds=_int_env("SERVICE_RETRY_BACKOFF_SECONDS", 2, minimum=1, maximum=120),
+            service_cooldown_base_seconds=_int_env("SERVICE_COOLDOWN_BASE_SECONDS", 60, minimum=5, maximum=3600),
+            service_cooldown_max_seconds=_int_env("SERVICE_COOLDOWN_MAX_SECONDS", 1800, minimum=30, maximum=86400),
             state_dir=state_dir,
             processed_log_file=processed_log_file,
             latest_json_file=latest_json_file,
             strava_token_file=strava_token_file,
             description_template_file=description_template_file,
+            runtime_db_file=runtime_db_file,
             enable_garmin=_bool_env("ENABLE_GARMIN", True),
             enable_intervals=_bool_env("ENABLE_INTERVALS", True),
             enable_weather=_bool_env("ENABLE_WEATHER", True),
