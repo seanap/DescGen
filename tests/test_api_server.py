@@ -43,6 +43,18 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(str(payload.get("context_source")).startswith("sample"))
 
+    def test_editor_catalog_endpoint(self) -> None:
+        response = self.client.get("/editor/catalog?context_mode=fixture&fixture_name=humid_hammer")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["has_context"])
+        self.assertIn("catalog", payload)
+        self.assertIn("fixtures", payload)
+        self.assertIn("context_modes", payload)
+        self.assertIn("helper_transforms", payload["catalog"])
+        self.assertTrue(str(payload.get("context_source")).startswith("sample:"))
+
     def test_ready_endpoint(self) -> None:
         response = self.client.get("/ready")
         self.assertIn(response.status_code, {200, 503})

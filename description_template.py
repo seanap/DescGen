@@ -711,55 +711,243 @@ _GROUP_SOURCE_MAP: dict[str, tuple[str, str]] = {
 }
 
 
-_FIELD_SOURCE_EXACT_MAP: dict[str, tuple[str, str]] = {
-    "activity.elevation_feet": ("Smashrun", "Per-activity elevation from Smashrun; Strava fallback."),
-    "activity.gap_pace": ("Strava+Garmin", "Strava GAP pace when available; Garmin/average-speed fallback."),
-    "activity.beers": ("Strava", "Calories from Strava converted to beers."),
-    "crono.line": ("crono-api", "Legacy preformatted line for backward compatibility."),
-    "crono.average_net_kcal_per_day": ("crono-api", "Trailing completed-day average net calories."),
-    "crono.average_status": ("crono-api", "Energy trend label (deficit/surplus)."),
-    "crono.protein_g": ("crono-api", "Protein grams for activity day."),
-    "crono.carbs_g": ("crono-api", "Carb grams for activity day."),
-    "crono.date": ("crono-api", "Resolved local date used for Crono lookup."),
-    "periods.week.elevation_feet": ("Smashrun", "7-day elevation total from Smashrun."),
-    "periods.month.elevation_feet": ("Smashrun", "30-day elevation total from Smashrun."),
-    "periods.year.elevation_feet": ("Smashrun", "YTD elevation total from Smashrun."),
-    "periods.week.gap": ("Strava+Garmin", "Average GAP from Strava runs; Garmin fallback."),
-    "periods.month.gap": ("Strava+Garmin", "Average GAP from Strava runs; Garmin fallback."),
-    "periods.year.gap": ("Strava+Garmin", "Average GAP from Strava runs; Garmin fallback."),
-    "periods.week.beers": ("Strava+Garmin", "Calories-derived beers from Strava; Garmin fallback."),
-    "periods.month.beers": ("Strava+Garmin", "Calories-derived beers from Strava; Garmin fallback."),
-    "periods.year.beers": ("Strava+Garmin", "Calories-derived beers from Strava; Garmin fallback."),
-    "raw.activity": ("Strava", "Raw activity detail payload."),
-    "raw.training": ("Garmin", "Raw Garmin-derived training payload."),
-    "raw.intervals": ("Intervals.icu", "Raw Intervals payload."),
-    "raw.weather": ("Weather.com", "Raw weather payload."),
-    "raw.week": ("Derived", "Computed 7-day aggregate from source activities."),
-    "raw.month": ("Derived", "Computed 30-day aggregate from source activities."),
-    "raw.year": ("Derived", "Computed YTD aggregate from source activities."),
+_FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
+    "activity.elevation_feet": {
+        "source": "Smashrun",
+        "source_note": "Per-activity elevation from Smashrun; Strava fallback.",
+        "label": "Elevation Gain",
+        "description": "Latest activity elevation in feet.",
+        "tags": ["elevation", "activity", "core"],
+        "metric_key": "activity_elevation_feet",
+        "alternatives": ["raw.activity.total_elevation_gain"],
+    },
+    "activity.gap_pace": {
+        "source": "Strava+Garmin",
+        "source_note": "Strava GAP pace when available; Garmin/average-speed fallback.",
+        "label": "GAP Pace",
+        "description": "Grade-adjusted pace for latest activity.",
+        "tags": ["pace", "activity", "core"],
+        "metric_key": "activity_gap_pace",
+        "alternatives": ["raw.activity.average_grade_adjusted_speed", "raw.activity.average_speed"],
+    },
+    "activity.distance_miles": {
+        "label": "Distance (mi)",
+        "description": "Latest activity distance in miles.",
+        "tags": ["distance", "activity", "core"],
+        "metric_key": "activity_distance_miles",
+    },
+    "activity.time": {
+        "label": "Moving Time",
+        "description": "Latest activity moving time string.",
+        "tags": ["time", "activity", "core"],
+        "metric_key": "activity_time",
+    },
+    "activity.beers": {
+        "source": "Strava",
+        "source_note": "Calories from Strava converted to beers.",
+        "label": "Beers Earned",
+        "description": "Calories converted into beer-equivalent units.",
+        "tags": ["calories", "activity", "derived"],
+        "metric_key": "activity_beers",
+    },
+    "weather.misery_index": {
+        "label": "Misery Index",
+        "description": "Mirrored running-condition index centered at 100.",
+        "tags": ["weather", "mi", "risk"],
+        "metric_key": "weather_misery_index",
+    },
+    "weather.aqi": {
+        "label": "AQI",
+        "description": "Air Quality Index at activity time.",
+        "tags": ["weather", "aqi", "air"],
+        "metric_key": "weather_aqi",
+    },
+    "crono.line": {
+        "source": "crono-api",
+        "source_note": "Legacy preformatted line for backward compatibility.",
+        "label": "Legacy Crono Line",
+        "description": "Preformatted Crono line retained for old templates.",
+        "tags": ["nutrition", "legacy"],
+        "metric_key": "crono_line",
+    },
+    "crono.average_net_kcal_per_day": {
+        "source": "crono-api",
+        "source_note": "Trailing completed-day average net calories.",
+        "label": "7d Avg Net kcal/day",
+        "description": "Average daily energy balance over trailing complete days.",
+        "tags": ["nutrition", "energy", "trend"],
+        "metric_key": "crono_energy_balance",
+    },
+    "crono.average_status": {
+        "source": "crono-api",
+        "source_note": "Energy trend label (deficit/surplus).",
+        "label": "Energy Balance Status",
+        "description": "Deficit or surplus status from Crono.",
+        "tags": ["nutrition", "energy", "trend"],
+        "metric_key": "crono_energy_status",
+    },
+    "crono.protein_g": {
+        "source": "crono-api",
+        "source_note": "Protein grams for activity day.",
+        "label": "Protein (g)",
+        "description": "Daily protein grams for the activity date.",
+        "tags": ["nutrition", "protein", "macros"],
+        "metric_key": "crono_protein_g",
+    },
+    "crono.carbs_g": {
+        "source": "crono-api",
+        "source_note": "Carb grams for activity day.",
+        "label": "Carbs (g)",
+        "description": "Daily carbohydrate grams for the activity date.",
+        "tags": ["nutrition", "carbs", "macros"],
+        "metric_key": "crono_carbs_g",
+    },
+    "periods.week.elevation_feet": {
+        "source": "Smashrun",
+        "source_note": "7-day elevation total from Smashrun.",
+        "label": "7d Elevation",
+        "description": "Trailing 7-day elevation gain in feet.",
+        "tags": ["summary", "week", "elevation"],
+        "metric_key": "week_elevation_feet",
+        "alternatives": ["raw.week.elevation"],
+    },
+    "periods.month.elevation_feet": {
+        "source": "Smashrun",
+        "source_note": "30-day elevation total from Smashrun.",
+        "label": "30d Elevation",
+        "description": "Trailing 30-day elevation gain in feet.",
+        "tags": ["summary", "month", "elevation"],
+        "metric_key": "month_elevation_feet",
+        "alternatives": ["raw.month.elevation"],
+    },
+    "periods.year.elevation_feet": {
+        "source": "Smashrun",
+        "source_note": "YTD elevation total from Smashrun.",
+        "label": "YTD Elevation",
+        "description": "Year-to-date elevation gain in feet.",
+        "tags": ["summary", "year", "elevation"],
+        "metric_key": "year_elevation_feet",
+        "alternatives": ["raw.year.elevation"],
+    },
+    "periods.week.gap": {
+        "source": "Strava+Garmin",
+        "source_note": "Average GAP from Strava runs; Garmin fallback.",
+        "label": "7d GAP",
+        "description": "Trailing 7-day average GAP pace.",
+        "tags": ["summary", "week", "pace"],
+        "metric_key": "week_gap",
+    },
+    "periods.month.gap": {
+        "source": "Strava+Garmin",
+        "source_note": "Average GAP from Strava runs; Garmin fallback.",
+        "label": "30d GAP",
+        "description": "Trailing 30-day average GAP pace.",
+        "tags": ["summary", "month", "pace"],
+        "metric_key": "month_gap",
+    },
+    "periods.year.gap": {
+        "source": "Strava+Garmin",
+        "source_note": "Average GAP from Strava runs; Garmin fallback.",
+        "label": "YTD GAP",
+        "description": "Year-to-date average GAP pace.",
+        "tags": ["summary", "year", "pace"],
+        "metric_key": "year_gap",
+    },
+    "periods.week.beers": {
+        "source": "Strava+Garmin",
+        "source_note": "Calories-derived beers from Strava; Garmin fallback.",
+        "label": "7d Beers",
+        "description": "Trailing 7-day calorie-equivalent beers.",
+        "tags": ["summary", "week", "calories"],
+        "metric_key": "week_beers",
+    },
+    "periods.month.beers": {
+        "source": "Strava+Garmin",
+        "source_note": "Calories-derived beers from Strava; Garmin fallback.",
+        "label": "30d Beers",
+        "description": "Trailing 30-day calorie-equivalent beers.",
+        "tags": ["summary", "month", "calories"],
+        "metric_key": "month_beers",
+    },
+    "periods.year.beers": {
+        "source": "Strava+Garmin",
+        "source_note": "Calories-derived beers from Strava; Garmin fallback.",
+        "label": "YTD Beers",
+        "description": "Year-to-date calorie-equivalent beers.",
+        "tags": ["summary", "year", "calories"],
+        "metric_key": "year_beers",
+    },
 }
 
 
-def _source_for_path(path: str) -> tuple[str, str]:
-    exact = _FIELD_SOURCE_EXACT_MAP.get(path)
-    if exact:
-        return exact
+_FIELD_CATALOG_PREFIX_MAP: list[tuple[str, dict[str, Any]]] = [
+    ("raw.activity.", {"source": "Strava", "source_note": "Raw activity detail payload.", "tags": ["raw", "strava"]}),
+    ("raw.training.", {"source": "Garmin", "source_note": "Raw Garmin-derived training payload.", "tags": ["raw", "garmin"]}),
+    ("raw.intervals.", {"source": "Intervals.icu", "source_note": "Raw Intervals payload.", "tags": ["raw", "intervals"]}),
+    ("raw.weather.", {"source": "Weather.com", "source_note": "Raw weather payload.", "tags": ["raw", "weather"]}),
+    ("raw.week.", {"source": "Derived", "source_note": "Computed 7-day aggregate from source activities.", "tags": ["raw", "summary", "week"]}),
+    ("raw.month.", {"source": "Derived", "source_note": "Computed 30-day aggregate from source activities.", "tags": ["raw", "summary", "month"]}),
+    ("raw.year.", {"source": "Derived", "source_note": "Computed YTD aggregate from source activities.", "tags": ["raw", "summary", "year"]}),
+    ("weather.details.", {"source": "Weather.com", "source_note": "Detailed weather conditions for activity time.", "tags": ["weather", "details"]}),
+]
 
-    for prefix, details in (
-        ("raw.activity.", ("Strava", "Raw activity detail payload.")),
-        ("raw.training.", ("Garmin", "Raw Garmin-derived training payload.")),
-        ("raw.intervals.", ("Intervals.icu", "Raw Intervals payload.")),
-        ("raw.weather.", ("Weather.com", "Raw weather payload.")),
-        ("raw.week.", ("Derived", "Computed 7-day aggregate from source activities.")),
-        ("raw.month.", ("Derived", "Computed 30-day aggregate from source activities.")),
-        ("raw.year.", ("Derived", "Computed YTD aggregate from source activities.")),
-        ("weather.details.", ("Weather.com", "Detailed weather conditions for activity time.")),
-    ):
-        if path.startswith(prefix):
-            return details
 
+_CATALOG_HELPER_TRANSFORMS: list[dict[str, str]] = [
+    {"id": "raw", "label": "Raw", "template": "{{ {path} }}"},
+    {"id": "default", "label": "Default N/A", "template": "{{ {path} | default('N/A') }}"},
+    {"id": "round1", "label": "Round 1", "template": "{{ {path} | round(1) }}"},
+    {"id": "int", "label": "Int", "template": "{{ {path} | int }}"},
+    {"id": "if_present", "label": "If Present", "template": "{% if {path} %}{{ {path} }}{% endif %}"},
+]
+
+
+def _default_label_for_path(path: str) -> str:
+    leaf = path.split(".")[-1].split("]")[-1].replace("_", " ").strip()
+    if not leaf:
+        leaf = path.replace("_", " ")
+    return leaf.title()
+
+
+def _field_metadata_for_path(path: str) -> dict[str, Any]:
+    exact = _FIELD_CATALOG_EXACT_MAP.get(path)
+    if exact is not None:
+        meta = deepcopy(exact)
+        meta["curated"] = True
+    else:
+        meta = {}
+        for prefix, prefix_meta in _FIELD_CATALOG_PREFIX_MAP:
+            if path.startswith(prefix):
+                meta.update(deepcopy(prefix_meta))
+                break
+
+        top_key = path.split(".", 1)[0].split("[", 1)[0]
+        default_source, default_note = _GROUP_SOURCE_MAP.get(
+            top_key, ("Unknown", "No source mapping available.")
+        )
+        meta.setdefault("source", default_source)
+        meta.setdefault("source_note", default_note)
+        meta["curated"] = bool(meta.get("curated", False))
+
+    meta.setdefault("label", _default_label_for_path(path))
+    meta.setdefault("description", meta.get("source_note") or "Catalog field.")
+    tags = meta.get("tags")
+    if not isinstance(tags, list):
+        tags = []
     top_key = path.split(".", 1)[0].split("[", 1)[0]
-    return _GROUP_SOURCE_MAP.get(top_key, ("Unknown", "No source mapping available."))
+    if top_key not in tags:
+        tags.append(top_key)
+    meta["tags"] = sorted({str(tag).strip() for tag in tags if str(tag).strip()})
+    alternatives = meta.get("alternatives")
+    if not isinstance(alternatives, list):
+        alternatives = []
+    meta["alternatives"] = [str(item) for item in alternatives if str(item).strip()]
+    metric_key = meta.get("metric_key")
+    if metric_key is None:
+        meta["metric_key"] = None
+    else:
+        metric_text = str(metric_key).strip()
+        meta["metric_key"] = metric_text or None
+    return meta
 
 
 def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, Any]]) -> None:
@@ -770,14 +958,20 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
         return
 
     if isinstance(value, list):
-        source, source_note = _source_for_path(path_prefix)
+        meta = _field_metadata_for_path(path_prefix)
         fields.append(
             {
                 "path": path_prefix,
                 "type": _type_name(value),
                 "sample": _sample_value(value),
-                "source": source,
-                "source_note": source_note,
+                "source": meta.get("source"),
+                "source_note": meta.get("source_note"),
+                "label": meta.get("label"),
+                "description": meta.get("description"),
+                "tags": meta.get("tags"),
+                "metric_key": meta.get("metric_key"),
+                "alternatives": meta.get("alternatives"),
+                "curated": bool(meta.get("curated")),
             }
         )
         if value and isinstance(value[0], dict):
@@ -785,14 +979,20 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
                 _collect_schema_fields(f"{path_prefix}[0].{key}", nested, fields)
         return
 
-    source, source_note = _source_for_path(path_prefix)
+    meta = _field_metadata_for_path(path_prefix)
     fields.append(
         {
             "path": path_prefix,
             "type": _type_name(value),
             "sample": _sample_value(value),
-            "source": source,
-            "source_note": source_note,
+            "source": meta.get("source"),
+            "source_note": meta.get("source_note"),
+            "label": meta.get("label"),
+            "description": meta.get("description"),
+            "tags": meta.get("tags"),
+            "metric_key": meta.get("metric_key"),
+            "alternatives": meta.get("alternatives"),
+            "curated": bool(meta.get("curated")),
         }
     )
 
@@ -800,6 +1000,11 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
 def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
     groups: list[dict[str, Any]] = []
     total_fields = 0
+    source_values: set[str] = set()
+    type_values: set[str] = set()
+    tag_values: set[str] = set()
+    metric_values: set[str] = set()
+    metric_path_map: dict[str, list[dict[str, str]]] = {}
 
     for top_key in sorted(context.keys()):
         value = context[top_key]
@@ -814,6 +1019,30 @@ def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
         group_source, group_source_note = _GROUP_SOURCE_MAP.get(
             top_key, ("Unknown", "No source mapping available.")
         )
+        for field in fields:
+            source = str(field.get("source") or "").strip()
+            if source:
+                source_values.add(source)
+            value_type = str(field.get("type") or "").strip()
+            if value_type:
+                type_values.add(value_type)
+            tags = field.get("tags")
+            if isinstance(tags, list):
+                for tag in tags:
+                    tag_text = str(tag).strip()
+                    if tag_text:
+                        tag_values.add(tag_text)
+            metric_key = field.get("metric_key")
+            if isinstance(metric_key, str) and metric_key.strip():
+                metric_text = metric_key.strip()
+                metric_values.add(metric_text)
+                metric_path_map.setdefault(metric_text, []).append(
+                    {
+                        "path": str(field.get("path") or ""),
+                        "source": source or "Unknown",
+                    }
+                )
+
         groups.append(
             {
                 "group": top_key,
@@ -824,9 +1053,32 @@ def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    overlaps: list[dict[str, Any]] = []
+    for metric_key in sorted(metric_path_map.keys()):
+        entries = metric_path_map[metric_key]
+        unique_paths = {entry["path"] for entry in entries if entry["path"]}
+        if len(unique_paths) <= 1:
+            continue
+        overlaps.append(
+            {
+                "metric_key": metric_key,
+                "paths": sorted(unique_paths),
+                "sources": sorted({entry["source"] for entry in entries}),
+            }
+        )
+
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "group_count": len(groups),
         "field_count": total_fields,
         "groups": groups,
+        "facets": {
+            "groups": sorted(str(group["group"]) for group in groups),
+            "sources": sorted(source_values),
+            "types": sorted(type_values),
+            "tags": sorted(tag_values),
+            "metric_keys": sorted(metric_values),
+        },
+        "overlaps": overlaps,
+        "helper_transforms": deepcopy(_CATALOG_HELPER_TRANSFORMS),
     }

@@ -147,15 +147,39 @@ class TestDescriptionTemplate(unittest.TestCase):
         context = {
             "activity": {"distance_miles": "8.02", "beers": "5.1"},
             "notables": ["Longest run"],
+            "raw": {"activity": {"distance_miles": 8.02}},
         }
         schema = build_context_schema(context)
-        self.assertEqual(schema["group_count"], 2)
+        self.assertEqual(schema["group_count"], 3)
         self.assertGreaterEqual(schema["field_count"], 2)
         activity_group = next(group for group in schema["groups"] if group["group"] == "activity")
         self.assertIn("source", activity_group)
         first_field = activity_group["fields"][0]
         self.assertIn("source", first_field)
         self.assertIn("source_note", first_field)
+        self.assertIn("facets", schema)
+        self.assertIn("helper_transforms", schema)
+        self.assertIsInstance(schema["helper_transforms"], list)
+        self.assertIn("sources", schema["facets"])
+        self.assertIn("tags", schema["facets"])
+        self.assertIn("types", schema["facets"])
+        self.assertIn("metric_keys", schema["facets"])
+        raw_group = next(group for group in schema["groups"] if group["group"] == "raw")
+        raw_field = next(field for field in raw_group["fields"] if field["path"] == "raw.activity.distance_miles")
+        self.assertFalse(raw_field["curated"])
+
+    def test_schema_overlap_detection(self) -> None:
+        context = {
+            "activity": {"beers": "5.1"},
+            "periods": {"week": {"beers": "21"}},
+        }
+        schema = build_context_schema(context)
+        self.assertIn("overlaps", schema)
+        overlaps = schema["overlaps"]
+        self.assertIsInstance(overlaps, list)
+        for entry in overlaps:
+            self.assertIn("metric_key", entry)
+            self.assertIn("paths", entry)
 
     def test_sample_context_shape(self) -> None:
         context = get_sample_template_context()

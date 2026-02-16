@@ -263,14 +263,32 @@ h2 {
   border-top: 0;
 }
 
+.field-curated .field-label::after {
+  content: "  curated";
+  color: var(--primary);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .field-key {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.78rem;
 }
 
+.field-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .field-type {
   color: var(--muted);
   font-size: 0.73rem;
+}
+
+.field-description {
+  color: var(--muted);
+  font-size: 0.74rem;
 }
 
 .field-source {
@@ -290,7 +308,27 @@ h2 {
   color: var(--secondary);
 }
 
+.field-actions {
+  display: grid;
+  gap: 6px;
+  align-items: center;
+}
+
+.field-transform {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 7px;
+  font: inherit;
+  font-size: 0.72rem;
+  background: #ffffff;
+  color: var(--ink);
+}
+
 body[data-theme="dark"] .field-insert {
+  background: #192923;
+}
+
+body[data-theme="dark"] .field-transform {
   background: #192923;
 }
 

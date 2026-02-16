@@ -46,6 +46,7 @@
         <label class="stack-label" for="schemaContextMode">Catalog Context</label>
         <select id="schemaContextMode" class="search">
           <option value="sample" selected>Sample Only</option>
+          <option value="fixture">Fixture</option>
           <option value="latest">Latest Only</option>
           <option value="latest_or_sample">Latest or Sample</option>
         </select>
@@ -53,8 +54,25 @@
         <select id="schemaSourceFilter" class="search">
           <option value="all" selected>All Sources</option>
         </select>
+        <label class="stack-label" for="schemaGroupFilter">Group Filter</label>
+        <select id="schemaGroupFilter" class="search">
+          <option value="all" selected>All Groups</option>
+        </select>
+        <label class="stack-label" for="schemaTypeFilter">Type Filter</label>
+        <select id="schemaTypeFilter" class="search">
+          <option value="all" selected>All Types</option>
+        </select>
+        <label class="stack-label" for="schemaTagFilter">Tag Filter</label>
+        <select id="schemaTagFilter" class="search">
+          <option value="all" selected>All Tags</option>
+        </select>
+        <label class="toggle-inline" for="schemaCuratedOnly">
+          <input id="schemaCuratedOnly" type="checkbox">
+          Curated Fields Only
+        </label>
         <input id="schemaSearch" class="search" type="search" placeholder="Search fields...">
         <div id="schemaMeta" class="meta"></div>
+        <div id="catalogDiagnostics" class="meta">No diagnostics yet.</div>
         <div id="schemaList" class="catalog"></div>
       </aside>
 

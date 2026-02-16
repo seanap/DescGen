@@ -357,6 +357,41 @@ def editor_schema() -> tuple[dict, int]:
     }, 200
 
 
+@app.get("/editor/catalog")
+def editor_catalog() -> tuple[dict, int]:
+    raw_mode = request.args.get("context_mode")
+    try:
+        context_mode = _resolve_context_mode(raw_mode)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    fixture_name = request.args.get("fixture_name")
+    context, context_source = _context_for_mode(
+        context_mode,
+        fixture_name=fixture_name,
+    )
+    if context is None:
+        schema = build_context_schema({})
+        return {
+            "status": "ok",
+            "has_context": False,
+            "context_source": None,
+            "catalog": schema,
+            "fixtures": list_sample_template_fixtures(),
+            "context_modes": ["latest", "sample", "latest_or_sample", "fixture"],
+        }, 200
+
+    schema = build_context_schema(context)
+    return {
+        "status": "ok",
+        "has_context": True,
+        "context_source": context_source,
+        "catalog": schema,
+        "fixtures": list_sample_template_fixtures(),
+        "context_modes": ["latest", "sample", "latest_or_sample", "fixture"],
+    }, 200
+
+
 @app.post("/rerun/latest")
 def rerun_latest() -> tuple[dict, int]:
     try:

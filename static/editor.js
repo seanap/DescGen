@@ -143,6 +143,7 @@ const state = {
   templateMeta: null,
   versions: [],
   fixtures: [],
+  helperTransforms: [],
   schema: null,
   schemaSource: null,
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
@@ -161,9 +162,14 @@ const elements = {
   validationPane: document.getElementById("validationPane"),
   schemaList: document.getElementById("schemaList"),
   schemaMeta: document.getElementById("schemaMeta"),
+  catalogDiagnostics: document.getElementById("catalogDiagnostics"),
   schemaSearch: document.getElementById("schemaSearch"),
   schemaContextMode: document.getElementById("schemaContextMode"),
   schemaSourceFilter: document.getElementById("schemaSourceFilter"),
+  schemaGroupFilter: document.getElementById("schemaGroupFilter"),
+  schemaTypeFilter: document.getElementById("schemaTypeFilter"),
+  schemaTagFilter: document.getElementById("schemaTagFilter"),
+  schemaCuratedOnly: document.getElementById("schemaCuratedOnly"),
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
   templateNameInput: document.getElementById("templateNameInput"),
@@ -264,39 +270,90 @@ function updateValidationPane(result, ok) {
   pane.textContent = lines.join("\n");
 }
 
-function refreshSourceFilterOptions() {
-  const select = elements.schemaSourceFilter;
+function setSelectOptions(select, values, allLabel) {
   const previous = select.value || "all";
-
-  const sourceSet = new Set();
-  if (state.schema && Array.isArray(state.schema.groups)) {
-    for (const group of state.schema.groups) {
-      for (const field of group.fields || []) {
-        const source = String(field.source || group.source || "Unknown");
-        sourceSet.add(source);
-      }
-    }
-  }
-
   select.innerHTML = "";
   const allOption = document.createElement("option");
   allOption.value = "all";
-  allOption.textContent = "All Sources";
+  allOption.textContent = allLabel;
   select.appendChild(allOption);
-
-  const sortedSources = Array.from(sourceSet).sort((a, b) => a.localeCompare(b));
-  for (const source of sortedSources) {
+  for (const value of values) {
     const option = document.createElement("option");
-    option.value = source;
-    option.textContent = source;
+    option.value = value;
+    option.textContent = value;
     select.appendChild(option);
   }
+  const valid = values.includes(previous);
+  select.value = valid ? previous : "all";
+}
 
-  if (sortedSources.includes(previous)) {
-    select.value = previous;
-  } else {
-    select.value = "all";
+function renderCatalogDiagnostics() {
+  const schema = state.schema || {};
+  const facets = schema.facets || {};
+  const overlaps = Array.isArray(schema.overlaps) ? schema.overlaps : [];
+  let curatedCount = 0;
+  for (const group of schema.groups || []) {
+    for (const field of group.fields || []) {
+      if (field.curated) curatedCount += 1;
+    }
   }
+  const lines = [];
+  lines.push(`Groups: ${(facets.groups || []).length} | Fields: ${schema.field_count || 0}`);
+  lines.push(`Curated fields: ${curatedCount}`);
+  lines.push(`Sources: ${(facets.sources || []).length} | Tags: ${(facets.tags || []).length}`);
+  lines.push(`Metric overlaps: ${overlaps.length}`);
+  if (overlaps.length > 0) {
+    const sample = overlaps.slice(0, 3).map((item) => item.metric_key).join(", ");
+    lines.push(`Overlap sample: ${sample}`);
+  }
+  elements.catalogDiagnostics.textContent = lines.join("\n");
+}
+
+function refreshSourceFilterOptions() {
+  const schema = state.schema || {};
+  const facets = schema.facets || {};
+  setSelectOptions(
+    elements.schemaSourceFilter,
+    Array.isArray(facets.sources) ? facets.sources.slice() : [],
+    "All Sources",
+  );
+  setSelectOptions(
+    elements.schemaGroupFilter,
+    Array.isArray(facets.groups) ? facets.groups.slice() : [],
+    "All Groups",
+  );
+  setSelectOptions(
+    elements.schemaTypeFilter,
+    Array.isArray(facets.types) ? facets.types.slice() : [],
+    "All Types",
+  );
+  setSelectOptions(
+    elements.schemaTagFilter,
+    Array.isArray(facets.tags) ? facets.tags.slice() : [],
+    "All Tags",
+  );
+  renderCatalogDiagnostics();
+}
+
+function stringifySample(sample) {
+  if (sample === undefined) return "undefined";
+  if (sample === null) return "null";
+  if (typeof sample === "string") return sample;
+  try {
+    return JSON.stringify(sample);
+  } catch (_err) {
+    return String(sample);
+  }
+}
+
+function insertFieldWithTransform(fieldPath, transformTemplate) {
+  const path = String(fieldPath || "").trim();
+  if (!path) return;
+  const template = String(transformTemplate || "{{ {path} }}");
+  const snippet = template.replaceAll("{path}", path);
+  insertAtCursor(snippet);
+  setStatus(`Inserted ${path}`, "ok");
+  queueAutoPreview();
 }
 
 function renderSchemaCatalog(filterText = "") {
@@ -310,20 +367,50 @@ function renderSchemaCatalog(filterText = "") {
 
   const q = filterText.trim().toLowerCase();
   const sourceFilter = elements.schemaSourceFilter.value || "all";
+  const groupFilter = elements.schemaGroupFilter.value || "all";
+  const typeFilter = elements.schemaTypeFilter.value || "all";
+  const tagFilter = elements.schemaTagFilter.value || "all";
+  const curatedOnly = Boolean(elements.schemaCuratedOnly.checked);
   let visibleFields = 0;
 
   for (const group of schema.groups) {
+    if (groupFilter !== "all" && String(group.group) !== groupFilter) {
+      continue;
+    }
+
     const fields = (group.fields || []).filter((field) => {
       const fieldSource = String(field.source || group.source || "Unknown");
+      const fieldType = String(field.type || "");
+      const fieldTags = Array.isArray(field.tags) ? field.tags.map((tag) => String(tag)) : [];
+      const fieldCurated = Boolean(field.curated);
+
       if (sourceFilter !== "all" && fieldSource !== sourceFilter) {
         return false;
       }
+      if (typeFilter !== "all" && fieldType !== typeFilter) {
+        return false;
+      }
+      if (tagFilter !== "all" && !fieldTags.includes(tagFilter)) {
+        return false;
+      }
+      if (curatedOnly && !fieldCurated) {
+        return false;
+      }
+
       if (!q) return true;
+      const alternatives = Array.isArray(field.alternatives)
+        ? field.alternatives.map((alt) => String(alt))
+        : [];
       return (
         String(field.path || "").toLowerCase().includes(q) ||
+        String(field.label || "").toLowerCase().includes(q) ||
+        String(field.description || "").toLowerCase().includes(q) ||
         String(field.type || "").toLowerCase().includes(q) ||
         fieldSource.toLowerCase().includes(q) ||
-        String(field.source_note || "").toLowerCase().includes(q)
+        String(field.source_note || "").toLowerCase().includes(q) ||
+        String(field.metric_key || "").toLowerCase().includes(q) ||
+        fieldTags.join(" ").toLowerCase().includes(q) ||
+        alternatives.join(" ").toLowerCase().includes(q)
       );
     });
 
@@ -338,18 +425,25 @@ function renderSchemaCatalog(filterText = "") {
     h.textContent = `${group.group} (${fields.length})${groupSource}`;
     card.appendChild(h);
 
-    for (const field of fields) {
+    for (const field of fields.sort((a, b) => String(a.path || "").localeCompare(String(b.path || "")))) {
       const row = document.createElement("div");
       row.className = "field";
+      if (field.curated) {
+        row.classList.add("field-curated");
+      }
 
       const body = document.createElement("div");
+      const label = document.createElement("div");
+      label.className = "field-label";
+      label.textContent = field.label || field.path;
+
       const key = document.createElement("div");
       key.className = "field-key";
       key.textContent = `{{ ${field.path} }}`;
 
       const type = document.createElement("div");
       type.className = "field-type";
-      type.textContent = `${field.type} | sample: ${JSON.stringify(field.sample)}`;
+      type.textContent = `${field.type} | sample: ${stringifySample(field.sample)}`;
 
       const source = document.createElement("div");
       source.className = "field-source";
@@ -357,26 +451,76 @@ function renderSchemaCatalog(filterText = "") {
         ? `Source: ${field.source} (${field.source_note})`
         : `Source: ${field.source || "Unknown"}`;
 
+      const desc = document.createElement("div");
+      desc.className = "field-description";
+      desc.textContent = field.description || "";
+
+      const metric = document.createElement("div");
+      metric.className = "field-type";
+      metric.textContent = field.metric_key
+        ? `Metric key: ${field.metric_key}`
+        : "Metric key: none";
+
+      const tags = Array.isArray(field.tags) ? field.tags : [];
+      const tagsLine = document.createElement("div");
+      tagsLine.className = "field-type";
+      tagsLine.textContent = tags.length > 0 ? `Tags: ${tags.join(", ")}` : "Tags: none";
+
+      const alternatives = Array.isArray(field.alternatives) ? field.alternatives : [];
+      const alternativesLine = document.createElement("div");
+      alternativesLine.className = "field-type";
+      alternativesLine.textContent = alternatives.length > 0
+        ? `Alternatives: ${alternatives.join(", ")}`
+        : "Alternatives: none";
+
+      body.appendChild(label);
       body.appendChild(key);
+      if (desc.textContent) body.appendChild(desc);
       body.appendChild(type);
+      body.appendChild(metric);
+      body.appendChild(tagsLine);
+      if (alternatives.length > 0) {
+        body.appendChild(alternativesLine);
+      }
       body.appendChild(source);
+
+      const controls = document.createElement("div");
+      controls.className = "field-actions";
 
       const insertBtn = document.createElement("button");
       insertBtn.className = "field-insert";
       insertBtn.textContent = "Insert";
       insertBtn.title = "Insert into advanced template";
       insertBtn.addEventListener("click", () => {
-        insertAtCursor(`{{ ${field.path} }}`);
-        setStatus(`Inserted ${field.path}`, "ok");
-        queueAutoPreview();
+        insertFieldWithTransform(field.path, "{{ {path} }}");
       });
 
+      controls.appendChild(insertBtn);
+
+      if (Array.isArray(state.helperTransforms) && state.helperTransforms.length > 0) {
+        const transformSelect = document.createElement("select");
+        transformSelect.className = "field-transform";
+        for (const transform of state.helperTransforms) {
+          const option = document.createElement("option");
+          option.value = String(transform.template || "{{ {path} }}");
+          option.textContent = String(transform.label || transform.id || "Transform");
+          transformSelect.appendChild(option);
+        }
+        const transformBtn = document.createElement("button");
+        transformBtn.className = "field-insert";
+        transformBtn.textContent = "Insert As";
+        transformBtn.title = "Insert using selected transform";
+        transformBtn.addEventListener("click", () => {
+          insertFieldWithTransform(field.path, transformSelect.value);
+        });
+        controls.appendChild(transformSelect);
+        controls.appendChild(transformBtn);
+      }
+
       row.appendChild(body);
-      row.appendChild(insertBtn);
+      row.appendChild(controls);
       row.addEventListener("dblclick", () => {
-        insertAtCursor(`{{ ${field.path} }}`);
-        setStatus(`Inserted ${field.path}`, "ok");
-        queueAutoPreview();
+        insertFieldWithTransform(field.path, "{{ {path} }}");
       });
 
       card.appendChild(row);
@@ -494,13 +638,16 @@ async function loadSchema(mode) {
   if ((mode || "sample") !== "latest") {
     query.set("fixture_name", elements.previewFixtureName.value || "default");
   }
-  const res = await requestJSON(`/editor/schema?${query.toString()}`);
+  const res = await requestJSON(`/editor/catalog?${query.toString()}`);
   if (!res.ok) {
     setStatus("Failed to load data catalog", "error");
     return;
   }
 
-  state.schema = res.payload.schema || null;
+  state.schema = res.payload.catalog || null;
+  state.helperTransforms = Array.isArray(state.schema?.helper_transforms)
+    ? state.schema.helper_transforms
+    : [];
   state.schemaSource = res.payload.context_source || null;
   refreshSourceFilterOptions();
   renderSchemaCatalog(elements.schemaSearch.value || "");
@@ -706,7 +853,7 @@ async function loadEditorBootstrap() {
   const [activeRes, defaultRes, schemaRes, snippetRes, fixtureRes, versionsRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
-    requestJSON(`/editor/schema?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
+    requestJSON(`/editor/catalog?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
     requestJSON("/editor/snippets"),
     requestJSON("/editor/fixtures"),
     requestJSON("/editor/template/versions?limit=40"),
@@ -729,7 +876,10 @@ async function loadEditorBootstrap() {
   }
 
   if (schemaRes.ok) {
-    state.schema = schemaRes.payload.schema || null;
+    state.schema = schemaRes.payload.catalog || null;
+    state.helperTransforms = Array.isArray(state.schema?.helper_transforms)
+      ? state.schema.helper_transforms
+      : [];
     state.schemaSource = schemaRes.payload.context_source || null;
   }
 
@@ -912,6 +1062,18 @@ function bindUI() {
   });
 
   elements.schemaSourceFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaGroupFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaTypeFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaTagFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaCuratedOnly.addEventListener("change", () => {
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
 
