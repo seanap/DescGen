@@ -253,6 +253,13 @@
             <button id="btnCatalogResetFilters" class="btn btn-ghost" type="button">Reset Filters</button>
           </div>
         </div>
+        <div class="scope-pills" id="catalogScopePills">
+          <button class="scope-pill is-active" data-scope="all" type="button">All</button>
+          <button class="scope-pill" data-scope="curated" type="button">Curated</button>
+          <button class="scope-pill" data-scope="favorites" type="button">Favorites</button>
+          <button class="scope-pill" data-scope="in_template" type="button">In Template</button>
+          <button class="scope-pill" data-scope="stable" type="button">Stable</button>
+        </div>
 
         <div class="filters-grid filters-advanced">
           <div class="inline-actions advanced-filter-actions">
@@ -352,6 +359,29 @@
         <button id="publishCancelBtn" class="btn btn-ghost" type="button">Cancel</button>
         <button id="publishConfirmBtn" class="btn btn-primary" type="button" disabled>Publish Now</button>
       </div>
+    </div>
+  </div>
+
+  <div id="versionDiffModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card" role="dialog" aria-modal="true" aria-labelledby="versionDiffTitle">
+      <div class="modal-head">
+        <h2 id="versionDiffTitle">Version Diff</h2>
+        <button id="versionDiffCloseBtn" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <div id="versionDiffMeta" class="meta">No diff loaded.</div>
+      <pre id="versionDiffView" class="preview diff-view"></pre>
+    </div>
+  </div>
+
+  <div id="commandPaletteModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card command-palette-card" role="dialog" aria-modal="true" aria-labelledby="commandPaletteTitle">
+      <div class="modal-head">
+        <h2 id="commandPaletteTitle">Command Palette</h2>
+        <button id="commandPaletteCloseBtn" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <input id="commandPaletteSearch" class="search" type="search" placeholder="Type a command...">
+      <div id="commandPaletteMeta" class="meta">Use ↑/↓ and Enter to run. Esc closes.</div>
+      <div id="commandPaletteList" class="catalog command-palette-list"></div>
     </div>
   </div>
 

@@ -250,6 +250,9 @@ const state = {
   schema: null,
   schemaSource: null,
   schemaSearchTimer: null,
+  schemaSortKey: "group",
+  schemaSortDir: "asc",
+  catalogScope: "all",
   catalogRows: [],
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
   snippets: FALLBACK_SNIPPETS,
@@ -268,6 +271,8 @@ const state = {
   tourStep: 0,
   catalogFavorites: new Set(),
   catalogRecents: [],
+  commandPaletteItems: [],
+  commandPaletteActiveIndex: 0,
 };
 
 const elements = {
@@ -310,6 +315,7 @@ const elements = {
   schemaPreset: document.getElementById("schemaPreset"),
   advancedFiltersWrap: document.getElementById("advancedFiltersWrap"),
   btnToggleAdvancedFilters: document.getElementById("btnToggleAdvancedFilters"),
+  catalogScopePills: document.getElementById("catalogScopePills"),
   catalogQuickPicks: document.getElementById("catalogQuickPicks"),
   schemaKeyboardHint: document.getElementById("schemaKeyboardHint"),
   schemaInspector: document.getElementById("schemaInspector"),
@@ -339,6 +345,15 @@ const elements = {
   publishModeBanner: document.getElementById("publishModeBanner"),
   publishChecklistReviewed: document.getElementById("publishChecklistReviewed"),
   publishChecklistReplace: document.getElementById("publishChecklistReplace"),
+  versionDiffModal: document.getElementById("versionDiffModal"),
+  versionDiffCloseBtn: document.getElementById("versionDiffCloseBtn"),
+  versionDiffMeta: document.getElementById("versionDiffMeta"),
+  versionDiffView: document.getElementById("versionDiffView"),
+  commandPaletteModal: document.getElementById("commandPaletteModal"),
+  commandPaletteCloseBtn: document.getElementById("commandPaletteCloseBtn"),
+  commandPaletteSearch: document.getElementById("commandPaletteSearch"),
+  commandPaletteMeta: document.getElementById("commandPaletteMeta"),
+  commandPaletteList: document.getElementById("commandPaletteList"),
   tourModal: document.getElementById("tourModal"),
   tourStepTitle: document.getElementById("tourStepTitle"),
   tourStepBody: document.getElementById("tourStepBody"),
@@ -933,6 +948,12 @@ function applyCatalogPreset(presetId, options = {}) {
   if (elements.schemaStableOnly) elements.schemaStableOnly.checked = Boolean(preset.stableOnly);
   if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = Boolean(preset.favoritesOnly);
   if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = Boolean(preset.inTemplateOnly);
+  if (preset.curatedOnly) state.catalogScope = "curated";
+  else if (preset.stableOnly) state.catalogScope = "stable";
+  else if (preset.favoritesOnly) state.catalogScope = "favorites";
+  else if (preset.inTemplateOnly) state.catalogScope = "in_template";
+  else state.catalogScope = "all";
+  updateScopePills();
 
   renderSchemaCatalog(elements.schemaSearch.value || "");
   if (announce) {
@@ -953,9 +974,61 @@ function resetCatalogFilters(options = {}) {
   if (elements.schemaStableOnly) elements.schemaStableOnly.checked = false;
   if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = false;
   if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = false;
+  state.catalogScope = "all";
+  updateScopePills();
   renderSchemaCatalog(elements.schemaSearch.value || "");
   if (announce) {
     setStatus("Catalog filters reset", "ok");
+  }
+}
+
+function updateScopePills() {
+  if (!elements.catalogScopePills) return;
+  const pills = elements.catalogScopePills.querySelectorAll(".scope-pill");
+  for (const pill of pills) {
+    const scope = String(pill.dataset.scope || "all");
+    pill.classList.toggle("is-active", state.catalogScope !== "custom" && scope === state.catalogScope);
+  }
+}
+
+function syncScopeFromFilterToggles() {
+  const curated = Boolean(elements.schemaCuratedOnly?.checked);
+  const stable = Boolean(elements.schemaStableOnly?.checked);
+  const favorites = Boolean(elements.schemaFavoritesOnly?.checked);
+  const inTemplate = Boolean(elements.schemaInTemplateOnly?.checked);
+  const enabled = [curated, stable, favorites, inTemplate].filter(Boolean).length;
+  if (enabled === 0) {
+    state.catalogScope = "all";
+  } else if (enabled === 1) {
+    if (curated) state.catalogScope = "curated";
+    if (stable) state.catalogScope = "stable";
+    if (favorites) state.catalogScope = "favorites";
+    if (inTemplate) state.catalogScope = "in_template";
+  } else {
+    state.catalogScope = "custom";
+  }
+  updateScopePills();
+}
+
+function applyCatalogScope(scope, options = {}) {
+  const { announce = true } = options;
+  const value = String(scope || "all");
+  state.catalogScope = value;
+  if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = value === "curated";
+  if (elements.schemaStableOnly) elements.schemaStableOnly.checked = value === "stable";
+  if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = value === "favorites";
+  if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = value === "in_template";
+  if (value === "all") {
+    if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = false;
+    if (elements.schemaStableOnly) elements.schemaStableOnly.checked = false;
+    if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = false;
+    if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = false;
+  }
+  updateScopePills();
+  renderSchemaCatalog(elements.schemaSearch.value || "");
+  if (announce) {
+    const label = value.replaceAll("_", " ");
+    setStatus(`Catalog scope: ${label}`, "ok");
   }
 }
 
@@ -967,6 +1040,32 @@ function fieldAppearsInTemplate(path, templateText) {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`(^|[^A-Za-z0-9_])${escaped}([^A-Za-z0-9_]|$)`);
   return pattern.test(haystack);
+}
+
+function schemaSortValue(record, key) {
+  const field = record?.field || {};
+  if (key === "path") return String(field.path || "");
+  if (key === "source") return String(record?.source || "");
+  if (key === "group") return String(record?.group || "");
+  if (key === "type") return String(field.type || "");
+  if (key === "stability") return String(field.stability || "");
+  if (key === "cost") return String(field.cost_tier || "");
+  if (key === "freshness") return String(field.freshness || "");
+  if (key === "sample") return stringifySample(field.sample);
+  return String(field.path || "");
+}
+
+function cycleSchemaSort(key) {
+  const nextKey = String(key || "path");
+  if (state.schemaSortKey !== nextKey) {
+    state.schemaSortKey = nextKey;
+    state.schemaSortDir = "asc";
+  } else if (state.schemaSortDir === "asc") {
+    state.schemaSortDir = "desc";
+  } else {
+    state.schemaSortDir = "asc";
+  }
+  renderSchemaCatalog(elements.schemaSearch.value || "");
 }
 
 function selectedCatalogIndex() {
@@ -1010,7 +1109,9 @@ function focusSchemaSearch() {
 function hasAnyModalOpen() {
   return Boolean(
     elements.publishModal?.classList.contains("open") ||
-    elements.tourModal?.classList.contains("open"),
+    elements.tourModal?.classList.contains("open") ||
+    elements.versionDiffModal?.classList.contains("open") ||
+    elements.commandPaletteModal?.classList.contains("open"),
   );
 }
 
@@ -1114,6 +1215,11 @@ function getFilteredSchemaRows(filterText = "") {
   }
 
   rows.sort((a, b) => {
+    const left = schemaSortValue(a, state.schemaSortKey);
+    const right = schemaSortValue(b, state.schemaSortKey);
+    const base = String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+    const direction = state.schemaSortDir === "desc" ? -1 : 1;
+    if (base !== 0) return base * direction;
     const groupCmp = String(a.group || "").localeCompare(String(b.group || ""));
     if (groupCmp !== 0) return groupCmp;
     return String(a.field.path || "").localeCompare(String(b.field.path || ""));
@@ -1304,20 +1410,38 @@ function renderSchemaCatalog(filterText = "", options = {}) {
   table.className = "data-table";
 
   const thead = document.createElement("thead");
-  thead.innerHTML = `
-    <tr>
-      <th>★</th>
-      <th>Field</th>
-      <th>Source</th>
-      <th>Group</th>
-      <th>Type</th>
-      <th>Stability</th>
-      <th>Cost</th>
-      <th>Freshness</th>
-      <th>Example</th>
-      <th>Action</th>
-    </tr>
-  `;
+  const headRow = document.createElement("tr");
+  const headers = [
+    { label: "★", key: null },
+    { label: "Field", key: "path" },
+    { label: "Source", key: "source" },
+    { label: "Group", key: "group" },
+    { label: "Type", key: "type" },
+    { label: "Stability", key: "stability" },
+    { label: "Cost", key: "cost" },
+    { label: "Freshness", key: "freshness" },
+    { label: "Example", key: "sample" },
+    { label: "Action", key: null },
+  ];
+  for (const header of headers) {
+    const th = document.createElement("th");
+    if (!header.key) {
+      th.textContent = header.label;
+      headRow.appendChild(th);
+      continue;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "sort-head-btn";
+    const active = state.schemaSortKey === header.key;
+    const arrow = active ? (state.schemaSortDir === "desc" ? " ↓" : " ↑") : "";
+    button.textContent = `${header.label}${arrow}`;
+    button.title = `Sort by ${header.label}`;
+    button.addEventListener("click", () => cycleSchemaSort(header.key));
+    th.appendChild(button);
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
@@ -1665,6 +1789,36 @@ function closePublishModal() {
   updatePublishConfirmEnabled();
 }
 
+function closeVersionDiffModal() {
+  if (!elements.versionDiffModal) return;
+  elements.versionDiffModal.classList.remove("open");
+  elements.versionDiffModal.setAttribute("aria-hidden", "true");
+}
+
+async function openVersionDiffModal(versionId) {
+  if (!elements.versionDiffModal || !versionId) return;
+  elements.versionDiffModal.classList.add("open");
+  elements.versionDiffModal.setAttribute("aria-hidden", "false");
+  if (elements.versionDiffMeta) elements.versionDiffMeta.textContent = "Loading diff...";
+  if (elements.versionDiffView) elements.versionDiffView.textContent = "";
+
+  const res = await requestJSON(`/editor/template/version/${encodeURIComponent(versionId)}`);
+  if (!res.ok) {
+    if (elements.versionDiffMeta) elements.versionDiffMeta.textContent = `Failed to load version ${versionId}`;
+    return;
+  }
+  const template = String(res.payload?.version?.template || "");
+  const diffRows = computeLineDiff(getEditorText(), template);
+  const summary = summarizeLineDiff(diffRows);
+  if (elements.versionDiffMeta) {
+    elements.versionDiffMeta.textContent =
+      `Editor vs ${versionId}: +${summary.added} / -${summary.removed} / unchanged ${summary.unchanged} / changed~ ${summary.changed}`;
+  }
+  if (elements.versionDiffView) {
+    elements.versionDiffView.textContent = renderDiffRows(diffRows, 260);
+  }
+}
+
 async function openPublishModal() {
   if (!elements.publishModal) {
     setStatus("Publish modal unavailable", "error");
@@ -1960,8 +2114,16 @@ function renderVersionHistory() {
       await rollbackTemplateVersion(String(version.version_id || ""));
     });
 
+    const diffBtn = document.createElement("button");
+    diffBtn.className = "field-insert";
+    diffBtn.textContent = "Diff";
+    diffBtn.addEventListener("click", async () => {
+      await openVersionDiffModal(String(version.version_id || ""));
+    });
+
     controls.appendChild(loadBtn);
     controls.appendChild(rollbackBtn);
+    controls.appendChild(diffBtn);
 
     row.appendChild(body);
     row.appendChild(controls);
@@ -2228,6 +2390,175 @@ function closeTour(options = {}) {
 function maybeOpenTourOnFirstRun() {
   if (hasSeenTour()) return;
   openTour(0);
+}
+
+function closeCommandPalette() {
+  if (!elements.commandPaletteModal) return;
+  elements.commandPaletteModal.classList.remove("open");
+  elements.commandPaletteModal.setAttribute("aria-hidden", "true");
+}
+
+function commandPaletteActions() {
+  return [
+    {
+      id: "preview",
+      title: "Run Preview",
+      description: "Render current template with active preview context",
+      run: async () => previewTemplate({ force: true }),
+    },
+    {
+      id: "validate",
+      title: "Validate Template",
+      description: "Run validation checks and hints",
+      run: async () => validateTemplate(),
+    },
+    {
+      id: "publish",
+      title: "Open Publish Modal",
+      description: "Review validation + diff before publish",
+      run: async () => openPublishModal(),
+    },
+    {
+      id: "focus-data",
+      title: "Focus Data Search",
+      description: "Jump to Available Data search box",
+      run: async () => focusSchemaSearch(),
+    },
+    {
+      id: "toggle-drawer",
+      title: "Toggle Workspace Drawer",
+      description: "Show/hide Template Repository, History, and Links",
+      run: async () => toggleDrawer(),
+    },
+    {
+      id: "load-active",
+      title: "Load Active Template",
+      description: "Replace editor with active template",
+      run: async () => {
+        setEditorText(state.templateActive);
+        setEditorDirty(false);
+        queueAutoPreview();
+      },
+    },
+    {
+      id: "load-default",
+      title: "Load Default Template",
+      description: "Replace editor with default template",
+      run: async () => {
+        setEditorText(state.templateDefault);
+        setEditorDirty(state.templateDefault !== state.templateActive);
+        queueAutoPreview();
+      },
+    },
+    {
+      id: "save-draft",
+      title: "Save Draft",
+      description: "Store current template in browser local draft",
+      run: async () => saveDraft(),
+    },
+    {
+      id: "toggle-theme",
+      title: "Toggle Theme",
+      description: "Switch between dark and light mode",
+      run: async () => {
+        const next = document.body.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+      },
+    },
+    {
+      id: "toggle-autopreview",
+      title: state.autoPreview ? "Disable Auto-preview" : "Enable Auto-preview",
+      description: "Toggle automatic preview refresh on edits",
+      run: async () => {
+        state.autoPreview = !state.autoPreview;
+        if (elements.autoPreviewToggle) {
+          elements.autoPreviewToggle.checked = state.autoPreview;
+        }
+        updateActionEmphasis();
+        if (state.autoPreview) queueAutoPreview();
+      },
+    },
+  ];
+}
+
+function renderCommandPaletteList(items) {
+  if (!elements.commandPaletteList) return;
+  elements.commandPaletteList.innerHTML = "";
+  if (!Array.isArray(items) || items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "meta";
+    empty.textContent = "No commands found.";
+    elements.commandPaletteList.appendChild(empty);
+    return;
+  }
+  state.commandPaletteActiveIndex = Math.max(0, Math.min(items.length - 1, state.commandPaletteActiveIndex));
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "command-item";
+    if (index === state.commandPaletteActiveIndex) {
+      row.classList.add("is-active");
+    }
+    row.addEventListener("click", async () => {
+      state.commandPaletteActiveIndex = index;
+      await executeCommandPaletteSelection();
+    });
+
+    const title = document.createElement("div");
+    title.className = "command-item-title";
+    title.textContent = item.title;
+    row.appendChild(title);
+
+    const desc = document.createElement("div");
+    desc.className = "command-item-desc";
+    desc.textContent = item.description;
+    row.appendChild(desc);
+
+    elements.commandPaletteList.appendChild(row);
+  });
+  if (elements.commandPaletteMeta) {
+    elements.commandPaletteMeta.textContent = `${items.length} command(s) available`;
+  }
+}
+
+function updateCommandPaletteResults() {
+  const all = commandPaletteActions();
+  const q = String(elements.commandPaletteSearch?.value || "").trim().toLowerCase();
+  const filtered = all.filter((item) => {
+    if (!q) return true;
+    return (
+      item.title.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q) ||
+      item.id.toLowerCase().includes(q)
+    );
+  });
+  state.commandPaletteItems = filtered;
+  state.commandPaletteActiveIndex = 0;
+  renderCommandPaletteList(filtered);
+}
+
+async function executeCommandPaletteSelection() {
+  if (!Array.isArray(state.commandPaletteItems) || state.commandPaletteItems.length === 0) return;
+  const index = Math.max(0, Math.min(state.commandPaletteItems.length - 1, state.commandPaletteActiveIndex));
+  const selected = state.commandPaletteItems[index];
+  if (!selected) return;
+  closeCommandPalette();
+  try {
+    await selected.run();
+    setStatus(`Command executed: ${selected.title}`, "ok");
+  } catch (_err) {
+    setStatus(`Command failed: ${selected.title}`, "error");
+  }
+}
+
+function openCommandPalette() {
+  if (!elements.commandPaletteModal) return;
+  elements.commandPaletteModal.classList.add("open");
+  elements.commandPaletteModal.setAttribute("aria-hidden", "false");
+  if (elements.commandPaletteSearch) {
+    elements.commandPaletteSearch.value = "";
+    elements.commandPaletteSearch.focus();
+  }
+  updateCommandPaletteResults();
 }
 
 function downloadTextFile(filename, text) {
@@ -2702,6 +3033,15 @@ function bindUI() {
       elements.btnToggleAdvancedFilters.textContent = isHidden ? "Show Advanced Filters" : "Hide Advanced Filters";
     });
   }
+  if (elements.catalogScopePills) {
+    elements.catalogScopePills.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.classList.contains("scope-pill")) return;
+      const scope = String(target.dataset.scope || "all");
+      applyCatalogScope(scope, { announce: true });
+    });
+  }
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
@@ -2837,16 +3177,20 @@ function bindUI() {
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
   elements.schemaCuratedOnly.addEventListener("change", () => {
+    syncScopeFromFilterToggles();
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
   elements.schemaStableOnly.addEventListener("change", () => {
+    syncScopeFromFilterToggles();
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
   elements.schemaFavoritesOnly.addEventListener("change", () => {
+    syncScopeFromFilterToggles();
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
   if (elements.schemaInTemplateOnly) {
     elements.schemaInTemplateOnly.addEventListener("change", () => {
+      syncScopeFromFilterToggles();
       renderSchemaCatalog(elements.schemaSearch.value || "");
     });
   }
@@ -3001,7 +3345,63 @@ function bindUI() {
       }
     });
   }
+  if (elements.versionDiffCloseBtn) {
+    elements.versionDiffCloseBtn.addEventListener("click", closeVersionDiffModal);
+  }
+  if (elements.versionDiffModal) {
+    elements.versionDiffModal.addEventListener("click", (event) => {
+      if (event.target === elements.versionDiffModal) {
+        closeVersionDiffModal();
+      }
+    });
+  }
+  if (elements.commandPaletteCloseBtn) {
+    elements.commandPaletteCloseBtn.addEventListener("click", closeCommandPalette);
+  }
+  if (elements.commandPaletteModal) {
+    elements.commandPaletteModal.addEventListener("click", (event) => {
+      if (event.target === elements.commandPaletteModal) {
+        closeCommandPalette();
+      }
+    });
+  }
+  if (elements.commandPaletteSearch) {
+    elements.commandPaletteSearch.addEventListener("input", () => {
+      updateCommandPaletteResults();
+    });
+    elements.commandPaletteSearch.addEventListener("keydown", async (event) => {
+      if (!Array.isArray(state.commandPaletteItems) || state.commandPaletteItems.length === 0) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.commandPaletteActiveIndex = Math.min(
+          state.commandPaletteItems.length - 1,
+          state.commandPaletteActiveIndex + 1,
+        );
+        renderCommandPaletteList(state.commandPaletteItems);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.commandPaletteActiveIndex = Math.max(0, state.commandPaletteActiveIndex - 1);
+        renderCommandPaletteList(state.commandPaletteItems);
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        await executeCommandPaletteSelection();
+      }
+    });
+  }
   document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      if (elements.commandPaletteModal?.classList.contains("open")) {
+        closeCommandPalette();
+      } else {
+        openCommandPalette();
+      }
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && !hasAnyModalOpen()) {
       if (!isTypingContext(event.target)) {
         event.preventDefault();
@@ -3015,6 +3415,14 @@ function bindUI() {
     }
     if (event.key === "Escape" && elements.tourModal?.classList.contains("open")) {
       closeTour({ markSeen: true });
+      return;
+    }
+    if (event.key === "Escape" && elements.versionDiffModal?.classList.contains("open")) {
+      closeVersionDiffModal();
+      return;
+    }
+    if (event.key === "Escape" && elements.commandPaletteModal?.classList.contains("open")) {
+      closeCommandPalette();
       return;
     }
     if (event.key === "Escape" && elements.leftDrawer?.classList.contains("open")) {

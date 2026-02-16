@@ -428,6 +428,30 @@ label[for="templateEditor"] {
   margin-top: 0;
 }
 
+.scope-pills {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scope-pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.scope-pill.is-active {
+  border-color: color-mix(in srgb, var(--secondary) 45%, var(--line));
+  color: var(--secondary);
+  background: #eef6f3;
+}
+
 .toggle-row {
   display: flex;
   flex-wrap: wrap;
@@ -542,6 +566,23 @@ label[for="templateEditor"] {
   letter-spacing: 0.04em;
   padding: 8px;
   border-bottom: 1px solid var(--line);
+}
+
+.sort-head-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sort-head-btn:hover {
+  color: var(--secondary);
 }
 
 .data-table tbody td {
@@ -971,6 +1012,42 @@ label[for="templateEditor"] {
   width: min(640px, 96vw);
 }
 
+.command-palette-card {
+  width: min(760px, 96vw);
+}
+
+.command-palette-list {
+  margin-top: 0;
+  max-height: 420px;
+}
+
+.command-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.command-item:hover,
+.command-item.is-active {
+  border-color: color-mix(in srgb, var(--secondary) 45%, var(--line));
+  background: #eef6f3;
+}
+
+.command-item-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.command-item-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .tour-body {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1038,6 +1115,14 @@ body[data-theme="dark"] .data-table tbody tr.is-selected {
   background: #20372d;
 }
 
+body[data-theme="dark"] .scope-pill {
+  background: #16221d;
+}
+
+body[data-theme="dark"] .scope-pill.is-active {
+  background: #20372d;
+}
+
 body[data-theme="dark"] .field-favorite {
   background: #2d2412;
   color: #f0c068;
@@ -1060,6 +1145,15 @@ body[data-theme="dark"] .theme-switch-track {
 
 body[data-theme="dark"] .theme-switch-thumb {
   background: #22332b;
+}
+
+body[data-theme="dark"] .command-item {
+  background: #16221d;
+}
+
+body[data-theme="dark"] .command-item:hover,
+body[data-theme="dark"] .command-item.is-active {
+  background: #20372d;
 }
 
 body[data-theme="dark"] .context-banner.live {
