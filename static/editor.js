@@ -168,6 +168,7 @@ const CATALOG_PRESETS = {
     curatedOnly: true,
     stableOnly: true,
     favoritesOnly: false,
+    inTemplateOnly: false,
     source: "all",
     group: "all",
     type: "all",
@@ -181,6 +182,7 @@ const CATALOG_PRESETS = {
     curatedOnly: false,
     stableOnly: false,
     favoritesOnly: false,
+    inTemplateOnly: false,
     source: "all",
     group: "all",
     type: "all",
@@ -194,6 +196,7 @@ const CATALOG_PRESETS = {
     curatedOnly: false,
     stableOnly: false,
     favoritesOnly: false,
+    inTemplateOnly: false,
     source: "Weather.com",
     group: "weather",
     type: "all",
@@ -207,6 +210,7 @@ const CATALOG_PRESETS = {
     curatedOnly: true,
     stableOnly: true,
     favoritesOnly: false,
+    inTemplateOnly: false,
     source: "crono-api",
     group: "all",
     type: "all",
@@ -220,6 +224,7 @@ const CATALOG_PRESETS = {
     curatedOnly: false,
     stableOnly: true,
     favoritesOnly: false,
+    inTemplateOnly: false,
     source: "all",
     group: "all",
     type: "all",
@@ -249,7 +254,14 @@ const state = {
   autoPreview: true,
   autoPreviewTimer: null,
   previewRequestId: 0,
+  previewCharLimit: 2200,
+  previewDiffEnabled: false,
+  activePreviewCacheKey: "",
+  activePreviewTemplate: "",
+  activePreviewRendered: "",
+  lastValidationOk: null,
   editorTouched: false,
+  selectedCatalogPath: "",
   publishModalValidationOk: false,
   tourStep: 0,
   catalogFavorites: new Set(),
@@ -257,10 +269,25 @@ const state = {
 };
 
 const elements = {
+  leftDrawer: document.getElementById("leftDrawer"),
+  drawerBackdrop: document.getElementById("drawerBackdrop"),
+  btnDrawerToggle: document.getElementById("btnDrawerToggle"),
+  btnDrawerClose: document.getElementById("btnDrawerClose"),
   topStatus: document.getElementById("topStatus"),
+  contextModeChip: document.getElementById("contextModeChip"),
+  contextFixtureChip: document.getElementById("contextFixtureChip"),
+  contextSchemaChip: document.getElementById("contextSchemaChip"),
+  contextSaveChip: document.getElementById("contextSaveChip"),
+  contextPublishChip: document.getElementById("contextPublishChip"),
   templateEditor: document.getElementById("templateEditor"),
   previewText: document.getElementById("previewText"),
   previewMeta: document.getElementById("previewMeta"),
+  previewCharLimit: document.getElementById("previewCharLimit"),
+  previewCharMeterFill: document.getElementById("previewCharMeterFill"),
+  previewCharCount: document.getElementById("previewCharCount"),
+  previewDiffToggle: document.getElementById("previewDiffToggle"),
+  previewDiffMeta: document.getElementById("previewDiffMeta"),
+  previewDiffText: document.getElementById("previewDiffText"),
   validationPane: document.getElementById("validationPane"),
   schemaList: document.getElementById("schemaList"),
   schemaMeta: document.getElementById("schemaMeta"),
@@ -277,8 +304,12 @@ const elements = {
   schemaCuratedOnly: document.getElementById("schemaCuratedOnly"),
   schemaStableOnly: document.getElementById("schemaStableOnly"),
   schemaFavoritesOnly: document.getElementById("schemaFavoritesOnly"),
+  schemaInTemplateOnly: document.getElementById("schemaInTemplateOnly"),
   schemaPreset: document.getElementById("schemaPreset"),
+  advancedFiltersWrap: document.getElementById("advancedFiltersWrap"),
+  btnToggleAdvancedFilters: document.getElementById("btnToggleAdvancedFilters"),
   catalogQuickPicks: document.getElementById("catalogQuickPicks"),
+  schemaInspector: document.getElementById("schemaInspector"),
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
   contextSafetyBanner: document.getElementById("contextSafetyBanner"),
@@ -310,6 +341,8 @@ const elements = {
   tourStepBody: document.getElementById("tourStepBody"),
   tourStepCounter: document.getElementById("tourStepCounter"),
   btnTour: document.getElementById("btnTour"),
+  btnPreview: document.getElementById("btnPreview"),
+  btnSave: document.getElementById("btnSave"),
   btnTourSkip: document.getElementById("btnTourSkip"),
   btnTourPrev: document.getElementById("btnTourPrev"),
   btnTourNext: document.getElementById("btnTourNext"),
@@ -319,6 +352,189 @@ const elements = {
 function setStatus(text, tone = "neutral") {
   elements.topStatus.textContent = text;
   elements.topStatus.dataset.tone = tone;
+}
+
+function updateContextChips() {
+  const previewMode = String(elements.previewContextMode?.value || "sample");
+  const schemaMode = String(elements.schemaContextMode?.value || "sample");
+  const fixture = selectedFixtureName();
+  const schemaSource = state.schemaSource ? ` (${state.schemaSource})` : "";
+
+  if (elements.contextModeChip) {
+    elements.contextModeChip.textContent = `Preview: ${previewMode}`;
+  }
+  if (elements.contextFixtureChip) {
+    elements.contextFixtureChip.textContent = `Fixture: ${fixture}`;
+  }
+  if (elements.contextSchemaChip) {
+    elements.contextSchemaChip.textContent = `Catalog: ${schemaMode}${schemaSource}`;
+  }
+  if (elements.contextSaveChip) {
+    const dirty = state.editorTouched ? "Dirty" : "Saved";
+    elements.contextSaveChip.textContent = `Template: ${dirty}`;
+  }
+  if (elements.contextPublishChip) {
+    let publish = "Not checked";
+    if (state.lastValidationOk === true) publish = "Ready";
+    if (state.lastValidationOk === false) publish = "Blocked";
+    elements.contextPublishChip.textContent = `Publish: ${publish}`;
+  }
+}
+
+function setButtonTone(button, tone) {
+  if (!button) return;
+  button.classList.remove("btn-primary", "btn-secondary", "btn-ghost");
+  if (tone === "primary") {
+    button.classList.add("btn-primary");
+    return;
+  }
+  if (tone === "secondary") {
+    button.classList.add("btn-secondary");
+    return;
+  }
+  button.classList.add("btn-ghost");
+}
+
+function updateActionEmphasis() {
+  const saveButton = elements.btnSave;
+  const previewButton = elements.btnPreview;
+  if (!saveButton || !previewButton) return;
+
+  if (state.editorTouched) {
+    setButtonTone(saveButton, "primary");
+    setButtonTone(previewButton, "secondary");
+    return;
+  }
+  if (!state.autoPreview) {
+    setButtonTone(previewButton, "primary");
+    setButtonTone(saveButton, "secondary");
+    return;
+  }
+  setButtonTone(saveButton, "secondary");
+  setButtonTone(previewButton, "ghost");
+}
+
+function closeDrawer() {
+  if (!elements.leftDrawer || !elements.drawerBackdrop) return;
+  elements.leftDrawer.classList.remove("open");
+  elements.leftDrawer.setAttribute("aria-hidden", "true");
+  elements.drawerBackdrop.classList.remove("open");
+  elements.drawerBackdrop.setAttribute("aria-hidden", "true");
+}
+
+function openDrawer() {
+  if (!elements.leftDrawer || !elements.drawerBackdrop) return;
+  elements.leftDrawer.classList.add("open");
+  elements.leftDrawer.setAttribute("aria-hidden", "false");
+  elements.drawerBackdrop.classList.add("open");
+  elements.drawerBackdrop.setAttribute("aria-hidden", "false");
+}
+
+function toggleDrawer() {
+  if (!elements.leftDrawer) return;
+  const open = elements.leftDrawer.classList.contains("open");
+  if (open) {
+    closeDrawer();
+  } else {
+    openDrawer();
+  }
+}
+
+function setEditorDirty(isDirty) {
+  state.editorTouched = Boolean(isDirty);
+  updateContextChips();
+  updateActionEmphasis();
+}
+
+function currentPreviewCharLimit() {
+  const raw = Number.parseInt(String(elements.previewCharLimit?.value || state.previewCharLimit), 10);
+  const next = Number.isFinite(raw) ? Math.min(20000, Math.max(100, raw)) : 2200;
+  state.previewCharLimit = next;
+  if (elements.previewCharLimit) {
+    elements.previewCharLimit.value = String(next);
+  }
+  return next;
+}
+
+function updatePreviewCharMeter() {
+  const renderedLength = String(elements.previewText?.textContent || "").length;
+  const limit = currentPreviewCharLimit();
+  const ratio = limit > 0 ? Math.min(1, renderedLength / limit) : 0;
+
+  if (elements.previewCharMeterFill) {
+    elements.previewCharMeterFill.style.width = `${Math.round(ratio * 100)}%`;
+    elements.previewCharMeterFill.dataset.over = renderedLength > limit ? "1" : "0";
+  }
+  if (elements.previewCharCount) {
+    const status = renderedLength > limit ? " (over limit)" : "";
+    elements.previewCharCount.dataset.over = renderedLength > limit ? "1" : "0";
+    elements.previewCharCount.textContent = `${renderedLength} / ${limit} chars${status}`;
+  }
+}
+
+function currentPreviewContextKey() {
+  const mode = String(elements.previewContextMode?.value || "sample");
+  const fixture = selectedFixtureName();
+  return `${mode}|${fixture}`;
+}
+
+function clearActivePreviewCache() {
+  state.activePreviewCacheKey = "";
+  state.activePreviewTemplate = "";
+  state.activePreviewRendered = "";
+}
+
+async function ensureActivePreviewBaseline() {
+  const key = currentPreviewContextKey();
+  if (
+    state.activePreviewCacheKey === key &&
+    state.activePreviewTemplate === state.templateActive
+  ) {
+    return { ok: true, preview: state.activePreviewRendered };
+  }
+
+  const contextMode = elements.previewContextMode.value || "sample";
+  const fixtureName = selectedFixtureName();
+  const res = await requestJSON("/editor/preview", {
+    method: "POST",
+    body: JSON.stringify({
+      template: state.templateActive || "",
+      context_mode: contextMode,
+      fixture_name: fixtureName,
+    }),
+  });
+  if (!res.ok) {
+    return { ok: false, error: res.payload?.error || "Baseline preview failed" };
+  }
+  state.activePreviewCacheKey = key;
+  state.activePreviewTemplate = state.templateActive;
+  state.activePreviewRendered = String(res.payload.preview || "");
+  return { ok: true, preview: state.activePreviewRendered };
+}
+
+async function updatePreviewDiff(currentRendered = "") {
+  if (!elements.previewDiffToggle || !elements.previewDiffMeta || !elements.previewDiffText) return;
+  if (!elements.previewDiffToggle.checked) {
+    elements.previewDiffMeta.textContent = "Diff disabled.";
+    elements.previewDiffText.classList.add("is-hidden");
+    elements.previewDiffText.textContent = "";
+    return;
+  }
+
+  const baseline = await ensureActivePreviewBaseline();
+  if (!baseline.ok) {
+    elements.previewDiffMeta.textContent = `Diff unavailable: ${baseline.error}`;
+    elements.previewDiffText.classList.add("is-hidden");
+    elements.previewDiffText.textContent = "";
+    return;
+  }
+
+  const diffRows = computeLineDiff(String(baseline.preview || ""), String(currentRendered || ""));
+  const summary = summarizeLineDiff(diffRows);
+  elements.previewDiffMeta.textContent =
+    `Diff vs active output: +${summary.added} / -${summary.removed} / unchanged ${summary.unchanged} / changed~ ${summary.changed}`;
+  elements.previewDiffText.textContent = renderDiffRows(diffRows, 180);
+  elements.previewDiffText.classList.remove("is-hidden");
 }
 
 function loadCatalogPreferences() {
@@ -449,6 +665,7 @@ function renderContextSafetyBanner() {
   elements.contextSafetyBanner.classList.remove("safe", "live");
   elements.contextSafetyBanner.classList.add(profile.level);
   elements.contextSafetyBanner.textContent = profile.text;
+  updateContextChips();
 }
 
 function collectValidationHints(validation) {
@@ -524,6 +741,7 @@ function insertAtCursor(text) {
   const nextCursor = start + text.length;
   editor.focus();
   editor.setSelectionRange(nextCursor, nextCursor);
+  setEditorDirty(true);
 }
 
 function updateValidationPane(result, ok) {
@@ -711,6 +929,7 @@ function applyCatalogPreset(presetId, options = {}) {
   if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = Boolean(preset.curatedOnly);
   if (elements.schemaStableOnly) elements.schemaStableOnly.checked = Boolean(preset.stableOnly);
   if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = Boolean(preset.favoritesOnly);
+  if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = Boolean(preset.inTemplateOnly);
 
   renderSchemaCatalog(elements.schemaSearch.value || "");
   if (announce) {
@@ -730,24 +949,30 @@ function resetCatalogFilters(options = {}) {
   if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = false;
   if (elements.schemaStableOnly) elements.schemaStableOnly.checked = false;
   if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = false;
+  if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = false;
   renderSchemaCatalog(elements.schemaSearch.value || "");
   if (announce) {
     setStatus("Catalog filters reset", "ok");
   }
 }
 
-function renderSchemaCatalog(filterText = "") {
-  const schema = state.schema;
-  elements.schemaList.innerHTML = "";
+function fieldAppearsInTemplate(path, templateText) {
+  const key = String(path || "").trim();
+  if (!key) return false;
+  const haystack = String(templateText || "");
+  if (!haystack) return false;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^|[^A-Za-z0-9_])${escaped}([^A-Za-z0-9_]|$)`);
+  return pattern.test(haystack);
+}
 
+function getFilteredSchemaRows(filterText = "") {
+  const schema = state.schema;
   if (!schema || !Array.isArray(schema.groups) || schema.groups.length === 0) {
-    const contextMode = elements.schemaContextMode.value || "sample";
-    elements.schemaMeta.textContent =
-      `No schema fields available. Try context mode '${contextMode}' or run one worker cycle to populate latest payload context.`;
-    return;
+    return [];
   }
 
-  const q = filterText.trim().toLowerCase();
+  const q = String(filterText || "").trim().toLowerCase();
   const sourceFilter = elements.schemaSourceFilter.value || "all";
   const groupFilter = elements.schemaGroupFilter.value || "all";
   const typeFilter = elements.schemaTypeFilter.value || "all";
@@ -758,230 +983,218 @@ function renderSchemaCatalog(filterText = "") {
   const curatedOnly = Boolean(elements.schemaCuratedOnly.checked);
   const stableOnly = Boolean(elements.schemaStableOnly.checked);
   const favoritesOnly = Boolean(elements.schemaFavoritesOnly.checked);
-  let visibleFields = 0;
+  const inTemplateOnly = Boolean(elements.schemaInTemplateOnly?.checked);
+  const templateText = inTemplateOnly ? getEditorText() : "";
 
+  const rows = [];
   for (const group of schema.groups) {
-    if (groupFilter !== "all" && String(group.group) !== groupFilter) {
+    const groupName = String(group.group || "");
+    const groupSource = String(group.source || "");
+    if (groupFilter !== "all" && groupName !== groupFilter) {
       continue;
     }
-
-    const fields = (group.fields || []).filter((field) => {
-      const fieldSource = String(field.source || group.source || "Unknown");
+    for (const field of group.fields || []) {
+      const path = String(field.path || "").trim();
+      if (!path) continue;
+      const fieldSource = String(field.source || groupSource || "Unknown");
       const fieldType = String(field.type || "");
       const fieldTags = Array.isArray(field.tags) ? field.tags.map((tag) => String(tag)) : [];
-      const fieldCurated = Boolean(field.curated);
       const fieldStability = String(field.stability || "");
       const fieldCostTier = String(field.cost_tier || "");
       const fieldFreshness = String(field.freshness || "");
-      const isFavorite = isFavoriteField(field.path);
+      const isFavorite = isFavoriteField(path);
 
-      if (sourceFilter !== "all" && fieldSource !== sourceFilter) {
-        return false;
-      }
-      if (typeFilter !== "all" && fieldType !== typeFilter) {
-        return false;
-      }
-      if (tagFilter !== "all" && !fieldTags.includes(tagFilter)) {
-        return false;
-      }
-      if (curatedOnly && !fieldCurated) {
-        return false;
-      }
-      if (stableOnly && fieldStability !== "stable") {
-        return false;
-      }
-      if (stabilityFilter !== "all" && fieldStability !== stabilityFilter) {
-        return false;
-      }
-      if (costTierFilter !== "all" && fieldCostTier !== costTierFilter) {
-        return false;
-      }
-      if (freshnessFilter !== "all" && fieldFreshness !== freshnessFilter) {
-        return false;
-      }
-      if (favoritesOnly && !isFavorite) {
-        return false;
-      }
+      if (sourceFilter !== "all" && fieldSource !== sourceFilter) continue;
+      if (typeFilter !== "all" && fieldType !== typeFilter) continue;
+      if (tagFilter !== "all" && !fieldTags.includes(tagFilter)) continue;
+      if (curatedOnly && !field.curated) continue;
+      if (stableOnly && fieldStability !== "stable") continue;
+      if (stabilityFilter !== "all" && fieldStability !== stabilityFilter) continue;
+      if (costTierFilter !== "all" && fieldCostTier !== costTierFilter) continue;
+      if (freshnessFilter !== "all" && fieldFreshness !== freshnessFilter) continue;
+      if (favoritesOnly && !isFavorite) continue;
+      if (inTemplateOnly && !fieldAppearsInTemplate(path, templateText)) continue;
 
-      if (!q) return true;
-      const alternatives = Array.isArray(field.alternatives)
-        ? field.alternatives.map((alt) => String(alt))
-        : [];
-      return (
-        String(field.path || "").toLowerCase().includes(q) ||
-        String(field.label || "").toLowerCase().includes(q) ||
-        String(field.description || "").toLowerCase().includes(q) ||
-        String(field.type || "").toLowerCase().includes(q) ||
-        fieldSource.toLowerCase().includes(q) ||
-        String(field.source_note || "").toLowerCase().includes(q) ||
-        String(field.metric_key || "").toLowerCase().includes(q) ||
-        String(field.stability || "").toLowerCase().includes(q) ||
-        String(field.cost_tier || "").toLowerCase().includes(q) ||
-        String(field.freshness || "").toLowerCase().includes(q) ||
-        String(field.units || "").toLowerCase().includes(q) ||
-        fieldTags.join(" ").toLowerCase().includes(q) ||
-        alternatives.join(" ").toLowerCase().includes(q)
-      );
-    });
-
-    if (fields.length === 0) continue;
-    visibleFields += fields.length;
-
-    const card = document.createElement("section");
-    card.className = "catalog-group";
-
-    const groupSource = group.source ? ` | ${group.source}` : "";
-    const h = document.createElement("h3");
-    h.textContent = `${group.group} (${fields.length})${groupSource}`;
-    card.appendChild(h);
-
-    for (const field of fields.sort((a, b) => String(a.path || "").localeCompare(String(b.path || "")))) {
-      const row = document.createElement("div");
-      row.className = "field";
-      if (field.curated) {
-        row.classList.add("field-curated");
+      if (q) {
+        const alternatives = Array.isArray(field.alternatives)
+          ? field.alternatives.map((alt) => String(alt))
+          : [];
+        const match = (
+          path.toLowerCase().includes(q) ||
+          String(field.label || "").toLowerCase().includes(q) ||
+          String(field.description || "").toLowerCase().includes(q) ||
+          fieldType.toLowerCase().includes(q) ||
+          fieldSource.toLowerCase().includes(q) ||
+          String(field.source_note || "").toLowerCase().includes(q) ||
+          String(field.metric_key || "").toLowerCase().includes(q) ||
+          fieldStability.toLowerCase().includes(q) ||
+          fieldCostTier.toLowerCase().includes(q) ||
+          fieldFreshness.toLowerCase().includes(q) ||
+          String(field.units || "").toLowerCase().includes(q) ||
+          groupName.toLowerCase().includes(q) ||
+          fieldTags.join(" ").toLowerCase().includes(q) ||
+          alternatives.join(" ").toLowerCase().includes(q)
+        );
+        if (!match) continue;
       }
 
-      const body = document.createElement("div");
-      const label = document.createElement("div");
-      label.className = "field-label";
-      label.textContent = field.label || field.path;
-
-      const key = document.createElement("div");
-      key.className = "field-key";
-      key.textContent = `{{ ${field.path} }}`;
-
-      const type = document.createElement("div");
-      type.className = "field-type";
-      type.textContent = `${field.type} | sample: ${stringifySample(field.sample)}`;
-
-      const badges = document.createElement("div");
-      badges.className = "field-badges";
-
-      const sourceBadge = document.createElement("span");
-      sourceBadge.className = "field-badge field-badge-source";
-      sourceBadge.textContent = field.source || "Unknown";
-      badges.appendChild(sourceBadge);
-
-      const stabilityBadge = document.createElement("span");
-      stabilityBadge.className = `field-badge field-badge-stability field-badge-${String(field.stability || "medium")}`;
-      stabilityBadge.textContent = String(field.stability || "medium");
-      badges.appendChild(stabilityBadge);
-
-      const costBadge = document.createElement("span");
-      costBadge.className = `field-badge field-badge-cost field-badge-${String(field.cost_tier || "medium")}`;
-      costBadge.textContent = `cost:${String(field.cost_tier || "medium")}`;
-      badges.appendChild(costBadge);
-
-      const freshnessBadge = document.createElement("span");
-      freshnessBadge.className = "field-badge field-badge-freshness";
-      freshnessBadge.textContent = `fresh:${String(field.freshness || "activity")}`;
-      badges.appendChild(freshnessBadge);
-
-      if (field.units) {
-        const unitsBadge = document.createElement("span");
-        unitsBadge.className = "field-badge field-badge-units";
-        unitsBadge.textContent = `units:${field.units}`;
-        badges.appendChild(unitsBadge);
-      }
-
-      const source = document.createElement("div");
-      source.className = "field-source";
-      source.textContent = field.source_note
-        ? `Source: ${field.source} (${field.source_note})`
-        : `Source: ${field.source || "Unknown"}`;
-
-      const desc = document.createElement("div");
-      desc.className = "field-description";
-      desc.textContent = field.description || "";
-
-      const metric = document.createElement("div");
-      metric.className = "field-type";
-      metric.textContent = field.metric_key
-        ? `Metric key: ${field.metric_key}`
-        : "Metric key: none";
-
-      const tags = Array.isArray(field.tags) ? field.tags : [];
-      const tagsLine = document.createElement("div");
-      tagsLine.className = "field-type";
-      tagsLine.textContent = tags.length > 0 ? `Tags: ${tags.join(", ")}` : "Tags: none";
-
-      const alternatives = Array.isArray(field.alternatives) ? field.alternatives : [];
-      const alternativesLine = document.createElement("div");
-      alternativesLine.className = "field-type";
-      alternativesLine.textContent = alternatives.length > 0
-        ? `Alternatives: ${alternatives.join(", ")}`
-        : "Alternatives: none";
-
-      body.appendChild(label);
-      body.appendChild(key);
-      if (desc.textContent) body.appendChild(desc);
-      body.appendChild(badges);
-      body.appendChild(type);
-      body.appendChild(metric);
-      body.appendChild(tagsLine);
-      if (alternatives.length > 0) {
-        body.appendChild(alternativesLine);
-      }
-      body.appendChild(source);
-
-      const controls = document.createElement("div");
-      controls.className = "field-actions";
-
-      const insertBtn = document.createElement("button");
-      insertBtn.className = "field-insert";
-      insertBtn.textContent = "Insert";
-      insertBtn.title = "Insert into advanced template";
-      insertBtn.addEventListener("click", () => {
-        insertFieldWithTransform(field.path, "{{ {path} }}");
+      rows.push({
+        group: groupName,
+        source: fieldSource,
+        field,
       });
-
-      controls.appendChild(insertBtn);
-
-      const favoriteBtn = document.createElement("button");
-      favoriteBtn.className = "field-favorite";
-      favoriteBtn.type = "button";
-      favoriteBtn.title = isFavoriteField(field.path) ? "Remove favorite" : "Add favorite";
-      favoriteBtn.textContent = isFavoriteField(field.path) ? "★" : "☆";
-      favoriteBtn.addEventListener("click", () => {
-        toggleFavoriteField(field.path);
-      });
-      controls.appendChild(favoriteBtn);
-
-      if (Array.isArray(state.helperTransforms) && state.helperTransforms.length > 0) {
-        const transformSelect = document.createElement("select");
-        transformSelect.className = "field-transform";
-        for (const transform of state.helperTransforms) {
-          const option = document.createElement("option");
-          option.value = String(transform.template || "{{ {path} }}");
-          option.textContent = String(transform.label || transform.id || "Transform");
-          transformSelect.appendChild(option);
-        }
-        const transformBtn = document.createElement("button");
-        transformBtn.className = "field-insert";
-        transformBtn.textContent = "Insert As";
-        transformBtn.title = "Insert using selected transform";
-        transformBtn.addEventListener("click", () => {
-          insertFieldWithTransform(field.path, transformSelect.value);
-        });
-        controls.appendChild(transformSelect);
-        controls.appendChild(transformBtn);
-      }
-
-      row.appendChild(body);
-      row.appendChild(controls);
-      row.addEventListener("dblclick", () => {
-        insertFieldWithTransform(field.path, "{{ {path} }}");
-      });
-
-      card.appendChild(row);
     }
-
-    elements.schemaList.appendChild(card);
   }
 
+  rows.sort((a, b) => {
+    const groupCmp = String(a.group || "").localeCompare(String(b.group || ""));
+    if (groupCmp !== 0) return groupCmp;
+    return String(a.field.path || "").localeCompare(String(b.field.path || ""));
+  });
+  return rows;
+}
+
+function renderSchemaInspector(record) {
+  if (!elements.schemaInspector) return;
+  const pane = elements.schemaInspector;
+  pane.innerHTML = "";
+
+  const title = document.createElement("h3");
+  title.textContent = "Field Inspector";
+  pane.appendChild(title);
+
+  if (!record) {
+    const empty = document.createElement("p");
+    empty.className = "subtext";
+    empty.textContent = "Select a field from the table to inspect details.";
+    pane.appendChild(empty);
+    return;
+  }
+
+  const { field, group, source } = record;
+  const path = String(field.path || "");
+  const token = `{{ ${path} }}`;
+
+  const line = document.createElement("div");
+  line.className = "inspector-path";
+  line.textContent = token;
+  pane.appendChild(line);
+
+  const desc = document.createElement("p");
+  desc.className = "subtext";
+  desc.textContent = field.description || "No field description.";
+  pane.appendChild(desc);
+
+  const badges = document.createElement("div");
+  badges.className = "inspector-badges";
+  const badgeValues = [
+    { label: source || "Unknown", type: "" },
+    { label: group || "misc", type: "" },
+    { label: String(field.type || "unknown"), type: "" },
+    { label: String(field.stability || "medium"), type: String(field.stability || "medium").toLowerCase() },
+    { label: `cost:${String(field.cost_tier || "medium")}`, type: String(field.cost_tier || "medium").toLowerCase() },
+    { label: `fresh:${String(field.freshness || "activity")}`, type: "" },
+  ];
+  for (const item of badgeValues) {
+    const badge = document.createElement("span");
+    badge.className = `badge ${item.type}`.trim();
+    badge.textContent = item.label;
+    badges.appendChild(badge);
+  }
+  pane.appendChild(badges);
+
+  const actions = document.createElement("div");
+  actions.className = "inline-actions";
+
+  const insertBtn = document.createElement("button");
+  insertBtn.type = "button";
+  insertBtn.className = "field-insert";
+  insertBtn.textContent = "Insert";
+  insertBtn.addEventListener("click", () => {
+    insertFieldWithTransform(path, "{{ {path} }}");
+  });
+  actions.appendChild(insertBtn);
+
+  const favoriteBtn = document.createElement("button");
+  favoriteBtn.type = "button";
+  favoriteBtn.className = "field-favorite";
+  favoriteBtn.textContent = isFavoriteField(path) ? "★ Favorite" : "☆ Favorite";
+  favoriteBtn.addEventListener("click", () => {
+    toggleFavoriteField(path);
+    renderSchemaInspector(record);
+  });
+  actions.appendChild(favoriteBtn);
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "field-insert";
+  copyBtn.textContent = "Copy Token";
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setStatus(`Copied token: ${path}`, "ok");
+    } catch (_err) {
+      setStatus("Clipboard copy failed", "error");
+    }
+  });
+  actions.appendChild(copyBtn);
+  pane.appendChild(actions);
+
+  if (Array.isArray(state.helperTransforms) && state.helperTransforms.length > 0) {
+    const transformRow = document.createElement("div");
+    transformRow.className = "inspector-transform";
+    const transformSelect = document.createElement("select");
+    transformSelect.className = "field-transform";
+    for (const transform of state.helperTransforms) {
+      const option = document.createElement("option");
+      option.value = String(transform.template || "{{ {path} }}");
+      option.textContent = String(transform.label || transform.id || "Transform");
+      transformSelect.appendChild(option);
+    }
+    const transformBtn = document.createElement("button");
+    transformBtn.type = "button";
+    transformBtn.className = "field-insert";
+    transformBtn.textContent = "Insert As";
+    transformBtn.addEventListener("click", () => {
+      insertFieldWithTransform(path, transformSelect.value);
+    });
+    transformRow.appendChild(transformSelect);
+    transformRow.appendChild(transformBtn);
+    pane.appendChild(transformRow);
+  }
+
+  const details = document.createElement("div");
+  details.className = "inspector-details";
+  const rows = [];
+  rows.push(`Label: ${field.label || path}`);
+  rows.push(`Source: ${source}${field.source_note ? ` (${field.source_note})` : ""}`);
+  rows.push(`Metric key: ${field.metric_key || "none"}`);
+  rows.push(`Units: ${field.units || "none"}`);
+  const tags = Array.isArray(field.tags) ? field.tags : [];
+  rows.push(`Tags: ${tags.length > 0 ? tags.join(", ") : "none"}`);
+  const alternatives = Array.isArray(field.alternatives) ? field.alternatives : [];
+  rows.push(`Alternatives: ${alternatives.length > 0 ? alternatives.join(", ") : "none"}`);
+  rows.push(`Sample: ${stringifySample(field.sample)}`);
+  details.textContent = rows.join("\n");
+  pane.appendChild(details);
+}
+
+function renderSchemaCatalog(filterText = "") {
+  const schema = state.schema;
+  elements.schemaList.innerHTML = "";
+
+  if (!schema || !Array.isArray(schema.groups) || schema.groups.length === 0) {
+    const contextMode = elements.schemaContextMode.value || "sample";
+    elements.schemaMeta.textContent =
+      `No schema fields available. Try context mode '${contextMode}' or run one worker cycle to populate latest payload context.`;
+    renderSchemaInspector(null);
+    return;
+  }
+
+  const rows = getFilteredSchemaRows(filterText);
   const sourceText = state.schemaSource ? ` | context: ${state.schemaSource}` : "";
-  if (visibleFields === 0) {
+
+  if (rows.length === 0) {
     const activeFilters = [];
     const sourceValue = elements.schemaSourceFilter.value || "all";
     const groupValue = elements.schemaGroupFilter.value || "all";
@@ -991,20 +1204,147 @@ function renderSchemaCatalog(filterText = "") {
     if (groupValue !== "all") activeFilters.push(`group=${groupValue}`);
     if (typeValue !== "all") activeFilters.push(`type=${typeValue}`);
     if (tagValue !== "all") activeFilters.push(`tag=${tagValue}`);
-    const stabilityValue = elements.schemaStabilityFilter.value || "all";
-    const costTierValue = elements.schemaCostTierFilter.value || "all";
-    const freshnessValue = elements.schemaFreshnessFilter.value || "all";
-    if (stabilityValue !== "all") activeFilters.push(`stability=${stabilityValue}`);
-    if (costTierValue !== "all") activeFilters.push(`cost=${costTierValue}`);
-    if (freshnessValue !== "all") activeFilters.push(`freshness=${freshnessValue}`);
+    if (elements.schemaStabilityFilter.value !== "all") activeFilters.push(`stability=${elements.schemaStabilityFilter.value}`);
+    if (elements.schemaCostTierFilter.value !== "all") activeFilters.push(`cost=${elements.schemaCostTierFilter.value}`);
+    if (elements.schemaFreshnessFilter.value !== "all") activeFilters.push(`freshness=${elements.schemaFreshnessFilter.value}`);
     if (elements.schemaCuratedOnly.checked) activeFilters.push("curated_only=true");
     if (elements.schemaStableOnly.checked) activeFilters.push("stable_only=true");
     if (elements.schemaFavoritesOnly.checked) activeFilters.push("favorites_only=true");
+    if (elements.schemaInTemplateOnly?.checked) activeFilters.push("in_template_only=true");
     const filterTextLabel = activeFilters.length > 0 ? ` with filters (${activeFilters.join(", ")})` : "";
     elements.schemaMeta.textContent = `No fields matched${filterTextLabel}${sourceText}.`;
+    state.selectedCatalogPath = "";
+    renderSchemaInspector(null);
     return;
   }
-  elements.schemaMeta.textContent = `${visibleFields} fields shown${sourceText}`;
+
+  const selectedExists = rows.some((row) => String(row.field.path || "") === state.selectedCatalogPath);
+  if (!selectedExists) {
+    state.selectedCatalogPath = String(rows[0].field.path || "");
+  }
+
+  const table = document.createElement("table");
+  table.className = "data-table";
+
+  const thead = document.createElement("thead");
+  thead.innerHTML = `
+    <tr>
+      <th>★</th>
+      <th>Field</th>
+      <th>Source</th>
+      <th>Group</th>
+      <th>Type</th>
+      <th>Stability</th>
+      <th>Cost</th>
+      <th>Freshness</th>
+      <th>Example</th>
+      <th>Action</th>
+    </tr>
+  `;
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  let selectedRecord = null;
+
+  for (const record of rows) {
+    const { field, group, source } = record;
+    const path = String(field.path || "");
+    const row = document.createElement("tr");
+    if (path === state.selectedCatalogPath) {
+      row.classList.add("is-selected");
+      selectedRecord = record;
+    }
+    row.addEventListener("click", () => {
+      state.selectedCatalogPath = path;
+      renderSchemaCatalog(elements.schemaSearch.value || "");
+    });
+    row.addEventListener("dblclick", () => {
+      insertFieldWithTransform(path, "{{ {path} }}");
+    });
+
+    const favCell = document.createElement("td");
+    const favBtn = document.createElement("button");
+    favBtn.className = "field-favorite";
+    favBtn.type = "button";
+    favBtn.title = isFavoriteField(path) ? "Remove favorite" : "Add favorite";
+    favBtn.textContent = isFavoriteField(path) ? "★" : "☆";
+    favBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.selectedCatalogPath = path;
+      toggleFavoriteField(path);
+    });
+    favCell.appendChild(favBtn);
+    row.appendChild(favCell);
+
+    const fieldCell = document.createElement("td");
+    const fieldLabel = document.createElement("div");
+    fieldLabel.textContent = field.label || path;
+    const fieldPath = document.createElement("div");
+    fieldPath.className = "mono";
+    fieldPath.textContent = path;
+    fieldCell.appendChild(fieldLabel);
+    fieldCell.appendChild(fieldPath);
+    row.appendChild(fieldCell);
+
+    const sourceCell = document.createElement("td");
+    sourceCell.textContent = source || "Unknown";
+    row.appendChild(sourceCell);
+
+    const groupCell = document.createElement("td");
+    groupCell.textContent = group || "misc";
+    row.appendChild(groupCell);
+
+    const typeCell = document.createElement("td");
+    typeCell.textContent = String(field.type || "");
+    row.appendChild(typeCell);
+
+    const stabilityCell = document.createElement("td");
+    const stabilityBadge = document.createElement("span");
+    const stabilityLabel = String(field.stability || "medium");
+    stabilityBadge.className = `badge ${stabilityLabel.toLowerCase()}`;
+    stabilityBadge.textContent = stabilityLabel;
+    stabilityCell.appendChild(stabilityBadge);
+    row.appendChild(stabilityCell);
+
+    const costCell = document.createElement("td");
+    costCell.textContent = String(field.cost_tier || "medium");
+    row.appendChild(costCell);
+
+    const freshCell = document.createElement("td");
+    freshCell.textContent = String(field.freshness || "activity");
+    row.appendChild(freshCell);
+
+    const sampleCell = document.createElement("td");
+    const sampleText = stringifySample(field.sample);
+    sampleCell.className = "mono";
+    sampleCell.textContent = sampleText.length > 56 ? `${sampleText.slice(0, 56)}…` : sampleText;
+    sampleCell.title = sampleText;
+    row.appendChild(sampleCell);
+
+    const actionCell = document.createElement("td");
+    const insertBtn = document.createElement("button");
+    insertBtn.className = "field-insert";
+    insertBtn.type = "button";
+    insertBtn.textContent = "Insert";
+    insertBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      insertFieldWithTransform(path, "{{ {path} }}");
+      state.selectedCatalogPath = path;
+    });
+    actionCell.appendChild(insertBtn);
+    row.appendChild(actionCell);
+
+    tbody.appendChild(row);
+  }
+
+  table.appendChild(tbody);
+  elements.schemaList.appendChild(table);
+  elements.schemaMeta.textContent = `${rows.length} fields shown${sourceText}`;
+
+  if (!selectedRecord && rows.length > 0) {
+    selectedRecord = rows[0];
+  }
+  renderSchemaInspector(selectedRecord);
 }
 
 function renderSnippets() {
@@ -1281,6 +1621,8 @@ async function openPublishModal() {
 
   setPublishValidationSummary(validationRes.payload || {}, validationRes.ok);
   state.publishModalValidationOk = Boolean(validationRes.ok);
+  state.lastValidationOk = Boolean(validationRes.ok);
+  updateContextChips();
   updatePublishConfirmEnabled();
 
   if (!validationRes.ok) {
@@ -1318,6 +1660,7 @@ async function loadSchema(mode) {
   state.schemaSource = res.payload.context_source || null;
   refreshSourceFilterOptions();
   renderSchemaCatalog(elements.schemaSearch.value || "");
+  updateContextChips();
 }
 
 function selectedFixtureName() {
@@ -1471,6 +1814,7 @@ async function loadRepositoryTemplateIntoEditor(templateId, options = {}) {
     elements.repositoryTemplateSelect.value = state.repositorySelectedId;
   }
   setEditorText(record.template || "");
+  setEditorDirty(false);
   setRepositoryFormValues({ name: record.name, author: record.author });
   renderRepositoryMeta(record);
   switchTab("advanced");
@@ -1580,6 +1924,7 @@ async function loadTemplateVersion(versionId) {
   }
   const record = res.payload.version || {};
   setEditorText(record.template || "");
+  setEditorDirty(false);
   switchTab("advanced");
   setStatus(`Loaded version ${versionId}`, "ok");
   queueAutoPreview();
@@ -1623,6 +1968,7 @@ function loadDraft() {
       return;
     }
     setEditorText(draft);
+    setEditorDirty(true);
     setStatus("Loaded local draft", "ok");
     queueAutoPreview();
   } catch (_err) {
@@ -1699,11 +2045,13 @@ async function previewSelectedStarterTemplate() {
   if (!res.ok) {
     elements.previewMeta.textContent = res.payload.error || "Starter preview failed";
     elements.previewText.textContent = "";
+    updatePreviewCharMeter();
     setStatus("Starter preview failed", "error");
     return;
   }
   elements.previewText.textContent = res.payload.preview || "";
   elements.previewMeta.textContent = `Starter preview | ${selected.label} | context: ${res.payload.context_source || "sample"}`;
+  updatePreviewCharMeter();
   setStatus(`Starter preview rendered: ${selected.label}`, "ok");
 }
 
@@ -1720,6 +2068,7 @@ function applySelectedStarterTemplate() {
     if (!confirmed) return;
   }
   setEditorText(incoming);
+  setEditorDirty(true);
   switchTab("advanced");
   setStatus(`Starter applied: ${selected.label}`, "ok");
   queueAutoPreview();
@@ -2044,8 +2393,11 @@ async function loadEditorBootstrap() {
   state.templateDefault = decodeEscapedNewlines(defaultRes.payload.template || "");
   state.templateMeta = activeRes.payload || null;
   state.templateName = String(activeRes.payload.name || "Auto Stat Template");
+  state.lastValidationOk = null;
+  clearActivePreviewCache();
 
   setEditorText(state.templateActive);
+  setEditorDirty(false);
   const activeAuthor = String(activeRes.payload.updated_by || "editor-user");
   setRepositoryFormValues({ name: state.templateName, author: activeAuthor });
 
@@ -2105,11 +2457,13 @@ async function loadEditorBootstrap() {
 
   state.autoPreview = true;
   elements.autoPreviewToggle.checked = true;
+  updateActionEmphasis();
 
   const isCustom = Boolean(activeRes.payload.is_custom);
   const sourceLabel = state.schemaSource ? ` | schema: ${state.schemaSource}` : "";
   setStatus((isCustom ? "Loaded custom template" : "Loaded default template") + sourceLabel, "ok");
   renderContextSafetyBanner();
+  updateContextChips();
 
   await previewTemplate({ force: true });
 }
@@ -2124,6 +2478,8 @@ async function validateTemplate() {
   });
 
   updateValidationPane(res.payload, res.ok);
+  state.lastValidationOk = Boolean(res.ok);
+  updateContextChips();
   setStatus(res.ok ? "Validation passed" : "Validation failed", res.ok ? "ok" : "error");
 }
 
@@ -2152,6 +2508,10 @@ async function previewTemplate(options = {}) {
     } else {
       elements.previewText.textContent = "Validation/render issue. Check the Validation panel for details and hints.";
     }
+    updatePreviewCharMeter();
+    state.lastValidationOk = false;
+    updateContextChips();
+    await updatePreviewDiff(elements.previewText.textContent || "");
     if (force) {
       // keep informative error text in preview pane on forced preview failures
     }
@@ -2167,6 +2527,10 @@ async function previewTemplate(options = {}) {
   }
   const source = res.payload.context_source || "sample";
   elements.previewMeta.textContent = `Rendered length: ${res.payload.length} chars | context: ${source}`;
+  state.lastValidationOk = true;
+  updateContextChips();
+  updatePreviewCharMeter();
+  await updatePreviewDiff(rendered);
   setStatus("Preview updated", "ok");
 }
 
@@ -2206,8 +2570,12 @@ async function saveTemplate(options = {}) {
   updateValidationPane(res.payload, true);
   state.templateActive = template;
   state.templateMeta = res.payload.active || state.templateMeta;
+  state.lastValidationOk = true;
+  clearActivePreviewCache();
+  setEditorDirty(false);
   renderTemplateMeta(state.templateMeta);
   await loadVersionHistory();
+  await updatePreviewDiff(elements.previewText.textContent || "");
   setStatus("Template saved + published", "ok");
   return true;
 }
@@ -2228,18 +2596,36 @@ async function copyPreview() {
 }
 
 function bindUI() {
+  if (elements.btnDrawerToggle) {
+    elements.btnDrawerToggle.addEventListener("click", toggleDrawer);
+  }
+  if (elements.btnDrawerClose) {
+    elements.btnDrawerClose.addEventListener("click", closeDrawer);
+  }
+  if (elements.drawerBackdrop) {
+    elements.drawerBackdrop.addEventListener("click", closeDrawer);
+  }
+  if (elements.btnToggleAdvancedFilters && elements.advancedFiltersWrap) {
+    elements.btnToggleAdvancedFilters.addEventListener("click", () => {
+      const isHidden = elements.advancedFiltersWrap.classList.toggle("is-hidden");
+      elements.btnToggleAdvancedFilters.textContent = isHidden ? "Show Advanced Filters" : "Hide Advanced Filters";
+    });
+  }
+
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => switchTab(tab.dataset.tab));
   });
 
   document.getElementById("btnLoadActive").addEventListener("click", () => {
     setEditorText(state.templateActive);
+    setEditorDirty(false);
     setStatus("Loaded active template", "ok");
     queueAutoPreview();
   });
 
   document.getElementById("btnLoadDefault").addEventListener("click", () => {
     setEditorText(state.templateDefault);
+    setEditorDirty(state.templateDefault !== state.templateActive);
     setStatus("Loaded default template", "ok");
     queueAutoPreview();
   });
@@ -2254,6 +2640,7 @@ function bindUI() {
 
   document.getElementById("btnFormatTemplate").addEventListener("click", () => {
     setEditorText(formatTemplateText(getEditorText()));
+    setEditorDirty(true);
     setStatus("Formatted: normalized whitespace and blank lines", "ok");
     queueAutoPreview();
   });
@@ -2315,6 +2702,7 @@ function bindUI() {
 
   document.getElementById("btnSimpleApply").addEventListener("click", () => {
     setEditorText(buildTemplateFromSimple());
+    setEditorDirty(true);
     switchTab("advanced");
     setStatus("Builder output applied to advanced editor", "ok");
     queueAutoPreview();
@@ -2360,6 +2748,11 @@ function bindUI() {
   elements.schemaFavoritesOnly.addEventListener("change", () => {
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
+  if (elements.schemaInTemplateOnly) {
+    elements.schemaInTemplateOnly.addEventListener("change", () => {
+      renderSchemaCatalog(elements.schemaSearch.value || "");
+    });
+  }
   if (elements.schemaPreset) {
     elements.schemaPreset.addEventListener("change", () => {
       applyCatalogPreset(elements.schemaPreset.value || "beginner", { announce: true });
@@ -2381,26 +2774,47 @@ function bindUI() {
   elements.schemaContextMode.addEventListener("change", async () => {
     await loadSchema(elements.schemaContextMode.value || "sample");
     setStatus("Catalog context changed", "ok");
+    updateContextChips();
   });
 
   elements.previewContextMode.addEventListener("change", () => {
+    clearActivePreviewCache();
     renderContextSafetyBanner();
+    updateContextChips();
     queueAutoPreview();
   });
 
   elements.previewFixtureName.addEventListener("change", async () => {
+    clearActivePreviewCache();
     renderContextSafetyBanner();
     await loadSchema(elements.schemaContextMode.value || "sample");
+    updateContextChips();
     queueAutoPreview();
   });
 
   elements.autoPreviewToggle.addEventListener("change", () => {
     state.autoPreview = elements.autoPreviewToggle.checked;
+    updateActionEmphasis();
     setStatus(state.autoPreview ? "Auto-preview enabled" : "Auto-preview disabled", "ok");
     if (state.autoPreview) {
       queueAutoPreview();
     }
   });
+
+  if (elements.previewDiffToggle) {
+    elements.previewDiffToggle.addEventListener("change", async () => {
+      state.previewDiffEnabled = Boolean(elements.previewDiffToggle.checked);
+      if (!state.previewDiffEnabled) {
+        if (elements.previewDiffMeta) elements.previewDiffMeta.textContent = "Diff disabled.";
+        if (elements.previewDiffText) {
+          elements.previewDiffText.classList.add("is-hidden");
+          elements.previewDiffText.textContent = "";
+        }
+      } else {
+        await updatePreviewDiff(elements.previewText.textContent || "");
+      }
+    });
+  }
 
   elements.themeToggle.addEventListener("change", () => {
     applyTheme(elements.themeToggle.checked ? "dark" : "light");
@@ -2408,9 +2822,21 @@ function bindUI() {
   });
 
   elements.templateEditor.addEventListener("input", () => {
-    state.editorTouched = true;
+    setEditorDirty(true);
+    if (elements.schemaInTemplateOnly?.checked) {
+      renderSchemaCatalog(elements.schemaSearch.value || "");
+    }
     queueAutoPreview();
   });
+
+  if (elements.previewCharLimit) {
+    elements.previewCharLimit.addEventListener("input", () => {
+      updatePreviewCharMeter();
+    });
+    elements.previewCharLimit.addEventListener("change", () => {
+      updatePreviewCharMeter();
+    });
+  }
 
   elements.templateEditor.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -2485,6 +2911,10 @@ function bindUI() {
     }
     if (event.key === "Escape" && elements.tourModal?.classList.contains("open")) {
       closeTour({ markSeen: true });
+      return;
+    }
+    if (event.key === "Escape" && elements.leftDrawer?.classList.contains("open")) {
+      closeDrawer();
     }
   });
 
@@ -2499,9 +2929,12 @@ function bindUI() {
 window.addEventListener("DOMContentLoaded", async () => {
   loadCatalogPreferences();
   bindUI();
+  updateActionEmphasis();
   applyTheme(loadThemePreference());
   updateValidationPane(null, true);
   renderContextSafetyBanner();
+  updateContextChips();
+  updatePreviewCharMeter();
   await loadEditorBootstrap();
   maybeOpenTourOnFirstRun();
 });
