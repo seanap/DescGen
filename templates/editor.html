@@ -108,6 +108,7 @@
               <option value="default" selected>default</option>
             </select>
           </div>
+          <div id="contextSafetyBanner" class="context-banner safe">SAFE mode: sample/fixture preview with no live payload dependency.</div>
           <div class="advanced-toolbar">
             <label for="templateNameInput">Template Name</label>
             <input id="templateNameInput" type="text" placeholder="Auto Stat Template">
@@ -143,6 +144,32 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="publishModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card" role="dialog" aria-modal="true" aria-labelledby="publishModalTitle">
+      <div class="modal-head">
+        <h2 id="publishModalTitle">Confirm Publish</h2>
+        <button id="publishCloseBtn" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <p class="subtext">Publishing replaces the active template used by the worker/API.</p>
+      <div id="publishModeBanner" class="context-banner safe">SAFE</div>
+      <div id="publishValidationSummary" class="validation"></div>
+      <div id="publishDiffSummary" class="meta"></div>
+      <pre id="publishDiffView" class="preview diff-view"></pre>
+      <label class="toggle-inline" for="publishChecklistReviewed">
+        <input id="publishChecklistReviewed" type="checkbox">
+        I reviewed the diff
+      </label>
+      <label class="toggle-inline" for="publishChecklistReplace">
+        <input id="publishChecklistReplace" type="checkbox">
+        I understand this replaces the active template
+      </label>
+      <div class="inline-actions">
+        <button id="publishCancelBtn" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="publishConfirmBtn" class="btn btn-primary" type="button" disabled>Publish Now</button>
+      </div>
+    </div>
   </div>
 
   <script src="/static/editor.js"></script>

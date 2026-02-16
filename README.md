@@ -14,6 +14,8 @@ Turn every Strava activity into a rich, auto-generated training report.
 - Template editor now supports saved version history + rollback.
 - Fixture-based preview modes for safe template testing without live calls.
 - Export/import template bundles so you can move configs between instances.
+- Mandatory publish confirmation with checklist + diff before replacing active template.
+- Safe/Live context banner to make preview data mode explicit.
 
 ## Sample Output (What Your Strava Description Can Look Like)
 ```text
