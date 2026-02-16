@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -23,7 +25,17 @@ from stat_modules.smashrun import (
     get_notables,
 )
 from stat_modules.vo2max import fetch_training_status_and_scores
-from storage import is_activity_processed, mark_activity_processed, write_json
+from storage import (
+    acquire_runtime_lock,
+    delete_runtime_value,
+    get_runtime_lock_owner,
+    get_runtime_value,
+    is_activity_processed,
+    mark_activity_processed,
+    release_runtime_lock,
+    set_runtime_value,
+    write_json,
+)
 from strava_utils import StravaClient, get_gap_speed_mps, mps_to_pace
 
 
@@ -35,6 +47,154 @@ def _configure_logging(level: str) -> None:
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
+
+
+def _record_cycle_status(
+    settings: Settings,
+    *,
+    status: str,
+    error: str | None = None,
+    activity_id: int | None = None,
+) -> None:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    set_runtime_value(settings.processed_log_file, "cycle.last_status", status)
+    set_runtime_value(settings.processed_log_file, "cycle.last_status_at_utc", now_iso)
+    if activity_id is not None:
+        set_runtime_value(settings.processed_log_file, "cycle.last_activity_id", activity_id)
+    if status in {"updated", "updated_treadmill", "already_processed", "no_activities"}:
+        set_runtime_value(settings.processed_log_file, "cycle.last_success_at_utc", now_iso)
+        if error:
+            set_runtime_value(settings.processed_log_file, "cycle.last_error", error)
+        else:
+            delete_runtime_value(settings.processed_log_file, "cycle.last_error")
+    elif error:
+        set_runtime_value(settings.processed_log_file, "cycle.last_error", error)
+        set_runtime_value(settings.processed_log_file, "cycle.last_error_at_utc", now_iso)
+
+
+def _service_key(service_name: str, suffix: str) -> str:
+    return f"service.{service_name}.{suffix}"
+
+
+def _service_in_cooldown(settings: Settings, service_name: str) -> tuple[bool, str | None]:
+    cooldown_until = get_runtime_value(
+        settings.processed_log_file,
+        _service_key(service_name, "cooldown_until_utc"),
+    )
+    if not isinstance(cooldown_until, str):
+        return False, None
+    try:
+        expires = datetime.fromisoformat(cooldown_until.replace("Z", "+00:00"))
+    except ValueError:
+        return False, None
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    expires_utc = expires.astimezone(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    if expires_utc > now_utc:
+        return True, expires_utc.isoformat()
+    return False, None
+
+
+def _set_service_cooldown(settings: Settings, service_name: str, failure_count: int) -> int:
+    delay = min(
+        settings.service_cooldown_base_seconds * (2 ** max(0, failure_count - 1)),
+        settings.service_cooldown_max_seconds,
+    )
+    cooldown_until = datetime.now(timezone.utc).timestamp() + delay
+    set_runtime_value(
+        settings.processed_log_file,
+        _service_key(service_name, "cooldown_until_utc"),
+        datetime.fromtimestamp(cooldown_until, tz=timezone.utc).isoformat(),
+    )
+    return delay
+
+
+def _reset_service_cooldown(settings: Settings, service_name: str) -> None:
+    delete_runtime_value(settings.processed_log_file, _service_key(service_name, "cooldown_until_utc"))
+    set_runtime_value(settings.processed_log_file, _service_key(service_name, "failures"), 0)
+    set_runtime_value(settings.processed_log_file, _service_key(service_name, "last_success_utc"), datetime.now(timezone.utc).isoformat())
+
+
+def _run_service_call(
+    settings: Settings,
+    service_name: str,
+    fn: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    in_cooldown, until = _service_in_cooldown(settings, service_name)
+    if in_cooldown:
+        logger.warning("Skipping %s call due to cooldown until %s", service_name, until)
+        return None
+
+    attempts = max(1, settings.service_retry_count + 1)
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            result = fn(*args, **kwargs)
+            _reset_service_cooldown(settings, service_name)
+            return result
+        except Exception as exc:
+            last_exc = exc
+            if attempt < attempts:
+                sleep_seconds = settings.service_retry_backoff_seconds * attempt
+                logger.warning(
+                    "%s call failed (%s/%s): %s. Retrying in %ss.",
+                    service_name,
+                    attempt,
+                    attempts,
+                    exc,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+
+    failures = int(
+        get_runtime_value(settings.processed_log_file, _service_key(service_name, "failures"), 0) or 0
+    ) + 1
+    set_runtime_value(settings.processed_log_file, _service_key(service_name, "failures"), failures)
+    set_runtime_value(
+        settings.processed_log_file,
+        _service_key(service_name, "last_error"),
+        str(last_exc) if last_exc else "unknown",
+    )
+    delay = _set_service_cooldown(settings, service_name, failures)
+    logger.error(
+        "%s failed after %s attempts. Cooling down for %ss. Last error: %s",
+        service_name,
+        attempts,
+        delay,
+        last_exc,
+    )
+    return None
+
+
+def _run_required_call(
+    settings: Settings,
+    service_name: str,
+    fn: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    attempts = max(1, settings.service_retry_count + 1)
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < attempts:
+                sleep_seconds = settings.service_retry_backoff_seconds * attempt
+                logger.warning(
+                    "%s call failed (%s/%s): %s. Retrying in %ss.",
+                    service_name,
+                    attempt,
+                    attempts,
+                    exc,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+    raise RuntimeError(f"{service_name} failed after {attempts} attempts: {last_exc}") from last_exc
 
 
 def _default_garmin_metrics() -> dict[str, Any]:
@@ -443,184 +603,247 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
     settings.ensure_state_paths()
 
     _configure_logging(settings.log_level)
-    logger.info("Starting update cycle.")
+    lock_owner = f"{uuid.uuid4()}:{int(time.time())}"
+    lock_name = "run_once"
+    selected_activity_id: int | None = None
 
-    strava_client = StravaClient(settings)
-
-    activities = strava_client.get_recent_activities(per_page=5)
-    if not activities:
-        logger.info("No Strava activities found.")
-        return {"status": "no_activities"}
-
-    latest = activities[0]
-    selected = latest
-    target_activity_id = activity_id
-
-    if target_activity_id is not None:
-        target_activity_id = int(target_activity_id)
-        selected = next(
-            (activity for activity in activities if int(activity["id"]) == target_activity_id),
-            {"id": target_activity_id},
+    if not acquire_runtime_lock(
+        settings.processed_log_file,
+        lock_name=lock_name,
+        owner=lock_owner,
+        ttl_seconds=settings.run_lock_ttl_seconds,
+    ):
+        current_owner = get_runtime_lock_owner(settings.processed_log_file, lock_name)
+        logger.info("Skipping update cycle because another run is in progress (owner=%s).", current_owner)
+        _record_cycle_status(
+            settings,
+            status="locked",
+            error=f"another run in progress (owner={current_owner})",
         )
-    elif not force_update:
-        selected = next(
-            (
-                activity
-                for activity in activities
-                if not is_activity_processed(
-                    settings.processed_log_file,
-                    int(activity["id"]),
-                )
-            ),
-            None,
-        )
-        if selected is None:
-            logger.info("No unprocessed activities in latest %s items.", len(activities))
-            return {"status": "already_processed", "activity_id": int(latest["id"])}
-
-    selected_activity_id = int(selected["id"])
-    detailed_activity = strava_client.get_activity_details(selected_activity_id)
-    selected.setdefault("start_date", detailed_activity.get("start_date"))
-
-    if selected_activity_id != int(latest["id"]):
-        logger.info(
-            "Selected activity %s (latest is %s).",
-            selected_activity_id,
-            int(latest["id"]),
-        )
-
-    if _is_treadmill(detailed_activity):
-        treadmill_payload = _build_treadmill_payload(detailed_activity)
-        strava_client.update_activity(selected_activity_id, treadmill_payload)
-
-        now = datetime.now(timezone.utc)
-        payload = {
-            "updated_at_utc": now.isoformat(),
-            "activity_id": selected_activity_id,
-            "activity_start_date": selected.get("start_date"),
-            "description": treadmill_payload["description"],
-            "source": "treadmill",
-        }
-        mark_activity_processed(settings.processed_log_file, selected_activity_id)
-        write_json(settings.latest_json_file, payload)
-        logger.info("Treadmill activity %s updated.", selected_activity_id)
-        return {"status": "updated_treadmill", "activity_id": selected_activity_id}
+        return {"status": "locked", "lock_owner": current_owner}
 
     try:
-        local_tz = ZoneInfo(settings.timezone)
-    except ZoneInfoNotFoundError:
-        logger.warning("Unknown timezone '%s'. Falling back to UTC.", settings.timezone)
-        local_tz = timezone.utc
+        logger.info("Starting update cycle.")
+        strava_client = StravaClient(settings)
 
-    now_local = datetime.now(local_tz)
-    now_utc = now_local.astimezone(timezone.utc)
-    year_start = datetime(now_local.year, 1, 1, tzinfo=local_tz).astimezone(timezone.utc)
+        activities = _run_required_call(
+            settings,
+            "strava.get_recent_activities",
+            strava_client.get_recent_activities,
+            per_page=5,
+        )
+        if not activities:
+            logger.info("No Strava activities found.")
+            result = {"status": "no_activities"}
+            _record_cycle_status(settings, status=result["status"])
+            return result
 
-    strava_activities = strava_client.get_activities_after(year_start)
+        latest = activities[0]
+        selected = latest
+        target_activity_id = activity_id
 
-    longest_streak = None
-    notables: list[str] = []
-    latest_elevation_feet = None
-    smashrun_elevation_totals = {"week": 0.0, "month": 0.0, "year": 0.0}
+        if target_activity_id is not None:
+            target_activity_id = int(target_activity_id)
+            selected = next(
+                (activity for activity in activities if int(activity["id"]) == target_activity_id),
+                {"id": target_activity_id},
+            )
+        elif not force_update:
+            selected = next(
+                (
+                    activity
+                    for activity in activities
+                    if not is_activity_processed(
+                        settings.processed_log_file,
+                        int(activity["id"]),
+                    )
+                ),
+                None,
+            )
+            if selected is None:
+                logger.info("No unprocessed activities in latest %s items.", len(activities))
+                result = {"status": "already_processed", "activity_id": int(latest["id"])}
+                _record_cycle_status(
+                    settings,
+                    status=result["status"],
+                    activity_id=result["activity_id"],
+                )
+                return result
 
-    if settings.enable_smashrun and settings.smashrun_access_token:
-        smashrun_activities = get_smashrun_activities(settings.smashrun_access_token)
-        latest_elevation_feet = get_activity_elevation_feet(smashrun_activities, detailed_activity)
-        smashrun_elevation_totals = aggregate_elevation_totals(
-            smashrun_activities,
-            now_utc,
+        selected_activity_id = int(selected["id"])
+        detailed_activity = _run_required_call(
+            settings,
+            "strava.get_activity_details",
+            strava_client.get_activity_details,
+            selected_activity_id,
+        )
+        selected.setdefault("start_date", detailed_activity.get("start_date"))
+
+        if selected_activity_id != int(latest["id"]):
+            logger.info(
+                "Selected activity %s (latest is %s).",
+                selected_activity_id,
+                int(latest["id"]),
+            )
+
+        if _is_treadmill(detailed_activity):
+            treadmill_payload = _build_treadmill_payload(detailed_activity)
+            _run_required_call(
+                settings,
+                "strava.update_activity",
+                strava_client.update_activity,
+                selected_activity_id,
+                treadmill_payload,
+            )
+
+            now = datetime.now(timezone.utc)
+            payload = {
+                "updated_at_utc": now.isoformat(),
+                "activity_id": selected_activity_id,
+                "activity_start_date": selected.get("start_date"),
+                "description": treadmill_payload["description"],
+                "source": "treadmill",
+            }
+            mark_activity_processed(settings.processed_log_file, selected_activity_id)
+            write_json(settings.latest_json_file, payload)
+            logger.info("Treadmill activity %s updated.", selected_activity_id)
+            result = {"status": "updated_treadmill", "activity_id": selected_activity_id}
+            _record_cycle_status(
+                settings,
+                status=result["status"],
+                activity_id=selected_activity_id,
+            )
+            return result
+
+        try:
+            local_tz = ZoneInfo(settings.timezone)
+        except ZoneInfoNotFoundError:
+            logger.warning("Unknown timezone '%s'. Falling back to UTC.", settings.timezone)
+            local_tz = timezone.utc
+
+        now_local = datetime.now(local_tz)
+        now_utc = now_local.astimezone(timezone.utc)
+        year_start = datetime(now_local.year, 1, 1, tzinfo=local_tz).astimezone(timezone.utc)
+
+        strava_activities = _run_required_call(
+            settings,
+            "strava.get_activities_after",
+            strava_client.get_activities_after,
+            year_start,
+        )
+
+        longest_streak = None
+        notables: list[str] = []
+        latest_elevation_feet = None
+        smashrun_elevation_totals = {"week": 0.0, "month": 0.0, "year": 0.0}
+
+        if settings.enable_smashrun and settings.smashrun_access_token:
+            smashrun_activities = _run_service_call(
+                settings,
+                "smashrun.activities",
+                get_smashrun_activities,
+                settings.smashrun_access_token,
+            )
+            if smashrun_activities:
+                latest_elevation_feet = get_activity_elevation_feet(smashrun_activities, detailed_activity)
+                smashrun_elevation_totals = aggregate_elevation_totals(
+                    smashrun_activities,
+                    now_utc,
+                    timezone_name=settings.timezone,
+                )
+                longest_streak = _run_service_call(
+                    settings,
+                    "smashrun.longest_streak",
+                    get_longest_streak,
+                    settings.smashrun_access_token,
+                )
+                if selected_activity_id == int(latest["id"]):
+                    latest_smashrun_activity_id = (
+                        smashrun_activities[0].get("activityId") if smashrun_activities else None
+                    )
+                    notables_payload = _run_service_call(
+                        settings,
+                        "smashrun.notables",
+                        get_notables,
+                        settings.smashrun_access_token,
+                        latest_activity_id=latest_smashrun_activity_id,
+                    )
+                    if isinstance(notables_payload, list):
+                        notables = [str(item) for item in notables_payload if str(item).strip()]
+                else:
+                    logger.info("Skipping Smashrun notables because selected activity is not latest.")
+
+        garmin_client = _get_garmin_client(settings)
+        training = _get_garmin_metrics(garmin_client)
+        garmin_period_fallback = _run_service_call(
+            settings,
+            "garmin.period_fallback",
+            week_stats.get_garmin_period_fallback,
+            garmin_client,
+            now_utc=now_utc,
             timezone_name=settings.timezone,
         )
-        longest_streak = get_longest_streak(settings.smashrun_access_token)
-        if selected_activity_id == int(latest["id"]):
-            latest_smashrun_activity_id = (
-                smashrun_activities[0].get("activityId") if smashrun_activities else None
-            )
-            notables = get_notables(
-                settings.smashrun_access_token,
-                latest_activity_id=latest_smashrun_activity_id,
-            )
-        else:
-            logger.info("Skipping Smashrun notables because selected activity is not latest.")
 
-    garmin_client = _get_garmin_client(settings)
-    training = _get_garmin_metrics(garmin_client)
-    garmin_period_fallback = week_stats.get_garmin_period_fallback(
-        garmin_client,
-        now_utc=now_utc,
-        timezone_name=settings.timezone,
-    )
-
-    period_stats = week_stats.get_period_stats(
-        strava_activities,
-        smashrun_elevation_totals,
-        now_utc,
-        timezone_name=settings.timezone,
-        garmin_period_fallback=garmin_period_fallback,
-    )
-
-    intervals_payload = None
-    if settings.enable_intervals:
-        intervals_payload = get_intervals_activity_data(
-            settings.intervals_user_id,
-            settings.intervals_api_key,
+        period_stats = week_stats.get_period_stats(
+            strava_activities,
+            smashrun_elevation_totals,
+            now_utc,
+            timezone_name=settings.timezone,
+            garmin_period_fallback=garmin_period_fallback,
         )
 
-    misery_index = misery_desc = aqi = aqi_desc = None
-    weather_details = None
-    if settings.enable_weather:
-        weather_details = get_misery_index_details_for_activity(
-            detailed_activity,
-            settings.weather_api_key,
-        )
-        if weather_details:
-            misery_index = weather_details.get("misery_index")
-            misery_desc = weather_details.get("misery_description")
-            aqi = weather_details.get("aqi")
-            aqi_desc = weather_details.get("aqi_description")
-        else:
-            misery_index, misery_desc, aqi, aqi_desc = get_misery_index_for_activity(
+        intervals_payload = None
+        if settings.enable_intervals:
+            intervals_payload = _run_service_call(
+                settings,
+                "intervals.activity",
+                get_intervals_activity_data,
+                settings.intervals_user_id,
+                settings.intervals_api_key,
+            )
+
+        misery_index = misery_desc = aqi = aqi_desc = None
+        weather_details = None
+        if settings.enable_weather:
+            weather_details = _run_service_call(
+                settings,
+                "weather.details",
+                get_misery_index_details_for_activity,
                 detailed_activity,
                 settings.weather_api_key,
             )
+            if weather_details:
+                misery_index = weather_details.get("misery_index")
+                misery_desc = weather_details.get("misery_description")
+                aqi = weather_details.get("aqi")
+                aqi_desc = weather_details.get("aqi_description")
+            else:
+                fallback_weather = _run_service_call(
+                    settings,
+                    "weather.fallback",
+                    get_misery_index_for_activity,
+                    detailed_activity,
+                    settings.weather_api_key,
+                )
+                if isinstance(fallback_weather, tuple) and len(fallback_weather) == 4:
+                    misery_index, misery_desc, aqi, aqi_desc = fallback_weather
 
-    crono_line = None
-    crono_summary = None
-    if settings.enable_crono_api:
-        crono_summary = get_crono_summary_for_activity(
-            activity=detailed_activity,
-            timezone_name=settings.timezone,
-            base_url=settings.crono_api_base_url,
-            api_key=settings.crono_api_key,
-            days=7,
-        )
-        crono_line = format_crono_line(crono_summary)
+        crono_line = None
+        crono_summary = None
+        if settings.enable_crono_api:
+            crono_summary = _run_service_call(
+                settings,
+                "crono.summary",
+                get_crono_summary_for_activity,
+                activity=detailed_activity,
+                timezone_name=settings.timezone,
+                base_url=settings.crono_api_base_url,
+                api_key=settings.crono_api_key,
+                days=7,
+            )
+            crono_line = format_crono_line(crono_summary)
 
-    description_context = _build_description_context(
-        detailed_activity=detailed_activity,
-        training=training,
-        intervals_payload=intervals_payload,
-        week=period_stats["week"],
-        month=period_stats["month"],
-        year=period_stats["year"],
-        longest_streak=longest_streak,
-        notables=notables,
-        latest_elevation_feet=latest_elevation_feet,
-        misery_index=misery_index,
-        misery_index_description=misery_desc,
-        air_quality_index=aqi,
-        aqi_description=aqi_desc,
-        crono_line=crono_line,
-        crono_summary=crono_summary,
-        weather_details=weather_details,
-    )
-
-    render_result = render_with_active_template(settings, description_context)
-    if render_result["ok"]:
-        description = str(render_result["description"])
-    else:
-        logger.error("Template render failed: %s", render_result.get("error"))
-        description = _build_description(
+        description_context = _build_description_context(
             detailed_activity=detailed_activity,
             training=training,
             intervals_payload=intervals_payload,
@@ -635,33 +858,83 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             air_quality_index=aqi,
             aqi_description=aqi_desc,
             crono_line=crono_line,
+            crono_summary=crono_summary,
+            weather_details=weather_details,
         )
 
-    strava_client.update_activity(selected_activity_id, {"description": description})
+        render_result = render_with_active_template(settings, description_context)
+        if render_result["ok"]:
+            description = str(render_result["description"])
+        else:
+            logger.error("Template render failed: %s", render_result.get("error"))
+            description = _build_description(
+                detailed_activity=detailed_activity,
+                training=training,
+                intervals_payload=intervals_payload,
+                week=period_stats["week"],
+                month=period_stats["month"],
+                year=period_stats["year"],
+                longest_streak=longest_streak,
+                notables=notables,
+                latest_elevation_feet=latest_elevation_feet,
+                misery_index=misery_index,
+                misery_index_description=misery_desc,
+                air_quality_index=aqi,
+                aqi_description=aqi_desc,
+                crono_line=crono_line,
+            )
 
-    payload = {
-        "updated_at_utc": now_utc.isoformat(),
-        "activity_id": selected_activity_id,
-        "activity_start_date": selected.get("start_date"),
-        "description": description,
-        "source": "standard",
-        "period_stats": period_stats,
-        "weather": weather_details,
-        "template_context": description_context,
-        "template_render": {
-            "ok": render_result.get("ok"),
-            "is_custom_template": render_result.get("is_custom_template"),
-            "fallback_used": render_result.get("fallback_used"),
-            "template_path": render_result.get("template_path"),
-            "error": render_result.get("error"),
-            "fallback_reason": render_result.get("fallback_reason"),
-        },
-    }
-    mark_activity_processed(settings.processed_log_file, selected_activity_id)
-    write_json(settings.latest_json_file, payload)
+        _run_required_call(
+            settings,
+            "strava.update_activity",
+            strava_client.update_activity,
+            selected_activity_id,
+            {"description": description},
+        )
 
-    logger.info("Activity %s updated successfully.", selected_activity_id)
-    return {"status": "updated", "activity_id": selected_activity_id}
+        payload = {
+            "updated_at_utc": now_utc.isoformat(),
+            "activity_id": selected_activity_id,
+            "activity_start_date": selected.get("start_date"),
+            "description": description,
+            "source": "standard",
+            "period_stats": period_stats,
+            "weather": weather_details,
+            "template_context": description_context,
+            "template_render": {
+                "ok": render_result.get("ok"),
+                "is_custom_template": render_result.get("is_custom_template"),
+                "fallback_used": render_result.get("fallback_used"),
+                "template_path": render_result.get("template_path"),
+                "error": render_result.get("error"),
+                "fallback_reason": render_result.get("fallback_reason"),
+            },
+        }
+        mark_activity_processed(settings.processed_log_file, selected_activity_id)
+        write_json(settings.latest_json_file, payload)
+
+        logger.info("Activity %s updated successfully.", selected_activity_id)
+        result = {"status": "updated", "activity_id": selected_activity_id}
+        _record_cycle_status(
+            settings,
+            status=result["status"],
+            activity_id=selected_activity_id,
+        )
+        return result
+    except Exception as exc:
+        _record_cycle_status(
+            settings,
+            status="error",
+            error=str(exc),
+            activity_id=selected_activity_id,
+        )
+        raise
+    finally:
+        release_runtime_lock(
+            settings.processed_log_file,
+            lock_name=lock_name,
+            owner=lock_owner,
+        )
 
 
 def main() -> None:

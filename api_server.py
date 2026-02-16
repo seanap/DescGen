@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Flask, render_template, request
 
@@ -17,7 +18,7 @@ from description_template import (
 from main_strava_update import run_once
 
 from config import Settings
-from storage import read_json
+from storage import get_runtime_value, get_worker_heartbeat, is_worker_healthy, read_json
 
 
 app = Flask(__name__)
@@ -27,6 +28,17 @@ settings.ensure_state_paths()
 
 def _latest_payload() -> dict | None:
     return read_json(settings.latest_json_file)
+
+
+def _state_path_writable(state_dir: Path) -> bool:
+    probe = state_dir / ".ready_probe"
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True)
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
 
 
 def _latest_template_context() -> dict | None:
@@ -61,13 +73,41 @@ def _context_for_mode(mode: str) -> tuple[dict | None, str]:
 @app.get("/health")
 def health() -> tuple[dict, int]:
     payload = _latest_payload()
+    heartbeat = get_worker_heartbeat(settings.processed_log_file)
     return (
         {
             "status": "ok",
             "time_utc": datetime.now(timezone.utc).isoformat(),
             "latest_payload_exists": payload is not None,
+            "worker_last_heartbeat_utc": heartbeat.isoformat() if heartbeat else None,
         },
         200,
+    )
+
+
+@app.get("/ready")
+def ready() -> tuple[dict, int]:
+    checks = {
+        "state_path_writable": _state_path_writable(settings.state_dir),
+        "template_accessible": bool(get_active_template(settings).get("template")),
+    }
+    worker_healthy = is_worker_healthy(
+        settings.processed_log_file,
+        max_age_seconds=settings.worker_health_max_age_seconds,
+    )
+    checks["worker_heartbeat_healthy"] = worker_healthy
+
+    ready_ok = checks["state_path_writable"] and checks["template_accessible"]
+    status_code = 200 if ready_ok else 503
+    return (
+        {
+            "status": "ready" if ready_ok else "not_ready",
+            "time_utc": datetime.now(timezone.utc).isoformat(),
+            "checks": checks,
+            "cycle_last_status": get_runtime_value(settings.processed_log_file, "cycle.last_status"),
+            "cycle_last_error": get_runtime_value(settings.processed_log_file, "cycle.last_error"),
+        },
+        status_code,
     )
 
 
