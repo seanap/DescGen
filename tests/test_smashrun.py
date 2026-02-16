@@ -1,7 +1,11 @@
 import unittest
 from datetime import datetime, timezone
 
-from stat_modules.smashrun import aggregate_elevation_totals, get_activity_elevation_feet
+from stat_modules.smashrun import (
+    aggregate_elevation_totals,
+    get_activity_elevation_feet,
+    get_activity_record,
+)
 
 
 class TestSmashrunAggregation(unittest.TestCase):
@@ -86,6 +90,29 @@ class TestSmashrunAggregation(unittest.TestCase):
             "distance": 10000.0,
         }
         self.assertEqual(get_activity_elevation_feet(activities, strava_activity), 250.0)
+
+    def test_get_activity_record_returns_best_match(self) -> None:
+        activities = [
+            {
+                "activityId": 31,
+                "startDateTimeUtc": "2026-02-15T12:30:00Z",
+                "distance": 5000.0,
+            },
+            {
+                "activityId": 32,
+                "startDateTimeUtc": "2026-02-15T13:00:00Z",
+                "distance": 10050.0,
+            },
+        ]
+        strava_activity = {
+            "id": 54321,
+            "start_date": "2026-02-15T13:00:00Z",
+            "distance": 10000.0,
+        }
+        matched = get_activity_record(activities, strava_activity)
+        self.assertIsNotNone(matched)
+        assert matched is not None
+        self.assertEqual(matched["activityId"], 32)
 
 
 if __name__ == "__main__":

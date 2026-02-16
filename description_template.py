@@ -145,17 +145,71 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "misery_description": "😀 Perfect",
         "aqi": 22,
         "aqi_description": " Good",
+        "temp_f": "63.0F",
+        "dewpoint_f": "49.6F",
+        "humidity_pct": 61,
+        "wind_mph": "11.9 mph",
+        "cloud_pct": 18,
+        "precip_in": "0.00in",
+        "chance_rain_pct": 4,
+        "chance_snow_pct": 0,
+        "condition": "Clear",
+        "is_day": True,
+        "heatindex_f": "63.0F",
+        "windchill_f": "63.0F",
+        "tz_id": "America/New_York",
+        "apparent_temp_f": "63.0F",
         "details": {
-            "temperature_f": 63.0,
-            "dew_point_f": 49.6,
-            "humidity_percent": 61,
+            "temp_f": 63.0,
+            "dewpoint_f": 49.6,
+            "humidity": 61,
             "wind_mph": 11.9,
+            "cloud": 18,
+            "precip_in": 0.0,
+            "chance_of_rain": 4.0,
+            "chance_of_snow": 0.0,
+            "is_day": True,
+            "heatindex_f": 63.0,
+            "windchill_f": 63.0,
+            "tz_id": "America/New_York",
             "condition_text": "Clear",
+        },
+        "components": {
+            "score": 104.3,
+            "apparent_temp_f": 63.0,
+            "component_thermal_hot": 1.2,
+            "component_thermal_cold": 0.0,
+            "component_dew_hot": 0.0,
+            "component_dew_cold": 0.0,
+            "component_humidity_hot": 0.5,
+            "component_dryness_cold": 0.0,
+            "component_stagnant_hot": 0.0,
+            "component_hot_breeze_relief": 0.2,
+            "component_gale_cold": 0.0,
+            "component_rain_hot": 0.0,
+            "component_rain_cold": 0.0,
+            "component_cold_rain_extra": 0.0,
+            "component_rain_hint": 0.0,
+            "component_snow": 0.0,
+            "component_sun_hot": 1.8,
+            "component_cloud_hot_relief": 0.3,
+            "component_cloud_cold": 0.0,
         },
     },
     "training": {
         "readiness_score": 83,
         "readiness_emoji": "🟢",
+        "readiness_level": "HIGH",
+        "readiness_feedback": "Recovering well. Keep building.",
+        "recovery_time_hours": 9.5,
+        "readiness_factors": {
+            "sleep_score_factor_pct": 82,
+            "sleep_history_factor_pct": 77,
+            "hrv_factor_pct": 69,
+            "stress_history_factor_pct": 74,
+            "acwr_factor_pct": 88,
+            "recovery_time_factor_pct": 71,
+        },
         "resting_hr": 47,
         "sleep_score": 86,
         "status_emoji": "🟢",
@@ -168,24 +222,83 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "load_ratio": 1.1,
         "acwr_status": "Optimal",
         "acwr_status_emoji": "🟢",
+        "acwr_percent": 112,
+        "daily_acwr_ratio": 1.12,
+        "load_tunnel_min": 60,
+        "load_tunnel_max": 92,
+        "weekly_training_load": 568,
+        "fitness_trend": "IMPROVING",
+        "load_level_trend": "WITHIN_RANGE",
         "vo2": 57.2,
         "endurance_score": 7312,
         "hill_score": 102,
+        "fitness_age": "34 yr",
+        "fitness_age_details": {
+            "fitness_age": 34,
+            "chronological_age": 40,
+            "achievable_fitness_age": 32,
+            "previous_fitness_age": 35,
+            "body_fat_pct": 14.8,
+            "rhr": 47,
+            "vigorous_days_avg": 4.7,
+            "vigorous_minutes_avg": 271,
+        },
     },
     "activity": {
         "gap_pace": "7:18/mi",
+        "average_pace": "7:24/mi",
         "distance_miles": "8.02",
         "elevation_feet": 612,
+        "elev_high_feet": 742,
+        "elev_low_feet": 411,
         "time": "58:39",
+        "moving_time": "58:39",
+        "elapsed_time": "1:02:04",
         "beers": "5.1",
+        "calories": 761,
+        "average_speed_mph": "8.1 mph",
+        "max_speed_mph": "12.2 mph",
+        "average_temp_f": "63.0F",
+        "start_local": "2026-02-15 06:42 AM",
+        "start_utc": "2026-02-15 11:42:00 UTC",
         "cadence_spm": 176,
         "work": "914 kJ",
         "norm_power": "271 W",
         "average_hr": 149,
+        "max_hr": 173,
         "efficiency": "1.03",
+        "social": {
+            "kudos": 12,
+            "comments": 3,
+            "achievements": 5,
+        },
     },
     "intervals": {
         "summary": "CTL 72 | ATL 78 | Form -6",
+        "ctl": 72,
+        "atl": 78,
+        "training_load": 126,
+        "strain_score": 142,
+        "pace_load": 57,
+        "hr_load": 61,
+        "power_load": 58,
+        "avg_pace": "7:26/mi",
+        "avg_speed_mph": "8.1 mph",
+        "max_speed_mph": "12.0 mph",
+        "distance_miles": "8.02 mi",
+        "moving_time": "58:39",
+        "elapsed_time": "1:02:04",
+        "average_hr": 149,
+        "max_hr": 173,
+        "elevation_gain_feet": 612,
+        "elevation_loss_feet": 607,
+        "average_temp_f": "63.0F",
+        "max_temp_f": "66.2F",
+        "min_temp_f": "58.8F",
+        "zone_summary": "Z1 5m 12s | Z2 19m 03s | Z3 25m 41s",
+        "hr_zone_summary": "Z1 4m 15s | Z2 21m 30s | Z3 22m 54s",
+        "pace_zone_summary": "Z1 8m 10s | Z2 26m 48s | Z3 17m 57s",
+        "gap_zone_summary": "Z1 9m 05s | Z2 24m 49s | Z3 16m 21s",
     },
     "periods": {
         "week": {
@@ -194,6 +307,8 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
             "elevation_feet": 3904,
             "duration": "5:21:08",
             "beers": "27",
+            "calories": 4050,
+            "run_count": 6,
         },
         "month": {
             "gap": "7:58/mi",
@@ -201,6 +316,8 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
             "elevation_feet": 14902,
             "duration": "20:04:51",
             "beers": "101",
+            "calories": 15135,
+            "run_count": 24,
         },
         "year": {
             "gap": "8:05/mi",
@@ -208,6 +325,130 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
             "elevation_feet": 24117,
             "duration": "36:40:27",
             "beers": "184",
+            "calories": 27680,
+            "run_count": 43,
+        },
+    },
+    "garmin": {
+        "last_activity": {
+            "activity_name": "Morning Run",
+            "activity_type": "running",
+            "start_local": "2026-02-15 06:42:00",
+            "distance_miles": "8.02 mi",
+            "duration": "58:39",
+            "moving_time": "58:10",
+            "elapsed_time": "1:02:04",
+            "average_pace": "7:24/mi",
+            "average_speed_mph": "8.1 mph",
+            "max_speed_mph": "12.2 mph",
+            "gap_pace": "7:18/mi",
+            "elevation_gain_feet": 612,
+            "elevation_loss_feet": 607,
+            "avg_elevation_feet": 512,
+            "max_elevation_feet": 742,
+            "min_elevation_feet": 411,
+            "average_hr": 149,
+            "max_hr": 173,
+            "avg_power_w": 262,
+            "norm_power_w": 271,
+            "max_power_w": 487,
+            "avg_ground_contact_time_ms": 238,
+            "avg_vertical_ratio_pct": "7.9%",
+            "avg_vertical_oscillation_mm": 85,
+            "avg_stride_length_m": "1.20 m",
+            "avg_respiration_rate": "34.2 brpm",
+            "max_respiration_rate": "47.8 brpm",
+            "steps": 10341,
+            "lap_count": 8,
+            "hr_zone_summary": "Z1 6:12 | Z2 18:44 | Z3 24:01",
+            "power_zone_summary": "Z1 4:58 | Z2 20:44 | Z3 19:39",
+            "is_pr": False,
+        },
+        "readiness": {
+            "score": 83,
+            "level": "HIGH",
+            "emoji": "🟢",
+            "sleep_score": 86,
+            "feedback": "Recovering well. Keep building.",
+            "recovery_time_hours": 9.5,
+            "factors": {
+                "sleep_score_factor_pct": 82,
+                "sleep_history_factor_pct": 77,
+                "hrv_factor_pct": 69,
+                "stress_history_factor_pct": 74,
+                "acwr_factor_pct": 88,
+                "recovery_time_factor_pct": 71,
+            },
+        },
+        "status": {
+            "key": "Productive",
+            "emoji": "🟢",
+            "fitness_trend": "IMPROVING",
+            "load_level_trend": "WITHIN_RANGE",
+            "weekly_training_load": 568,
+            "load_tunnel_min": 60,
+            "load_tunnel_max": 92,
+            "daily_acwr_ratio": 1.12,
+            "acwr_percent": 112,
+        },
+        "fitness_age": {
+            "fitness_age": 34,
+            "chronological_age": 40,
+            "achievable_fitness_age": 32,
+            "previous_fitness_age": 35,
+            "body_fat_pct": 14.8,
+            "rhr": 47,
+            "vigorous_days_avg": 4.7,
+            "vigorous_minutes_avg": 271,
+        },
+    },
+    "smashrun": {
+        "latest_activity": {
+            "activity_id": 99887766,
+            "activity_type": "Run",
+            "start_local": "2026-02-15 06:42 AM",
+            "distance_miles": "8.02",
+            "duration": "58:39",
+            "pace": "7:18",
+            "calories": 761,
+            "elevation_gain_feet": 612,
+            "elevation_loss_feet": 607,
+            "elevation_ascent_feet": 612,
+            "elevation_descent_feet": 607,
+            "elevation_max_feet": 742,
+            "elevation_min_feet": 411,
+            "average_hr": 149,
+            "max_hr": 173,
+            "cadence_average": 176,
+            "cadence_max": 188,
+            "temperature_f": "63.0F",
+            "apparent_temp_f": "63.0F",
+            "wind_chill_f": "63.0F",
+            "humidity_pct": "61%",
+            "wind_mph": "11.9 mph",
+            "weather_type": "Clear",
+            "terrain": "Road",
+            "is_race": False,
+            "is_treadmill": False,
+            "how_felt": "Strong",
+            "source": "Garmin",
+        },
+        "stats": {
+            "run_count": 1432,
+            "longest_streak": 412,
+            "longest_streak_date": "2025-10-11",
+            "average_days_run_per_week": "5.6",
+            "total_distance": "10044.3",
+            "average_run_length": "7.02",
+            "average_distance_per_day": "5.62",
+            "average_speed": "7.35",
+            "average_pace": "8:09",
+            "longest_run": "22.2",
+            "longest_run_when": "2025-11-16",
+            "longest_break_between_runs_days": 3,
+            "longest_break_between_runs_date": "2025-02-03",
+            "most_often_run_day": "Sunday",
+            "least_often_run_day": "Thursday",
         },
     },
     "raw": {
@@ -218,6 +459,8 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "month": {},
         "year": {},
         "weather": {},
+        "smashrun": {},
+        "garmin_period_fallback": {},
     },
 }
 
@@ -229,11 +472,31 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     winter_ctx["weather"]["misery_index"] = 34.7
     winter_ctx["weather"]["misery_description"] = "🥶 Oppressively cold"
     winter_ctx["weather"]["aqi"] = 11
+    winter_ctx["weather"]["temp_f"] = "24.1F"
+    winter_ctx["weather"]["dewpoint_f"] = "5.0F"
+    winter_ctx["weather"]["humidity_pct"] = 43
+    winter_ctx["weather"]["wind_mph"] = "16.5 mph"
+    winter_ctx["weather"]["cloud_pct"] = 82
+    winter_ctx["weather"]["precip_in"] = "0.02in"
+    winter_ctx["weather"]["chance_rain_pct"] = 22
+    winter_ctx["weather"]["chance_snow_pct"] = 45
+    winter_ctx["weather"]["condition"] = "Windy"
+    winter_ctx["weather"]["heatindex_f"] = "24.1F"
+    winter_ctx["weather"]["windchill_f"] = "15.9F"
+    winter_ctx["weather"]["apparent_temp_f"] = "15.9F"
     winter_ctx["weather"]["details"] = {
-        "temperature_f": 24.1,
-        "dew_point_f": 5.0,
-        "humidity_percent": 43,
+        "temp_f": 24.1,
+        "dewpoint_f": 5.0,
+        "humidity": 43,
         "wind_mph": 16.5,
+        "cloud": 82,
+        "precip_in": 0.02,
+        "chance_of_rain": 22.0,
+        "chance_of_snow": 45.0,
+        "is_day": True,
+        "heatindex_f": 24.1,
+        "windchill_f": 15.9,
+        "tz_id": "America/New_York",
         "condition_text": "Windy",
     }
     winter_ctx["activity"]["gap_pace"] = "8:42/mi"
@@ -250,11 +513,31 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     humid_ctx["weather"]["misery_index"] = 172.2
     humid_ctx["weather"]["misery_description"] = "😡 Miserable"
     humid_ctx["weather"]["aqi"] = 67
+    humid_ctx["weather"]["temp_f"] = "89.8F"
+    humid_ctx["weather"]["dewpoint_f"] = "80.2F"
+    humid_ctx["weather"]["humidity_pct"] = 78
+    humid_ctx["weather"]["wind_mph"] = "2.7 mph"
+    humid_ctx["weather"]["cloud_pct"] = 20
+    humid_ctx["weather"]["precip_in"] = "0.00in"
+    humid_ctx["weather"]["chance_rain_pct"] = 18
+    humid_ctx["weather"]["chance_snow_pct"] = 0
+    humid_ctx["weather"]["condition"] = "Humid"
+    humid_ctx["weather"]["heatindex_f"] = "101.3F"
+    humid_ctx["weather"]["windchill_f"] = "89.8F"
+    humid_ctx["weather"]["apparent_temp_f"] = "101.3F"
     humid_ctx["weather"]["details"] = {
-        "temperature_f": 89.8,
-        "dew_point_f": 80.2,
-        "humidity_percent": 78,
+        "temp_f": 89.8,
+        "dewpoint_f": 80.2,
+        "humidity": 78,
         "wind_mph": 2.7,
+        "cloud": 20,
+        "precip_in": 0.0,
+        "chance_of_rain": 18.0,
+        "chance_of_snow": 0.0,
+        "is_day": True,
+        "heatindex_f": 101.3,
+        "windchill_f": 89.8,
+        "tz_id": "America/New_York",
         "condition_text": "Humid",
     }
     humid_ctx["activity"]["gap_pace"] = "8:31/mi"
@@ -1092,13 +1375,47 @@ _GROUP_SOURCE_MAP: dict[str, tuple[str, str]] = {
     "achievements": ("Intervals.icu", "Achievement badges from Intervals activity payload."),
     "activity": ("Strava", "Latest activity metrics. Elevation can be overridden by Smashrun."),
     "crono": ("crono-api", "Local nutrition/energy balance API values."),
+    "garmin": ("Garmin", "Garmin-focused readiness, status, and run-dynamics metrics."),
     "intervals": ("Intervals.icu", "Intervals.icu rollup metrics."),
     "notables": ("Smashrun", "Smashrun notable badges for latest run."),
     "periods": ("Strava+Smashrun+Garmin", "Aggregated rolling summaries by period."),
     "raw": ("Mixed", "Raw and derived payloads from all enabled services."),
+    "smashrun": ("Smashrun", "Smashrun latest activity and historical stats."),
     "streak_days": ("Smashrun", "Current run streak length from Smashrun."),
     "training": ("Garmin+Strava", "Garmin metrics with Strava fallback for missing HR/cadence."),
     "weather": ("Weather.com", "Weather + AQI conditions for activity time."),
+}
+
+
+_SOURCE_COST_TIER_MAP: dict[str, str] = {
+    "Derived": "free",
+    "Unknown": "medium",
+    "Mixed": "medium",
+    "Strava": "low",
+    "Garmin": "medium",
+    "Smashrun": "low",
+    "Intervals.icu": "low",
+    "Weather.com": "low",
+    "crono-api": "low",
+    "Strava+Garmin": "medium",
+    "Garmin+Strava": "medium",
+    "Strava+Smashrun+Garmin": "medium",
+}
+
+
+_GROUP_FRESHNESS_MAP: dict[str, str] = {
+    "activity": "activity",
+    "achievements": "activity",
+    "intervals": "activity",
+    "weather": "activity",
+    "notables": "activity",
+    "streak_days": "daily",
+    "training": "daily",
+    "garmin": "daily",
+    "crono": "daily",
+    "smashrun": "rolling",
+    "periods": "rolling",
+    "raw": "activity",
 }
 
 
@@ -1141,6 +1458,126 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "tags": ["calories", "activity", "derived"],
         "metric_key": "activity_beers",
     },
+    "activity.average_pace": {
+        "source": "Strava",
+        "source_note": "Pace derived from Strava average speed.",
+        "label": "Average Pace",
+        "description": "Latest activity average pace in min/mi.",
+        "tags": ["pace", "activity", "core"],
+        "metric_key": "activity_average_pace",
+    },
+    "activity.average_speed_mph": {
+        "source": "Strava",
+        "source_note": "Average speed converted to mph.",
+        "label": "Average Speed (mph)",
+        "description": "Latest activity average speed in mph.",
+        "tags": ["speed", "activity"],
+        "metric_key": "activity_average_speed_mph",
+    },
+    "activity.max_speed_mph": {
+        "source": "Strava",
+        "source_note": "Max speed converted to mph.",
+        "label": "Max Speed (mph)",
+        "description": "Latest activity max speed in mph.",
+        "tags": ["speed", "activity"],
+        "metric_key": "activity_max_speed_mph",
+    },
+    "activity.elapsed_time": {
+        "source": "Strava",
+        "source_note": "Elapsed time normalized to H:MM:SS.",
+        "label": "Elapsed Time",
+        "description": "Latest activity elapsed duration.",
+        "tags": ["time", "activity"],
+        "metric_key": "activity_elapsed_time",
+    },
+    "activity.moving_time": {
+        "source": "Strava",
+        "source_note": "Moving time normalized to H:MM:SS.",
+        "label": "Moving Time",
+        "description": "Latest activity moving duration.",
+        "tags": ["time", "activity", "core"],
+        "metric_key": "activity_moving_time",
+    },
+    "activity.calories": {
+        "source": "Strava",
+        "source_note": "Calories from Strava latest activity.",
+        "label": "Calories",
+        "description": "Latest activity calories.",
+        "tags": ["calories", "activity"],
+        "metric_key": "activity_calories",
+    },
+    "activity.elev_high_feet": {
+        "source": "Strava",
+        "source_note": "High elevation converted to feet.",
+        "label": "Elevation High",
+        "description": "Highest activity elevation point in feet.",
+        "tags": ["elevation", "activity"],
+        "metric_key": "activity_elev_high_feet",
+    },
+    "activity.elev_low_feet": {
+        "source": "Strava",
+        "source_note": "Low elevation converted to feet.",
+        "label": "Elevation Low",
+        "description": "Lowest activity elevation point in feet.",
+        "tags": ["elevation", "activity"],
+        "metric_key": "activity_elev_low_feet",
+    },
+    "activity.average_temp_f": {
+        "source": "Strava",
+        "source_note": "Average recorded activity temperature.",
+        "label": "Activity Temp",
+        "description": "Average activity temperature in Fahrenheit.",
+        "tags": ["temperature", "activity", "weather"],
+        "metric_key": "activity_average_temp_f",
+    },
+    "activity.max_hr": {
+        "source": "Strava+Garmin",
+        "source_note": "Maximum heart rate from activity detail.",
+        "label": "Max Heart Rate",
+        "description": "Maximum heart rate for latest activity.",
+        "tags": ["heart_rate", "activity"],
+        "metric_key": "activity_max_hr",
+    },
+    "activity.start_local": {
+        "source": "Strava",
+        "source_note": "Localized start timestamp.",
+        "label": "Start (Local)",
+        "description": "Local start time for latest activity.",
+        "tags": ["time", "activity", "metadata"],
+        "metric_key": "activity_start_local",
+    },
+    "activity.start_utc": {
+        "source": "Strava",
+        "source_note": "UTC start timestamp.",
+        "label": "Start (UTC)",
+        "description": "UTC start time for latest activity.",
+        "tags": ["time", "activity", "metadata"],
+        "metric_key": "activity_start_utc",
+    },
+    "activity.social.kudos": {
+        "source": "Strava",
+        "source_note": "Strava social counters from activity detail.",
+        "label": "Kudos Count",
+        "description": "Number of kudos on this activity.",
+        "tags": ["social", "activity", "metadata"],
+        "metric_key": "activity_social_kudos",
+    },
+    "activity.social.comments": {
+        "source": "Strava",
+        "source_note": "Strava social counters from activity detail.",
+        "label": "Comment Count",
+        "description": "Number of comments on this activity.",
+        "tags": ["social", "activity", "metadata"],
+        "metric_key": "activity_social_comments",
+    },
+    "activity.social.achievements": {
+        "source": "Strava",
+        "source_note": "Strava social counters from activity detail.",
+        "label": "Achievement Count",
+        "description": "Number of segment achievements on this activity.",
+        "tags": ["social", "activity", "metadata"],
+        "metric_key": "activity_social_achievements",
+    },
     "weather.misery_index": {
         "label": "Misery Index",
         "description": "Mirrored running-condition index centered at 100.",
@@ -1152,6 +1589,54 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Air Quality Index at activity time.",
         "tags": ["weather", "aqi", "air"],
         "metric_key": "weather_aqi",
+    },
+    "weather.temp_f": {
+        "source": "Weather.com",
+        "source_note": "Hourly weather at activity start.",
+        "label": "Temperature",
+        "description": "Temperature at activity time (F).",
+        "tags": ["weather", "temperature", "core"],
+        "metric_key": "weather_temp_f",
+    },
+    "weather.dewpoint_f": {
+        "source": "Weather.com",
+        "source_note": "Hourly weather at activity start.",
+        "label": "Dew Point",
+        "description": "Dew point at activity time (F).",
+        "tags": ["weather", "temperature", "humidity"],
+        "metric_key": "weather_dewpoint_f",
+    },
+    "weather.humidity_pct": {
+        "source": "Weather.com",
+        "source_note": "Hourly weather at activity start.",
+        "label": "Humidity",
+        "description": "Relative humidity percentage.",
+        "tags": ["weather", "humidity", "core"],
+        "metric_key": "weather_humidity_pct",
+    },
+    "weather.wind_mph": {
+        "source": "Weather.com",
+        "source_note": "Hourly weather at activity start.",
+        "label": "Wind Speed",
+        "description": "Wind speed in mph.",
+        "tags": ["weather", "wind", "core"],
+        "metric_key": "weather_wind_mph",
+    },
+    "weather.condition": {
+        "source": "Weather.com",
+        "source_note": "Hourly weather condition text.",
+        "label": "Condition",
+        "description": "Condition summary at activity time.",
+        "tags": ["weather", "condition", "core"],
+        "metric_key": "weather_condition",
+    },
+    "weather.apparent_temp_f": {
+        "source": "Weather.com",
+        "source_note": "Apparent temperature from MI model components.",
+        "label": "Apparent Temp",
+        "description": "Apparent temperature perceived by runner (F).",
+        "tags": ["weather", "temperature", "mi"],
+        "metric_key": "weather_apparent_temp_f",
     },
     "crono.line": {
         "source": "crono-api",
@@ -1268,6 +1753,278 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "tags": ["summary", "year", "calories"],
         "metric_key": "year_beers",
     },
+    "intervals.training_load": {
+        "source": "Intervals.icu",
+        "source_note": "Load and strain values from Intervals detail payload.",
+        "label": "Training Load",
+        "description": "Intervals training load score.",
+        "tags": ["intervals", "load", "training"],
+        "metric_key": "intervals_training_load",
+    },
+    "intervals.strain_score": {
+        "source": "Intervals.icu",
+        "source_note": "Load and strain values from Intervals detail payload.",
+        "label": "Strain Score",
+        "description": "Intervals strain score.",
+        "tags": ["intervals", "load", "training"],
+        "metric_key": "intervals_strain_score",
+    },
+    "intervals.avg_pace": {
+        "source": "Intervals.icu",
+        "source_note": "Average pace derived from Intervals activity speed.",
+        "label": "Intervals Avg Pace",
+        "description": "Average pace from Intervals activity detail.",
+        "tags": ["intervals", "pace", "activity"],
+        "metric_key": "intervals_avg_pace",
+    },
+    "intervals.avg_speed_mph": {
+        "source": "Intervals.icu",
+        "source_note": "Average speed converted to mph.",
+        "label": "Intervals Avg Speed",
+        "description": "Average speed from Intervals activity detail.",
+        "tags": ["intervals", "speed", "activity"],
+        "metric_key": "intervals_avg_speed_mph",
+    },
+    "intervals.distance_miles": {
+        "source": "Intervals.icu",
+        "source_note": "Distance converted to miles.",
+        "label": "Intervals Distance",
+        "description": "Distance from Intervals activity detail.",
+        "tags": ["intervals", "distance", "activity"],
+        "metric_key": "intervals_distance_miles",
+    },
+    "intervals.moving_time": {
+        "source": "Intervals.icu",
+        "source_note": "Moving duration normalized to H:MM:SS.",
+        "label": "Intervals Moving Time",
+        "description": "Moving duration from Intervals activity detail.",
+        "tags": ["intervals", "time", "activity"],
+        "metric_key": "intervals_moving_time",
+    },
+    "intervals.zone_summary": {
+        "source": "Intervals.icu",
+        "source_note": "Time-in-zone summary from Intervals zone arrays.",
+        "label": "Intervals Zone Summary",
+        "description": "Condensed time spent per power zone.",
+        "tags": ["intervals", "zones", "training"],
+        "metric_key": "intervals_zone_summary",
+    },
+    "training.fitness_age": {
+        "source": "Garmin",
+        "source_note": "Fitness age from Garmin fitness-age endpoint.",
+        "label": "Fitness Age",
+        "description": "Garmin fitness age estimate.",
+        "tags": ["training", "wellness", "garmin"],
+        "metric_key": "training_fitness_age",
+    },
+    "periods.week.run_count": {
+        "source": "Strava",
+        "source_note": "Run count included in trailing 7-day summary window.",
+        "label": "7d Run Count",
+        "description": "Number of runs in the trailing 7-day summary.",
+        "tags": ["summary", "week", "volume"],
+        "metric_key": "week_run_count",
+    },
+    "periods.month.run_count": {
+        "source": "Strava",
+        "source_note": "Run count included in trailing 30-day summary window.",
+        "label": "30d Run Count",
+        "description": "Number of runs in the trailing 30-day summary.",
+        "tags": ["summary", "month", "volume"],
+        "metric_key": "month_run_count",
+    },
+    "periods.year.run_count": {
+        "source": "Strava",
+        "source_note": "Run count included in year-to-date summary window.",
+        "label": "YTD Run Count",
+        "description": "Number of runs in the year-to-date summary.",
+        "tags": ["summary", "year", "volume"],
+        "metric_key": "year_run_count",
+    },
+    "periods.week.calories": {
+        "source": "Strava+Garmin",
+        "source_note": "Calories from Strava runs; Garmin fallback may influence beers.",
+        "label": "7d Calories",
+        "description": "Trailing 7-day run calories.",
+        "tags": ["summary", "week", "calories"],
+        "metric_key": "week_calories",
+    },
+    "periods.month.calories": {
+        "source": "Strava+Garmin",
+        "source_note": "Calories from Strava runs; Garmin fallback may influence beers.",
+        "label": "30d Calories",
+        "description": "Trailing 30-day run calories.",
+        "tags": ["summary", "month", "calories"],
+        "metric_key": "month_calories",
+    },
+    "periods.year.calories": {
+        "source": "Strava+Garmin",
+        "source_note": "Calories from Strava runs; Garmin fallback may influence beers.",
+        "label": "YTD Calories",
+        "description": "Year-to-date run calories.",
+        "tags": ["summary", "year", "calories"],
+        "metric_key": "year_calories",
+    },
+    "smashrun.latest_activity.distance_miles": {
+        "source": "Smashrun",
+        "source_note": "Matched activity distance normalized from Smashrun record.",
+        "label": "Smashrun Distance",
+        "description": "Latest matched Smashrun activity distance in miles.",
+        "tags": ["smashrun", "activity", "distance"],
+        "metric_key": "smashrun_latest_distance",
+    },
+    "smashrun.latest_activity.pace": {
+        "source": "Smashrun",
+        "source_note": "Pace derived from Smashrun duration and distance.",
+        "label": "Smashrun Pace",
+        "description": "Latest matched Smashrun activity pace.",
+        "tags": ["smashrun", "activity", "pace"],
+        "metric_key": "smashrun_latest_pace",
+    },
+    "smashrun.latest_activity.elevation_gain_feet": {
+        "source": "Smashrun",
+        "source_note": "Elevation gain from Smashrun latest matched activity.",
+        "label": "Smashrun Elevation Gain",
+        "description": "Latest matched Smashrun activity elevation gain in feet.",
+        "tags": ["smashrun", "activity", "elevation"],
+        "metric_key": "smashrun_latest_elevation",
+    },
+    "smashrun.latest_activity.average_hr": {
+        "source": "Smashrun",
+        "source_note": "Heart rate metrics from Smashrun latest matched activity.",
+        "label": "Smashrun Avg HR",
+        "description": "Average heart rate from latest matched Smashrun activity.",
+        "tags": ["smashrun", "activity", "heart_rate"],
+        "metric_key": "smashrun_latest_avg_hr",
+    },
+    "smashrun.stats.run_count": {
+        "source": "Smashrun",
+        "source_note": "Historical run count from Smashrun stats endpoint.",
+        "label": "Smashrun Run Count",
+        "description": "All-time run count from Smashrun stats.",
+        "tags": ["smashrun", "stats", "volume"],
+        "metric_key": "smashrun_run_count",
+    },
+    "smashrun.stats.total_distance": {
+        "source": "Smashrun",
+        "source_note": "Historical total distance from Smashrun stats endpoint.",
+        "label": "Smashrun Total Distance",
+        "description": "Total distance from Smashrun stats endpoint.",
+        "tags": ["smashrun", "stats", "distance"],
+        "metric_key": "smashrun_total_distance",
+    },
+    "smashrun.stats.average_pace": {
+        "source": "Smashrun",
+        "source_note": "Average pace from Smashrun stats endpoint.",
+        "label": "Smashrun Avg Pace",
+        "description": "Average pace from Smashrun stats.",
+        "tags": ["smashrun", "stats", "pace"],
+        "metric_key": "smashrun_average_pace",
+    },
+    "smashrun.stats.longest_streak": {
+        "source": "Smashrun",
+        "source_note": "Longest streak from Smashrun stats endpoint.",
+        "label": "Smashrun Longest Streak",
+        "description": "Longest streak days from Smashrun stats.",
+        "tags": ["smashrun", "stats", "streak"],
+        "metric_key": "smashrun_longest_streak",
+    },
+    "garmin.last_activity.gap_pace": {
+        "source": "Garmin",
+        "source_note": "Garmin last-activity grade-adjusted pace.",
+        "label": "Garmin GAP Pace",
+        "description": "Garmin-reported last activity GAP pace.",
+        "tags": ["garmin", "activity", "pace"],
+        "metric_key": "garmin_last_gap_pace",
+    },
+    "garmin.last_activity.hr_zone_summary": {
+        "source": "Garmin",
+        "source_note": "Garmin last-activity heart-rate time-in-zone summary.",
+        "label": "Garmin HR Zones",
+        "description": "Garmin heart-rate zone time summary.",
+        "tags": ["garmin", "activity", "heart_rate", "zones"],
+        "metric_key": "garmin_last_hr_zones",
+    },
+    "garmin.last_activity.power_zone_summary": {
+        "source": "Garmin",
+        "source_note": "Garmin last-activity power time-in-zone summary.",
+        "label": "Garmin Power Zones",
+        "description": "Garmin power zone time summary.",
+        "tags": ["garmin", "activity", "power", "zones"],
+        "metric_key": "garmin_last_power_zones",
+    },
+    "garmin.last_activity.avg_ground_contact_time_ms": {
+        "source": "Garmin",
+        "source_note": "Run dynamics from Garmin last-activity payload.",
+        "label": "Garmin GCT",
+        "description": "Average ground contact time (ms) from Garmin.",
+        "tags": ["garmin", "activity", "run_dynamics"],
+        "metric_key": "garmin_last_gct",
+    },
+    "garmin.last_activity.avg_vertical_ratio_pct": {
+        "source": "Garmin",
+        "source_note": "Run dynamics from Garmin last-activity payload.",
+        "label": "Garmin Vertical Ratio",
+        "description": "Average vertical ratio from Garmin.",
+        "tags": ["garmin", "activity", "run_dynamics"],
+        "metric_key": "garmin_last_vertical_ratio",
+    },
+    "garmin.readiness.recovery_time_hours": {
+        "source": "Garmin",
+        "source_note": "Recovery estimate from Garmin training readiness payload.",
+        "label": "Garmin Recovery Hours",
+        "description": "Recovery-time estimate in hours.",
+        "tags": ["garmin", "readiness", "recovery"],
+        "metric_key": "garmin_recovery_hours",
+    },
+    "garmin.readiness.factors.sleep_score_factor_pct": {
+        "source": "Garmin",
+        "source_note": "Readiness factor percentages from Garmin readiness payload.",
+        "label": "Readiness Sleep Score %",
+        "description": "Sleep-score contribution to readiness.",
+        "tags": ["garmin", "readiness", "factors", "sleep"],
+        "metric_key": "garmin_readiness_sleep_score_factor",
+    },
+    "garmin.readiness.factors.hrv_factor_pct": {
+        "source": "Garmin",
+        "source_note": "Readiness factor percentages from Garmin readiness payload.",
+        "label": "Readiness HRV %",
+        "description": "HRV contribution to readiness.",
+        "tags": ["garmin", "readiness", "factors", "hrv"],
+        "metric_key": "garmin_readiness_hrv_factor",
+    },
+    "garmin.status.weekly_training_load": {
+        "source": "Garmin",
+        "source_note": "Weekly load trend from Garmin training status payload.",
+        "label": "Garmin Weekly Load",
+        "description": "Weekly training load from Garmin.",
+        "tags": ["garmin", "status", "load"],
+        "metric_key": "garmin_weekly_load",
+    },
+    "garmin.status.daily_acwr_ratio": {
+        "source": "Garmin",
+        "source_note": "ACWR ratio from Garmin training status payload.",
+        "label": "Garmin Daily ACWR",
+        "description": "Daily acute/chronic workload ratio from Garmin.",
+        "tags": ["garmin", "status", "acwr", "load"],
+        "metric_key": "garmin_daily_acwr_ratio",
+    },
+    "garmin.fitness_age.fitness_age": {
+        "source": "Garmin",
+        "source_note": "Fitness-age summary details from Garmin fitness-age payload.",
+        "label": "Garmin Fitness Age",
+        "description": "Numeric Garmin fitness age value.",
+        "tags": ["garmin", "fitness_age", "wellness"],
+        "metric_key": "garmin_fitness_age",
+    },
+    "garmin.fitness_age.chronological_age": {
+        "source": "Garmin",
+        "source_note": "Fitness-age summary details from Garmin fitness-age payload.",
+        "label": "Chronological Age",
+        "description": "Chronological age from Garmin fitness-age payload.",
+        "tags": ["garmin", "fitness_age", "wellness"],
+        "metric_key": "garmin_chronological_age",
+    },
 }
 
 
@@ -1276,10 +2033,16 @@ _FIELD_CATALOG_PREFIX_MAP: list[tuple[str, dict[str, Any]]] = [
     ("raw.training.", {"source": "Garmin", "source_note": "Raw Garmin-derived training payload.", "tags": ["raw", "garmin"]}),
     ("raw.intervals.", {"source": "Intervals.icu", "source_note": "Raw Intervals payload.", "tags": ["raw", "intervals"]}),
     ("raw.weather.", {"source": "Weather.com", "source_note": "Raw weather payload.", "tags": ["raw", "weather"]}),
+    ("raw.smashrun.", {"source": "Smashrun", "source_note": "Raw Smashrun payloads.", "tags": ["raw", "smashrun"]}),
+    ("raw.garmin_period_fallback.", {"source": "Garmin", "source_note": "Garmin period fallback summary payload.", "tags": ["raw", "garmin", "summary"]}),
     ("raw.week.", {"source": "Derived", "source_note": "Computed 7-day aggregate from source activities.", "tags": ["raw", "summary", "week"]}),
     ("raw.month.", {"source": "Derived", "source_note": "Computed 30-day aggregate from source activities.", "tags": ["raw", "summary", "month"]}),
     ("raw.year.", {"source": "Derived", "source_note": "Computed YTD aggregate from source activities.", "tags": ["raw", "summary", "year"]}),
     ("weather.details.", {"source": "Weather.com", "source_note": "Detailed weather conditions for activity time.", "tags": ["weather", "details"]}),
+    ("weather.components.", {"source": "Weather.com", "source_note": "Misery index component breakdown.", "tags": ["weather", "mi", "components"]}),
+    ("intervals.", {"source": "Intervals.icu", "source_note": "Intervals.icu activity detail and rollup metrics.", "tags": ["intervals"]}),
+    ("garmin.", {"source": "Garmin", "source_note": "Garmin-derived structured context fields.", "tags": ["garmin"]}),
+    ("smashrun.", {"source": "Smashrun", "source_note": "Smashrun structured context fields.", "tags": ["smashrun"]}),
 ]
 
 
@@ -1297,6 +2060,49 @@ def _default_label_for_path(path: str) -> str:
     if not leaf:
         leaf = path.replace("_", " ")
     return leaf.title()
+
+
+def _infer_units_for_path(path: str, value_type: str) -> str | None:
+    path_l = path.lower()
+    if path_l.endswith("_miles") or ".distance_miles" in path_l:
+        return "mi"
+    if path_l.endswith("_feet") or ".elevation_" in path_l:
+        return "ft"
+    if path_l.endswith("_mph"):
+        return "mph"
+    if path_l.endswith("_pace") or ".pace" in path_l:
+        return "min/mi"
+    if path_l.endswith("_pct") or "percent" in path_l:
+        return "%"
+    if path_l.endswith("_f") or "temp_f" in path_l or "dewpoint_f" in path_l:
+        return "F"
+    if path_l.endswith(".calories") or path_l.endswith("_calories"):
+        return "kcal"
+    if path_l.endswith("_g"):
+        return "g"
+    if path_l.endswith(".average_hr") or path_l.endswith(".max_hr") or path_l.endswith(".resting_hr") or path_l.endswith(".rhr"):
+        return "bpm"
+    if "cadence" in path_l:
+        return "spm"
+    if "power" in path_l and (path_l.endswith("_w") or ".norm_power" in path_l or ".avg_power" in path_l or ".max_power" in path_l):
+        return "W"
+    if "time" in path_l or "duration" in path_l:
+        if value_type in {"str", "int", "float"}:
+            return "h:mm:ss"
+    if path_l.endswith("vo2") or "vo2" in path_l:
+        return "ml/kg/min"
+    return None
+
+
+def _infer_freshness(path: str) -> str:
+    top_key = path.split(".", 1)[0].split("[", 1)[0]
+    if path.startswith("smashrun.latest_activity.") or path.startswith("garmin.last_activity."):
+        return "activity"
+    if path.startswith("smashrun.stats.") or path.startswith("periods.") or path.startswith("raw.week.") or path.startswith("raw.month.") or path.startswith("raw.year."):
+        return "rolling"
+    if path.startswith("garmin.readiness.") or path.startswith("garmin.status.") or path.startswith("garmin.fitness_age."):
+        return "daily"
+    return _GROUP_FRESHNESS_MAP.get(top_key, "activity")
 
 
 def _field_metadata_for_path(path: str) -> dict[str, Any]:
@@ -1338,6 +2144,26 @@ def _field_metadata_for_path(path: str) -> dict[str, Any]:
     else:
         metric_text = str(metric_key).strip()
         meta["metric_key"] = metric_text or None
+    source_text = str(meta.get("source") or "Unknown").strip() or "Unknown"
+    cost_tier = str(meta.get("cost_tier") or "").strip().lower()
+    if cost_tier not in {"free", "low", "medium", "high"}:
+        cost_tier = _SOURCE_COST_TIER_MAP.get(source_text, "medium")
+    meta["cost_tier"] = cost_tier
+
+    stability = str(meta.get("stability") or "").strip().lower()
+    if stability not in {"stable", "medium", "experimental"}:
+        if path.startswith("raw."):
+            stability = "experimental"
+        elif bool(meta.get("curated")):
+            stability = "stable"
+        else:
+            stability = "medium"
+    meta["stability"] = stability
+
+    freshness = str(meta.get("freshness") or "").strip().lower()
+    if freshness not in {"activity", "daily", "rolling"}:
+        freshness = _infer_freshness(path)
+    meta["freshness"] = freshness
     return meta
 
 
@@ -1350,10 +2176,14 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
 
     if isinstance(value, list):
         meta = _field_metadata_for_path(path_prefix)
+        value_type = _type_name(value)
+        units = meta.get("units")
+        if units is None:
+            units = _infer_units_for_path(path_prefix, value_type)
         fields.append(
             {
                 "path": path_prefix,
-                "type": _type_name(value),
+                "type": value_type,
                 "sample": _sample_value(value),
                 "source": meta.get("source"),
                 "source_note": meta.get("source_note"),
@@ -1363,6 +2193,10 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
                 "metric_key": meta.get("metric_key"),
                 "alternatives": meta.get("alternatives"),
                 "curated": bool(meta.get("curated")),
+                "stability": meta.get("stability"),
+                "cost_tier": meta.get("cost_tier"),
+                "freshness": meta.get("freshness"),
+                "units": units,
             }
         )
         if value and isinstance(value[0], dict):
@@ -1371,10 +2205,14 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
         return
 
     meta = _field_metadata_for_path(path_prefix)
+    value_type = _type_name(value)
+    units = meta.get("units")
+    if units is None:
+        units = _infer_units_for_path(path_prefix, value_type)
     fields.append(
         {
             "path": path_prefix,
-            "type": _type_name(value),
+            "type": value_type,
             "sample": _sample_value(value),
             "source": meta.get("source"),
             "source_note": meta.get("source_note"),
@@ -1384,6 +2222,10 @@ def _collect_schema_fields(path_prefix: str, value: Any, fields: list[dict[str, 
             "metric_key": meta.get("metric_key"),
             "alternatives": meta.get("alternatives"),
             "curated": bool(meta.get("curated")),
+            "stability": meta.get("stability"),
+            "cost_tier": meta.get("cost_tier"),
+            "freshness": meta.get("freshness"),
+            "units": units,
         }
     )
 
@@ -1395,6 +2237,10 @@ def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
     type_values: set[str] = set()
     tag_values: set[str] = set()
     metric_values: set[str] = set()
+    stability_values: set[str] = set()
+    cost_tier_values: set[str] = set()
+    freshness_values: set[str] = set()
+    units_values: set[str] = set()
     metric_path_map: dict[str, list[dict[str, str]]] = {}
 
     for top_key in sorted(context.keys()):
@@ -1433,6 +2279,18 @@ def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
                         "source": source or "Unknown",
                     }
                 )
+            stability = str(field.get("stability") or "").strip()
+            if stability:
+                stability_values.add(stability)
+            cost_tier = str(field.get("cost_tier") or "").strip()
+            if cost_tier:
+                cost_tier_values.add(cost_tier)
+            freshness = str(field.get("freshness") or "").strip()
+            if freshness:
+                freshness_values.add(freshness)
+            units = field.get("units")
+            if isinstance(units, str) and units.strip():
+                units_values.add(units.strip())
 
         groups.append(
             {
@@ -1469,6 +2327,10 @@ def build_context_schema(context: dict[str, Any]) -> dict[str, Any]:
             "types": sorted(type_values),
             "tags": sorted(tag_values),
             "metric_keys": sorted(metric_values),
+            "stability": sorted(stability_values),
+            "cost_tiers": sorted(cost_tier_values),
+            "freshness": sorted(freshness_values),
+            "units": sorted(units_values),
         },
         "overlaps": overlaps,
         "helper_transforms": deepcopy(_CATALOG_HELPER_TRANSFORMS),

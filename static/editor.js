@@ -136,6 +136,8 @@ const FALLBACK_SNIPPETS = [
 const DRAFT_KEY = "auto_stat_description_editor_draft";
 const THEME_KEY = "auto_stat_description_editor_theme";
 const TOUR_SEEN_KEY = "auto_stat_description_editor_tour_seen_v1";
+const CATALOG_FAVORITES_KEY = "auto_stat_description_editor_catalog_favorites_v1";
+const CATALOG_RECENTS_KEY = "auto_stat_description_editor_catalog_recents_v1";
 
 const TOUR_STEPS = [
   {
@@ -160,6 +162,74 @@ const TOUR_STEPS = [
   },
 ];
 
+const CATALOG_PRESETS = {
+  beginner: {
+    label: "Beginner",
+    curatedOnly: true,
+    stableOnly: true,
+    favoritesOnly: false,
+    source: "all",
+    group: "all",
+    type: "all",
+    tag: "all",
+    stability: "all",
+    costTier: "all",
+    freshness: "all",
+  },
+  power_user: {
+    label: "Power User",
+    curatedOnly: false,
+    stableOnly: false,
+    favoritesOnly: false,
+    source: "all",
+    group: "all",
+    type: "all",
+    tag: "all",
+    stability: "all",
+    costTier: "all",
+    freshness: "all",
+  },
+  weather_nerd: {
+    label: "Weather Nerd",
+    curatedOnly: false,
+    stableOnly: false,
+    favoritesOnly: false,
+    source: "Weather.com",
+    group: "weather",
+    type: "all",
+    tag: "weather",
+    stability: "all",
+    costTier: "all",
+    freshness: "all",
+  },
+  nutrition: {
+    label: "Nutrition",
+    curatedOnly: true,
+    stableOnly: true,
+    favoritesOnly: false,
+    source: "crono-api",
+    group: "all",
+    type: "all",
+    tag: "nutrition",
+    stability: "all",
+    costTier: "all",
+    freshness: "daily",
+  },
+  performance: {
+    label: "Performance",
+    curatedOnly: false,
+    stableOnly: true,
+    favoritesOnly: false,
+    source: "all",
+    group: "all",
+    type: "all",
+    tag: "training",
+    stability: "all",
+    costTier: "all",
+    freshness: "all",
+  },
+};
+
 const state = {
   templateActive: "",
   templateDefault: "",
@@ -182,6 +252,8 @@ const state = {
   editorTouched: false,
   publishModalValidationOk: false,
   tourStep: 0,
+  catalogFavorites: new Set(),
+  catalogRecents: [],
 };
 
 const elements = {
@@ -199,7 +271,14 @@ const elements = {
   schemaGroupFilter: document.getElementById("schemaGroupFilter"),
   schemaTypeFilter: document.getElementById("schemaTypeFilter"),
   schemaTagFilter: document.getElementById("schemaTagFilter"),
+  schemaStabilityFilter: document.getElementById("schemaStabilityFilter"),
+  schemaCostTierFilter: document.getElementById("schemaCostTierFilter"),
+  schemaFreshnessFilter: document.getElementById("schemaFreshnessFilter"),
   schemaCuratedOnly: document.getElementById("schemaCuratedOnly"),
+  schemaStableOnly: document.getElementById("schemaStableOnly"),
+  schemaFavoritesOnly: document.getElementById("schemaFavoritesOnly"),
+  schemaPreset: document.getElementById("schemaPreset"),
+  catalogQuickPicks: document.getElementById("catalogQuickPicks"),
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
   contextSafetyBanner: document.getElementById("contextSafetyBanner"),
@@ -240,6 +319,97 @@ const elements = {
 function setStatus(text, tone = "neutral") {
   elements.topStatus.textContent = text;
   elements.topStatus.dataset.tone = tone;
+}
+
+function loadCatalogPreferences() {
+  try {
+    const favoriteRaw = localStorage.getItem(CATALOG_FAVORITES_KEY);
+    const recentRaw = localStorage.getItem(CATALOG_RECENTS_KEY);
+    const favorites = JSON.parse(favoriteRaw || "[]");
+    const recents = JSON.parse(recentRaw || "[]");
+    if (Array.isArray(favorites)) {
+      state.catalogFavorites = new Set(
+        favorites
+          .map((item) => String(item || "").trim())
+          .filter(Boolean),
+      );
+    }
+    if (Array.isArray(recents)) {
+      state.catalogRecents = recents
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .slice(0, 15);
+    }
+  } catch (_err) {
+    state.catalogFavorites = new Set();
+    state.catalogRecents = [];
+  }
+}
+
+function saveCatalogFavorites() {
+  try {
+    localStorage.setItem(
+      CATALOG_FAVORITES_KEY,
+      JSON.stringify(Array.from(state.catalogFavorites.values()).slice(0, 300)),
+    );
+  } catch (_err) {
+    // Ignore localStorage failures.
+  }
+}
+
+function saveCatalogRecents() {
+  try {
+    localStorage.setItem(CATALOG_RECENTS_KEY, JSON.stringify(state.catalogRecents.slice(0, 15)));
+  } catch (_err) {
+    // Ignore localStorage failures.
+  }
+}
+
+function isFavoriteField(path) {
+  const key = String(path || "").trim();
+  if (!key) return false;
+  return state.catalogFavorites.has(key);
+}
+
+function toggleFavoriteField(path) {
+  const key = String(path || "").trim();
+  if (!key) return;
+  if (state.catalogFavorites.has(key)) {
+    state.catalogFavorites.delete(key);
+    setStatus(`Removed favorite: ${key}`, "ok");
+  } else {
+    state.catalogFavorites.add(key);
+    setStatus(`Added favorite: ${key}`, "ok");
+  }
+  saveCatalogFavorites();
+  renderCatalogQuickPicks();
+  renderSchemaCatalog(elements.schemaSearch.value || "");
+}
+
+function noteRecentField(path) {
+  const key = String(path || "").trim();
+  if (!key) return;
+  state.catalogRecents = [key, ...state.catalogRecents.filter((item) => item !== key)].slice(0, 15);
+  saveCatalogRecents();
+  renderCatalogQuickPicks();
+}
+
+function renderCatalogQuickPicks() {
+  if (!elements.catalogQuickPicks) return;
+  const favorites = Array.from(state.catalogFavorites.values()).slice(0, 8);
+  const recents = state.catalogRecents.slice(0, 8);
+  const lines = [];
+  lines.push(
+    favorites.length > 0
+      ? `Favorites (${state.catalogFavorites.size}): ${favorites.join(", ")}`
+      : "Favorites: none yet",
+  );
+  lines.push(
+    recents.length > 0
+      ? `Recent inserts: ${recents.join(", ")}`
+      : "Recent inserts: none yet",
+  );
+  elements.catalogQuickPicks.textContent = lines.join("\n");
 }
 
 function contextModeProfile(mode) {
@@ -429,15 +599,23 @@ function renderCatalogDiagnostics() {
   const facets = schema.facets || {};
   const overlaps = Array.isArray(schema.overlaps) ? schema.overlaps : [];
   let curatedCount = 0;
+  let stableCount = 0;
+  let experimentalCount = 0;
   for (const group of schema.groups || []) {
     for (const field of group.fields || []) {
       if (field.curated) curatedCount += 1;
+      const stability = String(field.stability || "").toLowerCase();
+      if (stability === "stable") stableCount += 1;
+      if (stability === "experimental") experimentalCount += 1;
     }
   }
   const lines = [];
   lines.push(`Groups: ${(facets.groups || []).length} | Fields: ${schema.field_count || 0}`);
   lines.push(`Curated fields: ${curatedCount}`);
+  lines.push(`Stable fields: ${stableCount} | Experimental fields: ${experimentalCount}`);
+  lines.push(`Favorites: ${state.catalogFavorites.size} | Recent inserts: ${state.catalogRecents.length}`);
   lines.push(`Sources: ${(facets.sources || []).length} | Tags: ${(facets.tags || []).length}`);
+  lines.push(`Cost tiers: ${(facets.cost_tiers || []).length} | Freshness buckets: ${(facets.freshness || []).length}`);
   lines.push(`Metric overlaps: ${overlaps.length}`);
   if (overlaps.length > 0) {
     const sample = overlaps.slice(0, 3).map((item) => item.metric_key).join(", ");
@@ -469,6 +647,22 @@ function refreshSourceFilterOptions() {
     Array.isArray(facets.tags) ? facets.tags.slice() : [],
     "All Tags",
   );
+  setSelectOptions(
+    elements.schemaStabilityFilter,
+    Array.isArray(facets.stability) ? facets.stability.slice() : [],
+    "All Stability Levels",
+  );
+  setSelectOptions(
+    elements.schemaCostTierFilter,
+    Array.isArray(facets.cost_tiers) ? facets.cost_tiers.slice() : [],
+    "All Cost Tiers",
+  );
+  setSelectOptions(
+    elements.schemaFreshnessFilter,
+    Array.isArray(facets.freshness) ? facets.freshness.slice() : [],
+    "All Freshness",
+  );
+  renderCatalogQuickPicks();
   renderCatalogDiagnostics();
 }
 
@@ -489,8 +683,57 @@ function insertFieldWithTransform(fieldPath, transformTemplate) {
   const template = String(transformTemplate || "{{ {path} }}");
   const snippet = template.replaceAll("{path}", path);
   insertAtCursor(snippet);
+  noteRecentField(path);
   setStatus(`Inserted ${path}`, "ok");
   queueAutoPreview();
+}
+
+function setSelectValueIfPresent(select, value, fallback = "all") {
+  if (!select) return;
+  const target = String(value || fallback);
+  const exists = Array.from(select.options || []).some((option) => option.value === target);
+  select.value = exists ? target : fallback;
+}
+
+function applyCatalogPreset(presetId, options = {}) {
+  const { announce = true } = options;
+  const key = String(presetId || "").trim();
+  const preset = CATALOG_PRESETS[key];
+  if (!preset) return;
+
+  setSelectValueIfPresent(elements.schemaSourceFilter, preset.source);
+  setSelectValueIfPresent(elements.schemaGroupFilter, preset.group);
+  setSelectValueIfPresent(elements.schemaTypeFilter, preset.type);
+  setSelectValueIfPresent(elements.schemaTagFilter, preset.tag);
+  setSelectValueIfPresent(elements.schemaStabilityFilter, preset.stability);
+  setSelectValueIfPresent(elements.schemaCostTierFilter, preset.costTier);
+  setSelectValueIfPresent(elements.schemaFreshnessFilter, preset.freshness);
+  if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = Boolean(preset.curatedOnly);
+  if (elements.schemaStableOnly) elements.schemaStableOnly.checked = Boolean(preset.stableOnly);
+  if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = Boolean(preset.favoritesOnly);
+
+  renderSchemaCatalog(elements.schemaSearch.value || "");
+  if (announce) {
+    setStatus(`Catalog preset applied: ${preset.label}`, "ok");
+  }
+}
+
+function resetCatalogFilters(options = {}) {
+  const { announce = true } = options;
+  setSelectValueIfPresent(elements.schemaSourceFilter, "all");
+  setSelectValueIfPresent(elements.schemaGroupFilter, "all");
+  setSelectValueIfPresent(elements.schemaTypeFilter, "all");
+  setSelectValueIfPresent(elements.schemaTagFilter, "all");
+  setSelectValueIfPresent(elements.schemaStabilityFilter, "all");
+  setSelectValueIfPresent(elements.schemaCostTierFilter, "all");
+  setSelectValueIfPresent(elements.schemaFreshnessFilter, "all");
+  if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = false;
+  if (elements.schemaStableOnly) elements.schemaStableOnly.checked = false;
+  if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = false;
+  renderSchemaCatalog(elements.schemaSearch.value || "");
+  if (announce) {
+    setStatus("Catalog filters reset", "ok");
+  }
 }
 
 function renderSchemaCatalog(filterText = "") {
@@ -509,7 +752,12 @@ function renderSchemaCatalog(filterText = "") {
   const groupFilter = elements.schemaGroupFilter.value || "all";
   const typeFilter = elements.schemaTypeFilter.value || "all";
   const tagFilter = elements.schemaTagFilter.value || "all";
+  const stabilityFilter = elements.schemaStabilityFilter.value || "all";
+  const costTierFilter = elements.schemaCostTierFilter.value || "all";
+  const freshnessFilter = elements.schemaFreshnessFilter.value || "all";
   const curatedOnly = Boolean(elements.schemaCuratedOnly.checked);
+  const stableOnly = Boolean(elements.schemaStableOnly.checked);
+  const favoritesOnly = Boolean(elements.schemaFavoritesOnly.checked);
   let visibleFields = 0;
 
   for (const group of schema.groups) {
@@ -522,6 +770,10 @@ function renderSchemaCatalog(filterText = "") {
       const fieldType = String(field.type || "");
       const fieldTags = Array.isArray(field.tags) ? field.tags.map((tag) => String(tag)) : [];
       const fieldCurated = Boolean(field.curated);
+      const fieldStability = String(field.stability || "");
+      const fieldCostTier = String(field.cost_tier || "");
+      const fieldFreshness = String(field.freshness || "");
+      const isFavorite = isFavoriteField(field.path);
 
       if (sourceFilter !== "all" && fieldSource !== sourceFilter) {
         return false;
@@ -533,6 +785,21 @@ function renderSchemaCatalog(filterText = "") {
         return false;
       }
       if (curatedOnly && !fieldCurated) {
+        return false;
+      }
+      if (stableOnly && fieldStability !== "stable") {
+        return false;
+      }
+      if (stabilityFilter !== "all" && fieldStability !== stabilityFilter) {
+        return false;
+      }
+      if (costTierFilter !== "all" && fieldCostTier !== costTierFilter) {
+        return false;
+      }
+      if (freshnessFilter !== "all" && fieldFreshness !== freshnessFilter) {
+        return false;
+      }
+      if (favoritesOnly && !isFavorite) {
         return false;
       }
 
@@ -548,6 +815,10 @@ function renderSchemaCatalog(filterText = "") {
         fieldSource.toLowerCase().includes(q) ||
         String(field.source_note || "").toLowerCase().includes(q) ||
         String(field.metric_key || "").toLowerCase().includes(q) ||
+        String(field.stability || "").toLowerCase().includes(q) ||
+        String(field.cost_tier || "").toLowerCase().includes(q) ||
+        String(field.freshness || "").toLowerCase().includes(q) ||
+        String(field.units || "").toLowerCase().includes(q) ||
         fieldTags.join(" ").toLowerCase().includes(q) ||
         alternatives.join(" ").toLowerCase().includes(q)
       );
@@ -584,6 +855,36 @@ function renderSchemaCatalog(filterText = "") {
       type.className = "field-type";
       type.textContent = `${field.type} | sample: ${stringifySample(field.sample)}`;
 
+      const badges = document.createElement("div");
+      badges.className = "field-badges";
+
+      const sourceBadge = document.createElement("span");
+      sourceBadge.className = "field-badge field-badge-source";
+      sourceBadge.textContent = field.source || "Unknown";
+      badges.appendChild(sourceBadge);
+
+      const stabilityBadge = document.createElement("span");
+      stabilityBadge.className = `field-badge field-badge-stability field-badge-${String(field.stability || "medium")}`;
+      stabilityBadge.textContent = String(field.stability || "medium");
+      badges.appendChild(stabilityBadge);
+
+      const costBadge = document.createElement("span");
+      costBadge.className = `field-badge field-badge-cost field-badge-${String(field.cost_tier || "medium")}`;
+      costBadge.textContent = `cost:${String(field.cost_tier || "medium")}`;
+      badges.appendChild(costBadge);
+
+      const freshnessBadge = document.createElement("span");
+      freshnessBadge.className = "field-badge field-badge-freshness";
+      freshnessBadge.textContent = `fresh:${String(field.freshness || "activity")}`;
+      badges.appendChild(freshnessBadge);
+
+      if (field.units) {
+        const unitsBadge = document.createElement("span");
+        unitsBadge.className = "field-badge field-badge-units";
+        unitsBadge.textContent = `units:${field.units}`;
+        badges.appendChild(unitsBadge);
+      }
+
       const source = document.createElement("div");
       source.className = "field-source";
       source.textContent = field.source_note
@@ -615,6 +916,7 @@ function renderSchemaCatalog(filterText = "") {
       body.appendChild(label);
       body.appendChild(key);
       if (desc.textContent) body.appendChild(desc);
+      body.appendChild(badges);
       body.appendChild(type);
       body.appendChild(metric);
       body.appendChild(tagsLine);
@@ -635,6 +937,16 @@ function renderSchemaCatalog(filterText = "") {
       });
 
       controls.appendChild(insertBtn);
+
+      const favoriteBtn = document.createElement("button");
+      favoriteBtn.className = "field-favorite";
+      favoriteBtn.type = "button";
+      favoriteBtn.title = isFavoriteField(field.path) ? "Remove favorite" : "Add favorite";
+      favoriteBtn.textContent = isFavoriteField(field.path) ? "★" : "☆";
+      favoriteBtn.addEventListener("click", () => {
+        toggleFavoriteField(field.path);
+      });
+      controls.appendChild(favoriteBtn);
 
       if (Array.isArray(state.helperTransforms) && state.helperTransforms.length > 0) {
         const transformSelect = document.createElement("select");
@@ -679,7 +991,15 @@ function renderSchemaCatalog(filterText = "") {
     if (groupValue !== "all") activeFilters.push(`group=${groupValue}`);
     if (typeValue !== "all") activeFilters.push(`type=${typeValue}`);
     if (tagValue !== "all") activeFilters.push(`tag=${tagValue}`);
+    const stabilityValue = elements.schemaStabilityFilter.value || "all";
+    const costTierValue = elements.schemaCostTierFilter.value || "all";
+    const freshnessValue = elements.schemaFreshnessFilter.value || "all";
+    if (stabilityValue !== "all") activeFilters.push(`stability=${stabilityValue}`);
+    if (costTierValue !== "all") activeFilters.push(`cost=${costTierValue}`);
+    if (freshnessValue !== "all") activeFilters.push(`freshness=${freshnessValue}`);
     if (elements.schemaCuratedOnly.checked) activeFilters.push("curated_only=true");
+    if (elements.schemaStableOnly.checked) activeFilters.push("stable_only=true");
+    if (elements.schemaFavoritesOnly.checked) activeFilters.push("favorites_only=true");
     const filterTextLabel = activeFilters.length > 0 ? ` with filters (${activeFilters.join(", ")})` : "";
     elements.schemaMeta.textContent = `No fields matched${filterTextLabel}${sourceText}.`;
     return;
@@ -1774,6 +2094,9 @@ async function loadEditorBootstrap() {
   }
 
   refreshSourceFilterOptions();
+  const selectedPreset = elements.schemaPreset?.value || "beginner";
+  applyCatalogPreset(selectedPreset, { announce: false });
+  renderCatalogQuickPicks();
   renderSchemaCatalog("");
   renderSimpleSections();
   renderSnippets();
@@ -2019,9 +2342,41 @@ function bindUI() {
   elements.schemaTagFilter.addEventListener("change", () => {
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
+  elements.schemaStabilityFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaCostTierFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaFreshnessFilter.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
   elements.schemaCuratedOnly.addEventListener("change", () => {
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
+  elements.schemaStableOnly.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  elements.schemaFavoritesOnly.addEventListener("change", () => {
+    renderSchemaCatalog(elements.schemaSearch.value || "");
+  });
+  if (elements.schemaPreset) {
+    elements.schemaPreset.addEventListener("change", () => {
+      applyCatalogPreset(elements.schemaPreset.value || "beginner", { announce: true });
+    });
+  }
+  const btnApplySchemaPreset = document.getElementById("btnApplySchemaPreset");
+  if (btnApplySchemaPreset) {
+    btnApplySchemaPreset.addEventListener("click", () => {
+      applyCatalogPreset(elements.schemaPreset?.value || "beginner", { announce: true });
+    });
+  }
+  const btnCatalogResetFilters = document.getElementById("btnCatalogResetFilters");
+  if (btnCatalogResetFilters) {
+    btnCatalogResetFilters.addEventListener("click", () => {
+      resetCatalogFilters({ announce: true });
+    });
+  }
 
   elements.schemaContextMode.addEventListener("change", async () => {
     await loadSchema(elements.schemaContextMode.value || "sample");
@@ -2142,6 +2497,7 @@ function bindUI() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  loadCatalogPreferences();
   bindUI();
   applyTheme(loadThemePreference());
   updateValidationPane(null, true);

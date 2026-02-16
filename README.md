@@ -206,6 +206,10 @@ SERVICE_RETRY_COUNT=2
 SERVICE_RETRY_BACKOFF_SECONDS=2
 SERVICE_COOLDOWN_BASE_SECONDS=60
 SERVICE_COOLDOWN_MAX_SECONDS=1800
+ENABLE_SERVICE_CALL_BUDGET=true
+MAX_OPTIONAL_SERVICE_CALLS_PER_CYCLE=10
+ENABLE_SERVICE_RESULT_CACHE=true
+SERVICE_CACHE_TTL_SECONDS=600
 
 # Feature flags
 ENABLE_GARMIN=true
@@ -239,6 +243,7 @@ docker network prune -f
 - `GET /health`
 - `GET /ready`
 - `GET /latest`
+- `GET /service-metrics`
 - `POST /rerun/latest` (rerun most recent activity)
 - `POST /rerun/activity/<activity_id>` (rerun specific Strava activity)
 - `POST /rerun` with optional JSON body: `{ "activity_id": 1234567890 }`

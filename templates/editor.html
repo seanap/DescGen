@@ -57,6 +57,18 @@
           <option value="latest">Latest Only</option>
           <option value="latest_or_sample">Latest or Sample</option>
         </select>
+        <label class="stack-label" for="schemaPreset">Catalog Preset</label>
+        <select id="schemaPreset" class="search">
+          <option value="beginner" selected>Beginner</option>
+          <option value="power_user">Power User</option>
+          <option value="weather_nerd">Weather Nerd</option>
+          <option value="nutrition">Nutrition</option>
+          <option value="performance">Performance</option>
+        </select>
+        <div class="inline-actions">
+          <button id="btnApplySchemaPreset" class="btn btn-ghost" type="button">Apply Preset</button>
+          <button id="btnCatalogResetFilters" class="btn btn-ghost" type="button">Reset Filters</button>
+        </div>
         <label class="stack-label" for="schemaSourceFilter">Source Filter</label>
         <select id="schemaSourceFilter" class="search">
           <option value="all" selected>All Sources</option>
@@ -73,11 +85,32 @@
         <select id="schemaTagFilter" class="search">
           <option value="all" selected>All Tags</option>
         </select>
+        <label class="stack-label" for="schemaStabilityFilter">Stability Filter</label>
+        <select id="schemaStabilityFilter" class="search">
+          <option value="all" selected>All Stability Levels</option>
+        </select>
+        <label class="stack-label" for="schemaCostTierFilter">Cost Tier Filter</label>
+        <select id="schemaCostTierFilter" class="search">
+          <option value="all" selected>All Cost Tiers</option>
+        </select>
+        <label class="stack-label" for="schemaFreshnessFilter">Freshness Filter</label>
+        <select id="schemaFreshnessFilter" class="search">
+          <option value="all" selected>All Freshness</option>
+        </select>
         <label class="toggle-inline" for="schemaCuratedOnly">
           <input id="schemaCuratedOnly" type="checkbox">
           Curated Fields Only
         </label>
+        <label class="toggle-inline" for="schemaStableOnly">
+          <input id="schemaStableOnly" type="checkbox" checked>
+          Stable Fields Only
+        </label>
+        <label class="toggle-inline" for="schemaFavoritesOnly">
+          <input id="schemaFavoritesOnly" type="checkbox">
+          Favorites Only
+        </label>
         <input id="schemaSearch" class="search" type="search" placeholder="Search fields...">
+        <div id="catalogQuickPicks" class="meta">No recent inserts yet.</div>
         <div id="schemaMeta" class="meta"></div>
         <div id="catalogDiagnostics" class="meta">No diagnostics yet.</div>
         <div id="schemaList" class="catalog"></div>

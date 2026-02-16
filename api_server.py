@@ -137,6 +137,16 @@ def latest() -> tuple[dict, int]:
     return payload, 200
 
 
+@app.get("/service-metrics")
+def service_metrics() -> tuple[dict, int]:
+    cycle_metrics = get_runtime_value(settings.processed_log_file, "cycle.service_calls")
+    return {
+        "status": "ok",
+        "time_utc": datetime.now(timezone.utc).isoformat(),
+        "cycle_service_calls": cycle_metrics if isinstance(cycle_metrics, dict) else {},
+    }, 200
+
+
 @app.get("/editor")
 def editor_page() -> str:
     return render_template("editor.html")

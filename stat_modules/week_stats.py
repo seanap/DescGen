@@ -52,6 +52,7 @@ def summarize_period(
     distance_meters = 0.0
     duration_seconds = 0
     calories = 0.0
+    run_count = 0
     gap_speed_sum = 0.0
     gap_count = 0
     avg_speed_sum = 0.0
@@ -71,6 +72,7 @@ def summarize_period(
 
         distance = float(activity.get("distance", 0) or 0)
         distance_meters += distance
+        run_count += 1
         moving_time = int(activity.get("moving_time", 0) or 0)
         duration_seconds += moving_time
         calories += _calories_for_activity(activity)
@@ -101,6 +103,8 @@ def summarize_period(
         "elevation": float(elevation_feet),
         "duration": _format_duration(duration_seconds),
         "beers_earned": round(calories / 150.0, 1),
+        "calories": round(calories, 1),
+        "run_count": run_count,
         "_gap_source": gap_source,
     }
 
