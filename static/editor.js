@@ -174,6 +174,7 @@ const elements = {
   previewFixtureName: document.getElementById("previewFixtureName"),
   templateNameInput: document.getElementById("templateNameInput"),
   templateAuthorInput: document.getElementById("templateAuthorInput"),
+  importTemplateFile: document.getElementById("importTemplateFile"),
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
   templateMeta: document.getElementById("templateMeta"),
@@ -822,6 +823,93 @@ function loadDraft() {
   }
 }
 
+function downloadTextFile(filename, text) {
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildExportFilename(name) {
+  const baseRaw = String(name || "auto-stat-template").trim().toLowerCase();
+  const base = baseRaw
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "") || "auto-stat-template";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `${base}-${stamp}.json`;
+}
+
+async function exportTemplateBundle() {
+  const res = await requestJSON("/editor/template/export?include_versions=false");
+  if (!res.ok) {
+    setStatus("Template export failed", "error");
+    return;
+  }
+  const payload = res.payload || {};
+  const filename = buildExportFilename(payload.name || state.templateName || "auto-stat-template");
+  downloadTextFile(filename, `${JSON.stringify(payload, null, 2)}\n`);
+  setStatus(`Template exported: ${filename}`, "ok");
+}
+
+function triggerImportTemplateFile() {
+  if (!elements.importTemplateFile) {
+    setStatus("Import control not available", "error");
+    return;
+  }
+  elements.importTemplateFile.value = "";
+  elements.importTemplateFile.click();
+}
+
+async function importTemplateBundleFromFile(file) {
+  if (!file) return;
+  let parsed;
+  try {
+    const text = await file.text();
+    parsed = JSON.parse(text);
+  } catch (_err) {
+    setStatus("Import failed: invalid JSON file", "error");
+    return;
+  }
+  if (!parsed || typeof parsed !== "object") {
+    setStatus("Import failed: expected a JSON object bundle", "error");
+    return;
+  }
+
+  const author = (elements.templateAuthorInput.value || "editor-user").trim() || "editor-user";
+  const res = await requestJSON("/editor/template/import", {
+    method: "POST",
+    body: JSON.stringify({
+      bundle: parsed,
+      author,
+      source: "editor-ui-import",
+      context_mode: elements.previewContextMode.value || "sample",
+      fixture_name: selectedFixtureName(),
+    }),
+  });
+  if (!res.ok) {
+    updateValidationPane(res.payload, false);
+    setStatus("Template import failed", "error");
+    return;
+  }
+
+  const active = res.payload.active || {};
+  state.templateActive = decodeEscapedNewlines(active.template || parsed.template || "");
+  state.templateMeta = active || state.templateMeta;
+  state.templateName = String(active.name || parsed.name || state.templateName || "Auto Stat Template");
+  setEditorText(state.templateActive);
+  elements.templateNameInput.value = state.templateName;
+  renderTemplateMeta(state.templateMeta);
+  await loadVersionHistory();
+  setStatus("Template imported + published", "ok");
+  queueAutoPreview();
+}
+
 function applyTheme(theme) {
   const nextTheme = theme === "light" ? "light" : "dark";
   document.body.dataset.theme = nextTheme;
@@ -1028,6 +1116,8 @@ function bindUI() {
 
   document.getElementById("btnSaveDraft").addEventListener("click", saveDraft);
   document.getElementById("btnLoadDraft").addEventListener("click", loadDraft);
+  document.getElementById("btnExportTemplate").addEventListener("click", exportTemplateBundle);
+  document.getElementById("btnImportTemplate").addEventListener("click", triggerImportTemplateFile);
 
   document.getElementById("btnFormatTemplate").addEventListener("click", () => {
     setEditorText(formatTemplateText(getEditorText()));
@@ -1115,6 +1205,13 @@ function bindUI() {
       previewTemplate({ force: true });
     }
   });
+
+  if (elements.importTemplateFile) {
+    elements.importTemplateFile.addEventListener("change", async () => {
+      const file = elements.importTemplateFile.files && elements.importTemplateFile.files[0];
+      await importTemplateBundleFromFile(file || null);
+    });
+  }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {

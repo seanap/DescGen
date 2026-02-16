@@ -95,6 +95,43 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertIn("template", payload)
 
+    def test_editor_template_export_endpoint(self) -> None:
+        response = self.client.get("/editor/template/export")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("bundle_version", payload)
+        self.assertIn("template", payload)
+        self.assertIn("exported_at_utc", payload)
+
+    def test_editor_template_import_endpoint(self) -> None:
+        response = self.client.post(
+            "/editor/template/import",
+            json={
+                "bundle": {
+                    "template": "Imported {{ activity.distance_miles }}",
+                    "name": "Imported Template",
+                    "exported_at_utc": "2026-02-16T00:00:00Z",
+                },
+                "author": "tester",
+                "context_mode": "sample",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("saved_version", payload)
+        self.assertIn("active", payload)
+
+    def test_editor_template_import_rejects_invalid_payload(self) -> None:
+        response = self.client.post(
+            "/editor/template/import",
+            json={"bundle": {"name": "Missing template"}},
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "error")
+
     def test_editor_fixtures_endpoint(self) -> None:
         response = self.client.get("/editor/fixtures")
         self.assertEqual(response.status_code, 200)
