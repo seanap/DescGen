@@ -20,7 +20,7 @@
       <h3>Template Controls</h3>
       <p class="subtext">Load and manage local working drafts.</p>
       <div class="inline-actions">
-        <button id="btnLoadActive" class="btn" type="button">Load Active</button>
+        <button id="btnLoadActive" class="btn btn-ghost" type="button">Load Active</button>
         <button id="btnLoadDefault" class="btn btn-ghost" type="button">Load Default</button>
         <button id="btnLoadDraft" class="btn btn-ghost" type="button" title="Load your locally saved browser draft">Load Draft</button>
         <button id="btnSaveDraft" class="btn btn-ghost" type="button" title="Save current editor content locally in your browser">Save Draft</button>
@@ -78,11 +78,6 @@
   </aside>
   <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
-  <div class="side-launcher card">
-    <button id="btnDrawerToggle" class="side-launcher-btn" type="button" aria-label="Open workspace panel">☰</button>
-    <span>Workspace</span>
-  </div>
-
   <div class="theme-corner">
     <button id="btnSettingsToggle" class="settings-btn" type="button" aria-label="Open display and context settings">⚙</button>
     <div id="settingsPanel" class="settings-panel" aria-hidden="true">
@@ -125,18 +120,10 @@
       <div class="status-block" id="topStatus">Ready</div>
     </header>
 
-    <section class="actions card">
-      <div class="action-group">
-        <span class="group-label">Run</span>
-        <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
-        <button id="btnValidate" class="btn btn-secondary">Validate</button>
-        <button id="btnPreview" class="btn btn-secondary">Preview</button>
-      </div>
-    </section>
-
     <main class="main-layout">
       <section class="workspace-row">
         <section class="panel card editor-panel reveal" style="--delay:0.03s">
+          <button id="btnDrawerToggle" class="workspace-tab" type="button" aria-label="Open template workspace">Template Workspace</button>
           <div class="template-current-line">
             <span class="stack-label">Current Template</span>
             <strong id="currentTemplateDisplay">Auto Stat Template</strong>
@@ -171,31 +158,20 @@
             </div>
             <div id="contextSafetyBanner" class="context-banner safe">SAFE mode: sample/fixture preview with no live payload dependency.</div>
 
-            <div class="snippet-shell">
-              <div class="snippet-head">
-                <h3>Starter Templates</h3>
-                <p class="subtext">Start from a curated layout, then customize.</p>
-              </div>
-              <div class="advanced-toolbar">
-                <label for="starterTemplateSelect">Preset</label>
-                <select id="starterTemplateSelect">
-                  <option value="" selected>Loading starters...</option>
-                </select>
-                <button id="btnStarterPreview" class="btn btn-secondary" type="button">Preview Starter</button>
-                <button id="btnStarterApply" class="btn btn-ghost" type="button">Apply Starter</button>
-              </div>
-              <div id="starterTemplateMeta" class="meta">No starter selected.</div>
-            </div>
-
             <label for="templateEditor">Jinja Template</label>
             <textarea id="templateEditor" spellcheck="false"></textarea>
 
             <div class="snippet-shell">
               <div class="snippet-head">
                 <h3>Snippet Palette</h3>
-                <p class="subtext">Insert starter blocks at your cursor.</p>
+                <p class="subtext">Insert snippet blocks at your cursor.</p>
               </div>
               <div id="snippetList" class="snippets"></div>
+            </div>
+            <div class="inline-actions builder-run-actions">
+              <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
+              <button id="btnValidate" class="btn btn-secondary">Validate</button>
+              <button id="btnPreview" class="btn btn-secondary">Preview</button>
             </div>
             <div id="validationPane" class="validation"></div>
           </div>

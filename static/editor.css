@@ -249,6 +249,36 @@ h3 {
   min-height: 620px;
 }
 
+.editor-panel {
+  position: relative;
+}
+
+.workspace-tab {
+  position: absolute;
+  left: -38px;
+  top: 70px;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: color-mix(in srgb, var(--panel) 92%, white);
+  color: var(--secondary);
+  padding: 10px 6px;
+  min-height: 170px;
+  width: 38px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.workspace-tab:hover {
+  background: color-mix(in srgb, var(--panel-soft) 88%, white);
+}
+
 .preview-head {
   display: flex;
   justify-content: space-between;
@@ -258,6 +288,10 @@ h3 {
 
 .preview-tools {
   margin-top: 8px;
+}
+
+.builder-run-actions {
+  margin-top: 10px;
 }
 
 .preview-publish-actions {
@@ -932,39 +966,6 @@ label[for="templateEditor"] {
   pointer-events: auto;
 }
 
-.side-launcher {
-  position: fixed;
-  left: 12px;
-  top: 82px;
-  z-index: 58;
-  width: 66px;
-  padding: 8px 6px;
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  border-radius: 14px;
-}
-
-.side-launcher span {
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.side-launcher-btn {
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
-  color: var(--secondary);
-  font-size: 1.08rem;
-  cursor: pointer;
-  font-weight: 700;
-}
-
 .theme-corner {
   position: fixed;
   top: 10px;
@@ -1246,7 +1247,7 @@ body[data-theme="dark"] .field {
 
 body[data-theme="dark"] .field-insert,
 body[data-theme="dark"] .field-transform,
-body[data-theme="dark"] .side-launcher-btn,
+body[data-theme="dark"] .workspace-tab,
 body[data-theme="dark"] .settings-btn,
 body[data-theme="dark"] .mini-btn {
   background: #192923;
@@ -1334,8 +1335,11 @@ body[data-theme="dark"] .tour-body {
     grid-template-columns: 1fr;
   }
 
-  .side-launcher {
-    left: 8px;
-    top: 74px;
+  .workspace-tab {
+    left: -30px;
+    width: 30px;
+    min-height: 146px;
+    font-size: 0.66rem;
+    top: 54px;
   }
 }

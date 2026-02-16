@@ -151,9 +151,9 @@ const TOUR_STEPS = [
       "Use the Available Data catalog to search fields by source/group/tag. Click Insert or Insert As to add variables and filters directly into your template.",
   },
   {
-    title: "Use Starter Templates",
+    title: "Use Snippet Palette",
     body:
-      "Choose a starter preset to instantly bootstrap a layout. Preview Starter lets you test without replacing your current editor content.",
+      "Use snippet inserts and field tokens to build templates quickly without leaving the editor.",
   },
   {
     title: "Publish With Confidence",
@@ -172,7 +172,6 @@ const state = {
   repositoryLoadedTemplateId: "",
   versions: [],
   fixtures: [],
-  starterTemplates: [],
   helperTransforms: [],
   schema: null,
   schemaSource: null,
@@ -251,8 +250,6 @@ const elements = {
   repositoryTemplateMeta: document.getElementById("repositoryTemplateMeta"),
   repoTemplateNameInput: document.getElementById("repoTemplateNameInput"),
   repoTemplateAuthorInput: document.getElementById("repoTemplateAuthorInput"),
-  starterTemplateSelect: document.getElementById("starterTemplateSelect"),
-  starterTemplateMeta: document.getElementById("starterTemplateMeta"),
   importTemplateFile: document.getElementById("importTemplateFile"),
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
@@ -2119,120 +2116,6 @@ function loadDraft() {
   }
 }
 
-function selectedStarterTemplate() {
-  const selectedId = String(elements.starterTemplateSelect?.value || "").trim();
-  if (!selectedId) return null;
-  return state.starterTemplates.find((item) => String(item.id) === selectedId) || null;
-}
-
-function renderStarterTemplateMeta() {
-  if (!elements.starterTemplateMeta) return;
-  const selected = selectedStarterTemplate();
-  if (!selected) {
-    elements.starterTemplateMeta.textContent = "No starter selected.";
-    return;
-  }
-  const lines = [];
-  lines.push(`${selected.label || selected.id}`);
-  if (selected.description) lines.push(selected.description);
-  const templateText = String(selected.template || "");
-  lines.push(`Template length: ${templateText.length} chars`);
-  elements.starterTemplateMeta.textContent = lines.join("\n");
-}
-
-function renderStarterTemplateOptions() {
-  if (!elements.starterTemplateSelect) return;
-  const select = elements.starterTemplateSelect;
-  const previous = String(select.value || "");
-  select.innerHTML = "";
-
-  if (!Array.isArray(state.starterTemplates) || state.starterTemplates.length === 0) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "No starters available";
-    select.appendChild(option);
-    select.value = "";
-    renderStarterTemplateMeta();
-    return;
-  }
-
-  for (const starter of state.starterTemplates) {
-    const option = document.createElement("option");
-    option.value = String(starter.id || "");
-    option.textContent = String(starter.label || starter.id || "Starter");
-    option.title = String(starter.description || starter.label || "");
-    select.appendChild(option);
-  }
-
-  const validPrevious = state.starterTemplates.some((item) => String(item.id || "") === previous);
-  select.value = validPrevious ? previous : String(state.starterTemplates[0].id || "");
-  renderStarterTemplateMeta();
-}
-
-async function previewSelectedStarterTemplate() {
-  const selected = selectedStarterTemplate();
-  if (!selected) {
-    setStatus("No starter template selected", "error");
-    return;
-  }
-  const contextMode = elements.previewContextMode.value || "sample";
-  const fixtureName = selectedFixtureName();
-  const res = await requestJSON("/editor/preview", {
-    method: "POST",
-    body: JSON.stringify({
-      template: String(selected.template || ""),
-      context_mode: contextMode,
-      fixture_name: fixtureName,
-    }),
-  });
-  if (!res.ok) {
-    elements.previewMeta.textContent = res.payload.error || "Starter preview failed";
-    elements.previewText.textContent = "";
-    updatePreviewCharMeter();
-    setStatus("Starter preview failed", "error");
-    return;
-  }
-  elements.previewText.textContent = res.payload.preview || "";
-  elements.previewMeta.textContent = `Starter preview | ${selected.label} | context: ${res.payload.context_source || "sample"}`;
-  updatePreviewCharMeter();
-  setStatus(`Starter preview rendered: ${selected.label}`, "ok");
-}
-
-function applySelectedStarterTemplate() {
-  const selected = selectedStarterTemplate();
-  if (!selected) {
-    setStatus("No starter template selected", "error");
-    return;
-  }
-  const incoming = decodeEscapedNewlines(String(selected.template || ""));
-  const current = getEditorText();
-  if (current.trim() && current.trim() !== incoming.trim()) {
-    const confirmed = window.confirm(`Replace current editor content with starter template "${selected.label}"?`);
-    if (!confirmed) return;
-  }
-  setEditorText(incoming);
-  setEditorDirty(true);
-  switchTab("advanced");
-  setStatus(`Starter applied: ${selected.label}`, "ok");
-  queueAutoPreview();
-}
-
-async function loadStarterTemplates(startersPayload = null) {
-  if (startersPayload && Array.isArray(startersPayload)) {
-    state.starterTemplates = startersPayload;
-  } else {
-    const res = await requestJSON("/editor/starter-templates");
-    if (!res.ok || !Array.isArray(res.payload.starter_templates)) {
-      state.starterTemplates = [];
-      renderStarterTemplateOptions();
-      setStatus("Failed to load starter templates", "error");
-      return;
-    }
-    state.starterTemplates = res.payload.starter_templates;
-  }
-  renderStarterTemplateOptions();
-}
-
 function markTourSeen() {
   try {
     localStorage.setItem(TOUR_SEEN_KEY, "1");
@@ -2685,12 +2568,11 @@ async function loadEditorBootstrap() {
 
   const schemaMode = elements.schemaContextMode.value || "sample";
   const fixtureName = selectedFixtureName();
-  const [activeRes, defaultRes, schemaRes, snippetRes, starterRes, fixtureRes, versionsRes, repositoryRes] = await Promise.all([
+  const [activeRes, defaultRes, schemaRes, snippetRes, fixtureRes, versionsRes, repositoryRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
     requestJSON(`/editor/catalog?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
     requestJSON("/editor/snippets"),
-    requestJSON("/editor/starter-templates"),
     requestJSON("/editor/fixtures"),
     requestJSON("/editor/template/versions?limit=40"),
     requestJSON("/editor/repository/templates"),
@@ -2723,11 +2605,6 @@ async function loadEditorBootstrap() {
 
   if (snippetRes.ok && Array.isArray(snippetRes.payload.snippets)) {
     state.snippets = snippetRes.payload.snippets;
-  }
-  if (starterRes.ok && Array.isArray(starterRes.payload.starter_templates)) {
-    await loadStarterTemplates(starterRes.payload.starter_templates);
-  } else {
-    await loadStarterTemplates([]);
   }
   if (fixtureRes.ok && Array.isArray(fixtureRes.payload.fixtures)) {
     await loadFixtures(fixtureRes.payload.fixtures);
@@ -2987,17 +2864,6 @@ function bindUI() {
   document.getElementById("btnValidate").addEventListener("click", validateTemplate);
   document.getElementById("btnPreview").addEventListener("click", () => previewTemplate({ force: true }));
   document.getElementById("btnSave").addEventListener("click", openPublishModal);
-  if (elements.starterTemplateSelect) {
-    elements.starterTemplateSelect.addEventListener("change", renderStarterTemplateMeta);
-  }
-  const starterPreviewBtn = document.getElementById("btnStarterPreview");
-  if (starterPreviewBtn) {
-    starterPreviewBtn.addEventListener("click", previewSelectedStarterTemplate);
-  }
-  const starterApplyBtn = document.getElementById("btnStarterApply");
-  if (starterApplyBtn) {
-    starterApplyBtn.addEventListener("click", applySelectedStarterTemplate);
-  }
   const repoLoadBtn = document.getElementById("btnRepoLoad");
   if (repoLoadBtn) {
     repoLoadBtn.addEventListener("click", () => loadRepositoryTemplateIntoEditor(repositorySelectedId(), { promptIfOverwrite: true }));
