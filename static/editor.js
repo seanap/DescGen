@@ -139,6 +139,10 @@ const THEME_KEY = "auto_stat_description_editor_theme";
 const state = {
   templateActive: "",
   templateDefault: "",
+  templateName: "Auto Stat Template",
+  templateMeta: null,
+  versions: [],
+  fixtures: [],
   schema: null,
   schemaSource: null,
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
@@ -161,8 +165,13 @@ const elements = {
   schemaContextMode: document.getElementById("schemaContextMode"),
   schemaSourceFilter: document.getElementById("schemaSourceFilter"),
   previewContextMode: document.getElementById("previewContextMode"),
+  previewFixtureName: document.getElementById("previewFixtureName"),
+  templateNameInput: document.getElementById("templateNameInput"),
+  templateAuthorInput: document.getElementById("templateAuthorInput"),
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
+  templateMeta: document.getElementById("templateMeta"),
+  versionList: document.getElementById("versionList"),
   autoPreviewToggle: document.getElementById("autoPreviewToggle"),
   themeToggle: document.getElementById("themeToggle"),
 };
@@ -482,6 +491,9 @@ function switchTab(name) {
 
 async function loadSchema(mode) {
   const query = new URLSearchParams({ context_mode: mode || "sample" });
+  if ((mode || "sample") !== "latest") {
+    query.set("fixture_name", elements.previewFixtureName.value || "default");
+  }
   const res = await requestJSON(`/editor/schema?${query.toString()}`);
   if (!res.ok) {
     setStatus("Failed to load data catalog", "error");
@@ -492,6 +504,151 @@ async function loadSchema(mode) {
   state.schemaSource = res.payload.context_source || null;
   refreshSourceFilterOptions();
   renderSchemaCatalog(elements.schemaSearch.value || "");
+}
+
+function selectedFixtureName() {
+  return (elements.previewFixtureName.value || "default").trim().toLowerCase();
+}
+
+function renderTemplateMeta(meta) {
+  if (!meta) {
+    elements.templateMeta.textContent = "No template metadata.";
+    return;
+  }
+  const lines = [];
+  lines.push(`Name: ${meta.name || "Auto Stat Template"}`);
+  lines.push(`Version: ${meta.current_version || "none"}`);
+  lines.push(`Updated: ${meta.updated_at_utc || "unknown"}`);
+  lines.push(`By: ${meta.updated_by || "unknown"} | Source: ${meta.source || "unknown"}`);
+  elements.templateMeta.textContent = lines.join("\n");
+}
+
+function renderVersionHistory() {
+  elements.versionList.innerHTML = "";
+  if (!Array.isArray(state.versions) || state.versions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "meta";
+    empty.textContent = "No saved versions yet.";
+    elements.versionList.appendChild(empty);
+    return;
+  }
+
+  for (const version of state.versions) {
+    const row = document.createElement("div");
+    row.className = "field";
+
+    const body = document.createElement("div");
+    const key = document.createElement("div");
+    key.className = "field-key";
+    key.textContent = `${version.version_id || "unknown"} | ${version.name || "Template"}`;
+
+    const type = document.createElement("div");
+    type.className = "field-type";
+    type.textContent = `${version.operation || "save"} | ${version.author || "unknown"} | ${version.created_at_utc || "unknown"}`;
+
+    const source = document.createElement("div");
+    source.className = "field-source";
+    source.textContent = version.notes
+      ? `Source: ${version.source || "unknown"} (${version.notes})`
+      : `Source: ${version.source || "unknown"}`;
+
+    body.appendChild(key);
+    body.appendChild(type);
+    body.appendChild(source);
+
+    const controls = document.createElement("div");
+    controls.className = "row-controls";
+
+    const loadBtn = document.createElement("button");
+    loadBtn.className = "field-insert";
+    loadBtn.textContent = "Load";
+    loadBtn.addEventListener("click", async () => {
+      await loadTemplateVersion(String(version.version_id || ""));
+    });
+
+    const rollbackBtn = document.createElement("button");
+    rollbackBtn.className = "field-insert";
+    rollbackBtn.textContent = "Rollback";
+    rollbackBtn.addEventListener("click", async () => {
+      await rollbackTemplateVersion(String(version.version_id || ""));
+    });
+
+    controls.appendChild(loadBtn);
+    controls.appendChild(rollbackBtn);
+
+    row.appendChild(body);
+    row.appendChild(controls);
+    elements.versionList.appendChild(row);
+  }
+}
+
+async function loadFixtures(fixturesPayload = null) {
+  if (fixturesPayload && Array.isArray(fixturesPayload)) {
+    state.fixtures = fixturesPayload;
+  } else {
+    const res = await requestJSON("/editor/fixtures");
+    if (!res.ok || !Array.isArray(res.payload.fixtures)) {
+      setStatus("Failed to load fixtures", "error");
+      return;
+    }
+    state.fixtures = res.payload.fixtures;
+  }
+  const previous = selectedFixtureName();
+  elements.previewFixtureName.innerHTML = "";
+  for (const fixture of state.fixtures) {
+    const option = document.createElement("option");
+    option.value = fixture.name;
+    option.textContent = fixture.label || fixture.name;
+    option.title = fixture.description || fixture.name;
+    elements.previewFixtureName.appendChild(option);
+  }
+  const names = state.fixtures.map((x) => String(x.name || ""));
+  elements.previewFixtureName.value = names.includes(previous) ? previous : (names[0] || "default");
+}
+
+async function loadVersionHistory() {
+  const res = await requestJSON("/editor/template/versions?limit=40");
+  if (!res.ok) {
+    setStatus("Failed to load template history", "error");
+    return;
+  }
+  state.versions = Array.isArray(res.payload.versions) ? res.payload.versions : [];
+  renderVersionHistory();
+}
+
+async function loadTemplateVersion(versionId) {
+  if (!versionId) return;
+  const res = await requestJSON(`/editor/template/version/${encodeURIComponent(versionId)}`);
+  if (!res.ok) {
+    setStatus("Failed to load version", "error");
+    return;
+  }
+  const record = res.payload.version || {};
+  setEditorText(record.template || "");
+  switchTab("advanced");
+  setStatus(`Loaded version ${versionId}`, "ok");
+  queueAutoPreview();
+}
+
+async function rollbackTemplateVersion(versionId) {
+  if (!versionId) return;
+  const ok = window.confirm(`Rollback active template to ${versionId}?`);
+  if (!ok) return;
+
+  const res = await requestJSON("/editor/template/rollback", {
+    method: "POST",
+    body: JSON.stringify({
+      version_id: versionId,
+      author: elements.templateAuthorInput.value || "editor-user",
+      source: "editor-rollback",
+    }),
+  });
+  if (!res.ok) {
+    setStatus("Rollback failed", "error");
+    return;
+  }
+  await loadEditorBootstrap();
+  setStatus(`Rolled back to ${versionId}`, "ok");
 }
 
 function saveDraft() {
@@ -545,11 +702,14 @@ async function loadEditorBootstrap() {
   setStatus("Loading editor data...");
 
   const schemaMode = elements.schemaContextMode.value || "sample";
-  const [activeRes, defaultRes, schemaRes, snippetRes] = await Promise.all([
+  const fixtureName = selectedFixtureName();
+  const [activeRes, defaultRes, schemaRes, snippetRes, fixtureRes, versionsRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
-    requestJSON(`/editor/schema?context_mode=${encodeURIComponent(schemaMode)}`),
+    requestJSON(`/editor/schema?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
     requestJSON("/editor/snippets"),
+    requestJSON("/editor/fixtures"),
+    requestJSON("/editor/template/versions?limit=40"),
   ]);
 
   if (!activeRes.ok || !defaultRes.ok) {
@@ -559,8 +719,14 @@ async function loadEditorBootstrap() {
 
   state.templateActive = decodeEscapedNewlines(activeRes.payload.template || "");
   state.templateDefault = decodeEscapedNewlines(defaultRes.payload.template || "");
+  state.templateMeta = activeRes.payload || null;
+  state.templateName = String(activeRes.payload.name || "Auto Stat Template");
 
   setEditorText(state.templateActive);
+  elements.templateNameInput.value = state.templateName;
+  if (!elements.templateAuthorInput.value.trim()) {
+    elements.templateAuthorInput.value = String(activeRes.payload.updated_by || "editor-user");
+  }
 
   if (schemaRes.ok) {
     state.schema = schemaRes.payload.schema || null;
@@ -570,11 +736,19 @@ async function loadEditorBootstrap() {
   if (snippetRes.ok && Array.isArray(snippetRes.payload.snippets)) {
     state.snippets = snippetRes.payload.snippets;
   }
+  if (fixtureRes.ok && Array.isArray(fixtureRes.payload.fixtures)) {
+    await loadFixtures(fixtureRes.payload.fixtures);
+  }
+  if (versionsRes.ok && Array.isArray(versionsRes.payload.versions)) {
+    state.versions = versionsRes.payload.versions;
+  }
 
   refreshSourceFilterOptions();
   renderSchemaCatalog("");
   renderSimpleSections();
   renderSnippets();
+  renderTemplateMeta(state.templateMeta);
+  renderVersionHistory();
 
   state.autoPreview = true;
   elements.autoPreviewToggle.checked = true;
@@ -589,9 +763,10 @@ async function loadEditorBootstrap() {
 async function validateTemplate() {
   const template = getEditorText();
   const contextMode = elements.previewContextMode.value || "sample";
+  const fixtureName = selectedFixtureName();
   const res = await requestJSON("/editor/validate", {
     method: "POST",
-    body: JSON.stringify({ template, context_mode: contextMode }),
+    body: JSON.stringify({ template, context_mode: contextMode, fixture_name: fixtureName }),
   });
 
   updateValidationPane(res.payload, res.ok);
@@ -602,11 +777,12 @@ async function previewTemplate(options = {}) {
   const { force = false } = options;
   const template = getEditorText();
   const contextMode = elements.previewContextMode.value || "sample";
+  const fixtureName = selectedFixtureName();
 
   const requestId = ++state.previewRequestId;
   const res = await requestJSON("/editor/preview", {
     method: "POST",
-    body: JSON.stringify({ template, context_mode: contextMode }),
+    body: JSON.stringify({ template, context_mode: contextMode, fixture_name: fixtureName }),
   });
 
   if (requestId !== state.previewRequestId) {
@@ -642,9 +818,16 @@ function queueAutoPreview() {
 
 async function saveTemplate() {
   const template = getEditorText();
+  const author = (elements.templateAuthorInput.value || "editor-user").trim();
+  const name = (elements.templateNameInput.value || "Auto Stat Template").trim();
   const res = await requestJSON("/editor/template", {
     method: "PUT",
-    body: JSON.stringify({ template }),
+    body: JSON.stringify({
+      template,
+      author: author || "editor-user",
+      source: "editor-ui",
+      name: name || "Auto Stat Template",
+    }),
   });
 
   if (!res.ok) {
@@ -655,6 +838,9 @@ async function saveTemplate() {
 
   updateValidationPane(res.payload, true);
   state.templateActive = template;
+  state.templateMeta = res.payload.active || state.templateMeta;
+  renderTemplateMeta(state.templateMeta);
+  await loadVersionHistory();
   setStatus("Template saved + published", "ok");
 }
 
@@ -703,6 +889,10 @@ function bindUI() {
   document.getElementById("btnPreview").addEventListener("click", () => previewTemplate({ force: true }));
   document.getElementById("btnSave").addEventListener("click", saveTemplate);
   document.getElementById("btnCopyPreview").addEventListener("click", copyPreview);
+  document.getElementById("btnRefreshHistory").addEventListener("click", async () => {
+    await loadVersionHistory();
+    setStatus("Template history refreshed", "ok");
+  });
 
   document.getElementById("btnSimpleApply").addEventListener("click", () => {
     setEditorText(buildTemplateFromSimple());
@@ -731,6 +921,11 @@ function bindUI() {
   });
 
   elements.previewContextMode.addEventListener("change", () => {
+    queueAutoPreview();
+  });
+
+  elements.previewFixtureName.addEventListener("change", async () => {
+    await loadSchema(elements.schemaContextMode.value || "sample");
     queueAutoPreview();
   });
 

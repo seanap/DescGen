@@ -11,6 +11,10 @@ from description_template import (
     get_default_template,
     get_active_template,
     get_sample_template_context,
+    get_template_version,
+    list_sample_template_fixtures,
+    list_template_versions,
+    rollback_template_version,
     render_template_text,
     save_active_template,
     validate_template_text,
@@ -53,21 +57,27 @@ def _latest_template_context() -> dict | None:
 
 def _resolve_context_mode(raw_mode: str | None) -> str:
     mode = (raw_mode or "sample").strip().lower()
-    if mode not in {"latest", "sample", "latest_or_sample"}:
-        raise ValueError("context_mode must be one of: latest, sample, latest_or_sample.")
+    if mode not in {"latest", "sample", "latest_or_sample", "fixture"}:
+        raise ValueError("context_mode must be one of: latest, sample, latest_or_sample, fixture.")
     return mode
 
 
-def _context_for_mode(mode: str) -> tuple[dict | None, str]:
+def _resolve_fixture_name(raw_name: str | None) -> str:
+    value = (raw_name or "default").strip().lower()
+    return value or "default"
+
+
+def _context_for_mode(mode: str, fixture_name: str | None = None) -> tuple[dict | None, str]:
+    fixture = _resolve_fixture_name(fixture_name)
     if mode == "latest":
         return _latest_template_context(), "latest"
-    if mode == "sample":
-        return get_sample_template_context(), "sample"
+    if mode in {"sample", "fixture"}:
+        return get_sample_template_context(fixture), f"sample:{fixture}"
 
     latest = _latest_template_context()
     if latest is not None:
         return latest, "latest"
-    return get_sample_template_context(), "sample"
+    return get_sample_template_context(fixture), f"sample:{fixture}"
 
 
 @app.get("/health")
@@ -132,6 +142,12 @@ def editor_template_get() -> tuple[dict, int]:
         "template": active["template"],
         "is_custom": active["is_custom"],
         "template_path": active["path"],
+        "name": active.get("name"),
+        "current_version": active.get("current_version"),
+        "updated_at_utc": active.get("updated_at_utc"),
+        "updated_by": active.get("updated_by"),
+        "source": active.get("source"),
+        "metadata": active.get("metadata"),
     }, 200
 
 
@@ -143,18 +159,75 @@ def editor_template_default_get() -> tuple[dict, int]:
     }, 200
 
 
+@app.get("/editor/fixtures")
+def editor_fixtures_get() -> tuple[dict, int]:
+    return {
+        "status": "ok",
+        "fixtures": list_sample_template_fixtures(),
+    }, 200
+
+
+@app.get("/editor/template/versions")
+def editor_template_versions_get() -> tuple[dict, int]:
+    limit_raw = request.args.get("limit", "30")
+    try:
+        limit = max(1, min(200, int(limit_raw)))
+    except ValueError:
+        limit = 30
+    versions = list_template_versions(settings, limit=limit)
+    return {
+        "status": "ok",
+        "versions": versions,
+    }, 200
+
+
+@app.get("/editor/template/version/<string:version_id>")
+def editor_template_version_get(version_id: str) -> tuple[dict, int]:
+    record = get_template_version(settings, version_id)
+    if not record:
+        return {"status": "error", "error": "Unknown template version."}, 404
+    return {"status": "ok", "version": record}, 200
+
+
+@app.post("/editor/template/rollback")
+def editor_template_rollback_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    version_id = body.get("version_id")
+    if not isinstance(version_id, str) or not version_id.strip():
+        return {"status": "error", "error": "version_id is required."}, 400
+    author = str(body.get("author") or "editor-user")
+    source = str(body.get("source") or "editor-rollback")
+    notes = body.get("notes")
+    try:
+        saved = rollback_template_version(
+            settings,
+            version_id=version_id.strip(),
+            author=author,
+            source=source,
+            notes=str(notes) if notes is not None else None,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {
+        "status": "ok",
+        "template_path": saved.get("path"),
+        "saved_version": saved.get("saved_version"),
+        "active": saved,
+    }, 200
+
+
 @app.get("/editor/snippets")
 def editor_snippets_get() -> tuple[dict, int]:
     return {
         "status": "ok",
         "snippets": get_editor_snippets(),
-        "context_modes": ["latest", "sample", "latest_or_sample"],
+        "context_modes": ["latest", "sample", "latest_or_sample", "fixture"],
     }, 200
 
 
 @app.get("/editor/context/sample")
 def editor_sample_context_get() -> tuple[dict, int]:
-    context = get_sample_template_context()
+    context = get_sample_template_context(request.args.get("fixture"))
     return {
         "status": "ok",
         "context": context,
@@ -174,10 +247,23 @@ def editor_template_put() -> tuple[dict, int]:
     if not validation["valid"]:
         return {"status": "error", "validation": validation}, 400
 
-    path = save_active_template(settings, template_text)
+    author = str(body.get("author") or "editor-user")
+    source = str(body.get("source") or "editor-ui")
+    name = body.get("name")
+    notes = body.get("notes")
+    saved = save_active_template(
+        settings,
+        template_text,
+        name=str(name) if name is not None else None,
+        author=author,
+        source=source,
+        notes=str(notes) if notes is not None else None,
+    )
     return {
         "status": "ok",
-        "template_path": str(path),
+        "template_path": str(saved.get("path")),
+        "saved_version": saved.get("saved_version"),
+        "active": saved,
         "validation": validation,
     }, 200
 
@@ -196,7 +282,10 @@ def editor_validate() -> tuple[dict, int]:
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400
 
-    context, context_source = _context_for_mode(context_mode)
+    context, context_source = _context_for_mode(
+        context_mode,
+        fixture_name=body.get("fixture_name"),
+    )
     validation = validate_template_text(template_text, context)
     return {
         "status": "ok" if validation["valid"] else "error",
@@ -220,7 +309,10 @@ def editor_preview() -> tuple[dict, int]:
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400
 
-    context, context_source = _context_for_mode(context_mode)
+    context, context_source = _context_for_mode(
+        context_mode,
+        fixture_name=body.get("fixture_name"),
+    )
     if context is None:
         return {
             "status": "error",
@@ -246,7 +338,10 @@ def editor_schema() -> tuple[dict, int]:
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400
 
-    context, context_source = _context_for_mode(context_mode)
+    context, context_source = _context_for_mode(
+        context_mode,
+        fixture_name=request.args.get("fixture_name"),
+    )
     if context is None:
         return {
             "status": "ok",

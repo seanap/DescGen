@@ -5,12 +5,16 @@ from types import SimpleNamespace
 
 from description_template import (
     build_context_schema,
+    get_template_version,
     get_editor_snippets,
     get_active_template,
     get_default_template,
     get_sample_template_context,
+    list_sample_template_fixtures,
+    list_template_versions,
     render_template_text,
     render_with_active_template,
+    rollback_template_version,
     save_active_template,
     validate_template_text,
 )
@@ -37,6 +41,7 @@ class TestDescriptionTemplate(unittest.TestCase):
             active = get_active_template(settings)
             self.assertTrue(active["is_custom"])
             self.assertEqual(active["template"], "Hello {{ name }}")
+            self.assertTrue(active.get("current_version"))
 
     def test_validate_and_render(self) -> None:
         context = {"name": "Runner"}
@@ -46,6 +51,12 @@ class TestDescriptionTemplate(unittest.TestCase):
         result = render_template_text("Hello {{ name }}", context)
         self.assertTrue(result["ok"])
         self.assertEqual(result["description"], "Hello Runner")
+
+    def test_validate_rejects_forbidden_constructs(self) -> None:
+        context = {"value": "ok"}
+        validation = validate_template_text("{% include 'x' %}", context)
+        self.assertFalse(validation["valid"])
+        self.assertTrue(validation["errors"])
 
     def test_validate_warns_on_unknown_top_level(self) -> None:
         context = {"name": "Runner"}
@@ -154,6 +165,33 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("periods", context)
         self.assertIn("crono", context)
         self.assertIn("average_net_kcal_per_day", context["crono"])
+
+    def test_sample_fixture_context(self) -> None:
+        winter = get_sample_template_context("winter_grind")
+        self.assertIn("weather", winter)
+        self.assertIn("misery_index", winter["weather"])
+        fixtures = list_sample_template_fixtures()
+        self.assertGreaterEqual(len(fixtures), 2)
+        self.assertTrue(any(item["name"] == "winter_grind" for item in fixtures))
+
+    def test_template_versions_and_rollback(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+            first = save_active_template(settings, "First {{ value }}", author="alice", source="test")
+            second = save_active_template(settings, "Second {{ value }}", author="bob", source="test")
+            self.assertNotEqual(first.get("saved_version"), second.get("saved_version"))
+
+            versions = list_template_versions(settings)
+            self.assertGreaterEqual(len(versions), 2)
+            version_id = versions[0]["version_id"]
+            loaded = get_template_version(settings, version_id)
+            self.assertIsNotNone(loaded)
+            self.assertIn("template", loaded)
+
+            rolled = rollback_template_version(settings, version_id=versions[-1]["version_id"], author="tester")
+            self.assertTrue(rolled["is_custom"])
+            self.assertIn("saved_version", rolled)
 
     def test_editor_snippets_shape(self) -> None:
         snippets = get_editor_snippets()

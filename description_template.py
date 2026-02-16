@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import hashlib
+import json
 from pathlib import Path
+import re
 from typing import Any
 
 from jinja2 import StrictUndefined, TemplateError, meta
@@ -31,6 +34,12 @@ DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
 🏃 {{ periods.month.gap }} | 🗺️ {{ periods.month.distance_miles }} | 🏔️ {{ periods.month.elevation_feet }}' | 🕓 {{ periods.month.duration }} | 🍺 {{ periods.month.beers }}
 🌍 This Year:
 🏃 {{ periods.year.gap }} | 🗺️ {{ periods.year.distance_miles }} | 🏔️ {{ periods.year.elevation_feet }}' | 🕓 {{ periods.year.duration }} | 🍺 {{ periods.year.beers }}"""
+
+MAX_TEMPLATE_CHARS = 16000
+FORBIDDEN_TEMPLATE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"{%\s*(import|from|include|extends|macro|call)\b", re.IGNORECASE), "Template uses unsupported Jinja control tag."),
+    (re.compile(r"\b__\w+\b"), "Template references dunder-style attributes, which are not allowed."),
+]
 
 
 EDITOR_SNIPPETS: list[dict[str, str]] = [
@@ -176,6 +185,76 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
 }
 
 
+def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
+    default_ctx = deepcopy(SAMPLE_TEMPLATE_CONTEXT)
+
+    winter_ctx = deepcopy(default_ctx)
+    winter_ctx["weather"]["misery_index"] = 34.7
+    winter_ctx["weather"]["misery_description"] = "🥶 Oppressively cold"
+    winter_ctx["weather"]["aqi"] = 11
+    winter_ctx["weather"]["details"] = {
+        "temperature_f": 24.1,
+        "dew_point_f": 5.0,
+        "humidity_percent": 43,
+        "wind_mph": 16.5,
+        "condition_text": "Windy",
+    }
+    winter_ctx["activity"]["gap_pace"] = "8:42/mi"
+    winter_ctx["activity"]["distance_miles"] = "6.10"
+    winter_ctx["activity"]["elevation_feet"] = 441
+    winter_ctx["activity"]["time"] = "53:03"
+    winter_ctx["activity"]["beers"] = "3.1"
+    winter_ctx["crono"]["average_net_kcal_per_day"] = -842.0
+    winter_ctx["crono"]["average_status"] = "deficit"
+    winter_ctx["crono"]["protein_g"] = 169.0
+    winter_ctx["crono"]["carbs_g"] = 153.0
+
+    humid_ctx = deepcopy(default_ctx)
+    humid_ctx["weather"]["misery_index"] = 172.2
+    humid_ctx["weather"]["misery_description"] = "😡 Miserable"
+    humid_ctx["weather"]["aqi"] = 67
+    humid_ctx["weather"]["details"] = {
+        "temperature_f": 89.8,
+        "dew_point_f": 80.2,
+        "humidity_percent": 78,
+        "wind_mph": 2.7,
+        "condition_text": "Humid",
+    }
+    humid_ctx["activity"]["gap_pace"] = "8:31/mi"
+    humid_ctx["activity"]["distance_miles"] = "9.28"
+    humid_ctx["activity"]["elevation_feet"] = 518
+    humid_ctx["activity"]["time"] = "1:19:16"
+    humid_ctx["activity"]["beers"] = "6.7"
+    humid_ctx["crono"]["average_net_kcal_per_day"] = 204.0
+    humid_ctx["crono"]["average_status"] = "surplus"
+    humid_ctx["crono"]["protein_g"] = 132.0
+    humid_ctx["crono"]["carbs_g"] = 301.0
+
+    return {
+        "default": {
+            "name": "default",
+            "label": "Default",
+            "description": "Balanced weather and training context.",
+            "context": default_ctx,
+        },
+        "winter_grind": {
+            "name": "winter_grind",
+            "label": "Winter Grind",
+            "description": "Cold and windy run profile for edge-case formatting.",
+            "context": winter_ctx,
+        },
+        "humid_hammer": {
+            "name": "humid_hammer",
+            "label": "Humid Hammer",
+            "description": "Hot + humid profile for heat-stress rendering checks.",
+            "context": humid_ctx,
+        },
+    }
+
+
+SAMPLE_TEMPLATE_FIXTURES = _build_sample_fixtures()
+
+
 def _template_environment() -> SandboxedEnvironment:
     return SandboxedEnvironment(
         autoescape=False,
@@ -203,16 +282,194 @@ def get_editor_snippets() -> list[dict[str, str]]:
     return deepcopy(EDITOR_SNIPPETS)
 
 
-def get_sample_template_context() -> dict[str, Any]:
-    return deepcopy(SAMPLE_TEMPLATE_CONTEXT)
+def list_sample_template_fixtures() -> list[dict[str, str]]:
+    fixtures: list[dict[str, str]] = []
+    for fixture in SAMPLE_TEMPLATE_FIXTURES.values():
+        fixtures.append(
+            {
+                "name": str(fixture["name"]),
+                "label": str(fixture["label"]),
+                "description": str(fixture["description"]),
+            }
+        )
+    fixtures.sort(key=lambda item: item["name"])
+    return fixtures
+
+
+def get_sample_template_context(fixture_name: str | None = None) -> dict[str, Any]:
+    key = (fixture_name or "default").strip().lower()
+    fixture = SAMPLE_TEMPLATE_FIXTURES.get(key) or SAMPLE_TEMPLATE_FIXTURES["default"]
+    return deepcopy(fixture["context"])
 
 
 def _template_path(settings: Settings) -> Path:
     return settings.description_template_file
 
 
+def _template_meta_path(settings: Settings) -> Path:
+    return _template_path(settings).with_suffix(".meta.json")
+
+
+def _template_versions_dir(settings: Settings) -> Path:
+    return _template_path(settings).parent / "template_versions"
+
+
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _new_version_id(template_text: str) -> str:
+    now = datetime.now(timezone.utc)
+    digest = hashlib.sha256(template_text.encode("utf-8")).hexdigest()[:10]
+    return f"v{now.strftime('%Y%m%dT%H%M%S%fZ')}-{digest}"
+
+
+def _template_metadata_defaults() -> dict[str, Any]:
+    return {
+        "name": "Auto Stat Template",
+        "current_version": None,
+        "updated_at_utc": None,
+        "updated_by": "system",
+        "source": "default",
+    }
+
+
+def _load_template_metadata(settings: Settings) -> dict[str, Any]:
+    data = _read_json_file(_template_meta_path(settings))
+    if data is None:
+        return _template_metadata_defaults()
+    defaults = _template_metadata_defaults()
+    defaults.update({k: v for k, v in data.items() if k in defaults})
+    return defaults
+
+
+def _save_template_metadata(settings: Settings, metadata: dict[str, Any]) -> None:
+    merged = _template_metadata_defaults()
+    merged.update({k: v for k, v in metadata.items() if k in merged})
+    _write_json_file(_template_meta_path(settings), merged)
+
+
+def _build_template_version_record(
+    *,
+    template_text: str,
+    name: str,
+    author: str,
+    source: str,
+    notes: str | None,
+    operation: str,
+    rolled_back_from: str | None = None,
+) -> dict[str, Any]:
+    normalized = _normalize_template_text(template_text)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    version_id = _new_version_id(normalized)
+    return {
+        "version_id": version_id,
+        "name": name.strip() or "Auto Stat Template",
+        "author": author.strip() or "unknown",
+        "source": source.strip() or "editor",
+        "operation": operation,
+        "notes": (notes or "").strip() or None,
+        "rolled_back_from": rolled_back_from,
+        "created_at_utc": now_iso,
+        "template_sha256": hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
+        "template": normalized,
+    }
+
+
+def _store_template_version(settings: Settings, record: dict[str, Any]) -> None:
+    versions_dir = _template_versions_dir(settings)
+    version_id = str(record.get("version_id") or "").strip()
+    if not version_id:
+        raise ValueError("Template version record missing version_id.")
+    version_path = versions_dir / f"{version_id}.json"
+    _write_json_file(version_path, record)
+
+
+def get_template_version(settings: Settings, version_id: str) -> dict[str, Any] | None:
+    version_key = version_id.strip()
+    if not version_key:
+        return None
+    version_path = _template_versions_dir(settings) / f"{version_key}.json"
+    return _read_json_file(version_path)
+
+
+def list_template_versions(settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
+    versions_dir = _template_versions_dir(settings)
+    if not versions_dir.exists():
+        return []
+
+    records: list[dict[str, Any]] = []
+    for path in sorted(versions_dir.glob("*.json"), reverse=True):
+        record = _read_json_file(path)
+        if not record:
+            continue
+        records.append(
+            {
+                "version_id": record.get("version_id"),
+                "name": record.get("name"),
+                "author": record.get("author"),
+                "source": record.get("source"),
+                "operation": record.get("operation"),
+                "notes": record.get("notes"),
+                "rolled_back_from": record.get("rolled_back_from"),
+                "created_at_utc": record.get("created_at_utc"),
+                "template_sha256": record.get("template_sha256"),
+            }
+        )
+        if len(records) >= max(1, int(limit)):
+            break
+    return records
+
+
+def rollback_template_version(
+    settings: Settings,
+    *,
+    version_id: str,
+    author: str = "unknown",
+    source: str = "rollback",
+    notes: str | None = None,
+) -> dict[str, Any]:
+    record = get_template_version(settings, version_id)
+    if not record:
+        raise ValueError(f"Unknown template version: {version_id}")
+
+    template_text = record.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        raise ValueError("Selected template version has no template body.")
+
+    current = get_active_template(settings)
+    rollback_name = str(record.get("name") or current.get("name") or "Auto Stat Template")
+    saved = save_active_template(
+        settings,
+        template_text,
+        name=rollback_name,
+        author=author,
+        source=source,
+        notes=notes or f"Rollback to {version_id}",
+        operation="rollback",
+        rolled_back_from=version_id,
+    )
+    return saved
+
+
 def get_active_template(settings: Settings) -> dict[str, Any]:
     path = _template_path(settings)
+    metadata = _load_template_metadata(settings)
     if path.exists():
         text = path.read_text(encoding="utf-8").strip()
         if text:
@@ -220,19 +477,98 @@ def get_active_template(settings: Settings) -> dict[str, Any]:
                 "template": _normalize_template_text(text),
                 "is_custom": True,
                 "path": str(path),
+                "name": metadata.get("name"),
+                "current_version": metadata.get("current_version"),
+                "updated_at_utc": metadata.get("updated_at_utc"),
+                "updated_by": metadata.get("updated_by"),
+                "source": metadata.get("source"),
+                "metadata": metadata,
             }
+    default_meta = _template_metadata_defaults()
     return {
         "template": get_default_template(),
         "is_custom": False,
         "path": str(path),
+        "name": default_meta["name"],
+        "current_version": None,
+        "updated_at_utc": None,
+        "updated_by": default_meta["updated_by"],
+        "source": default_meta["source"],
+        "metadata": default_meta,
     }
 
 
-def save_active_template(settings: Settings, template_text: str) -> Path:
+def save_active_template(
+    settings: Settings,
+    template_text: str,
+    *,
+    name: str | None = None,
+    author: str = "unknown",
+    source: str = "editor",
+    notes: str | None = None,
+    operation: str = "save",
+    rolled_back_from: str | None = None,
+) -> dict[str, Any]:
     path = _template_path(settings)
+    normalized = _normalize_template_text(template_text)
+    if not normalized:
+        raise ValueError("template_text must not be empty.")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_normalize_template_text(template_text) + "\n", encoding="utf-8")
-    return path
+    path.write_text(normalized + "\n", encoding="utf-8")
+
+    current = get_active_template(settings)
+    record = _build_template_version_record(
+        template_text=normalized,
+        name=name or str(current.get("name") or "Auto Stat Template"),
+        author=author,
+        source=source,
+        notes=notes,
+        operation=operation,
+        rolled_back_from=rolled_back_from,
+    )
+    _store_template_version(settings, record)
+
+    metadata = _template_metadata_defaults()
+    metadata.update(
+        {
+            "name": record["name"],
+            "current_version": record["version_id"],
+            "updated_at_utc": record["created_at_utc"],
+            "updated_by": record["author"],
+            "source": record["source"],
+        }
+    )
+    _save_template_metadata(settings, metadata)
+
+    active = get_active_template(settings)
+    active["saved_version"] = record["version_id"]
+    return active
+
+
+def _lint_template_text(template_text: str) -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
+    errors: list[str] = []
+
+    if len(template_text) > MAX_TEMPLATE_CHARS:
+        errors.append(
+            f"Template is too large ({len(template_text)} chars). Max allowed: {MAX_TEMPLATE_CHARS}."
+        )
+
+    for pattern, message in FORBIDDEN_TEMPLATE_PATTERNS:
+        if pattern.search(template_text):
+            errors.append(message)
+
+    if "raw." in template_text:
+        warnings.append("Template uses raw payload fields; prefer curated fields for stability.")
+
+    long_line_count = 0
+    for line in template_text.splitlines():
+        if len(line) > 240:
+            long_line_count += 1
+    if long_line_count:
+        warnings.append(f"Template has {long_line_count} long line(s) over 240 chars.")
+
+    return warnings, errors
 
 
 def validate_template_text(template_text: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -242,6 +578,17 @@ def validate_template_text(template_text: str, context: dict[str, Any] | None = 
     errors: list[str] = []
     warnings: list[str] = []
     undeclared: list[str] = []
+    lint_warnings, lint_errors = _lint_template_text(template_text)
+    warnings.extend(lint_warnings)
+    errors.extend(lint_errors)
+
+    if errors:
+        return {
+            "valid": False,
+            "errors": errors,
+            "warnings": warnings,
+            "undeclared_variables": undeclared,
+        }
 
     try:
         ast = env.parse(template_text)
