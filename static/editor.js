@@ -152,6 +152,7 @@ const state = {
   autoPreviewTimer: null,
   previewRequestId: 0,
   editorTouched: false,
+  publishModalValidationOk: false,
 };
 
 const elements = {
@@ -172,6 +173,7 @@ const elements = {
   schemaCuratedOnly: document.getElementById("schemaCuratedOnly"),
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
+  contextSafetyBanner: document.getElementById("contextSafetyBanner"),
   templateNameInput: document.getElementById("templateNameInput"),
   templateAuthorInput: document.getElementById("templateAuthorInput"),
   importTemplateFile: document.getElementById("importTemplateFile"),
@@ -181,11 +183,89 @@ const elements = {
   versionList: document.getElementById("versionList"),
   autoPreviewToggle: document.getElementById("autoPreviewToggle"),
   themeToggle: document.getElementById("themeToggle"),
+  publishModal: document.getElementById("publishModal"),
+  publishCloseBtn: document.getElementById("publishCloseBtn"),
+  publishCancelBtn: document.getElementById("publishCancelBtn"),
+  publishConfirmBtn: document.getElementById("publishConfirmBtn"),
+  publishValidationSummary: document.getElementById("publishValidationSummary"),
+  publishDiffSummary: document.getElementById("publishDiffSummary"),
+  publishDiffView: document.getElementById("publishDiffView"),
+  publishModeBanner: document.getElementById("publishModeBanner"),
+  publishChecklistReviewed: document.getElementById("publishChecklistReviewed"),
+  publishChecklistReplace: document.getElementById("publishChecklistReplace"),
 };
 
 function setStatus(text, tone = "neutral") {
   elements.topStatus.textContent = text;
   elements.topStatus.dataset.tone = tone;
+}
+
+function contextModeProfile(mode) {
+  const value = String(mode || "sample");
+  if (value === "sample") {
+    return {
+      level: "safe",
+      label: "SAFE",
+      text: "SAFE mode: sample context only. No live payload dependency and no upstream API calls.",
+    };
+  }
+  if (value === "fixture") {
+    const fixture = selectedFixtureName();
+    return {
+      level: "safe",
+      label: "SAFE",
+      text: `SAFE mode: fixture '${fixture}'. No live payload dependency and no upstream API calls.`,
+    };
+  }
+  if (value === "latest_or_sample") {
+    return {
+      level: "live",
+      label: "LIVE",
+      text: "LIVE mode: latest captured payload with sample fallback. Editor preview does not call upstream services.",
+    };
+  }
+  return {
+    level: "live",
+    label: "LIVE",
+    text: "LIVE mode: latest captured payload. Editor preview does not call upstream services.",
+  };
+}
+
+function renderContextSafetyBanner() {
+  if (!elements.contextSafetyBanner) return;
+  const profile = contextModeProfile(elements.previewContextMode.value || "sample");
+  elements.contextSafetyBanner.classList.remove("safe", "live");
+  elements.contextSafetyBanner.classList.add(profile.level);
+  elements.contextSafetyBanner.textContent = profile.text;
+}
+
+function collectValidationHints(validation) {
+  const hints = [];
+  const errors = Array.isArray(validation.errors) ? validation.errors : [];
+  const warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+  const undeclared = Array.isArray(validation.undeclared_variables) ? validation.undeclared_variables : [];
+
+  if (undeclared.length > 0) {
+    hints.push("Guard optional fields with `| default('N/A')` or `{% if value is defined %}`.");
+  }
+  if (errors.some((line) => String(line).toLowerCase().includes("unsupported jinja control tag"))) {
+    hints.push("Only basic Jinja logic is supported. Avoid include/import/extends/macro tags.");
+  }
+  if (errors.some((line) => String(line).toLowerCase().includes("too large"))) {
+    hints.push("Trim duplicate sections or long literal blocks to reduce template size.");
+  }
+  if (warnings.some((line) => String(line).toLowerCase().includes("raw payload"))) {
+    hints.push("Prefer curated catalog fields over `raw.*` fields for long-term stability.");
+  }
+
+  const groups = Array.isArray(state.schema?.facets?.groups) ? state.schema.facets.groups : [];
+  if (groups.length > 0 && undeclared.length > 0) {
+    const unknownTop = undeclared.filter((name) => !groups.includes(name));
+    if (unknownTop.length > 0) {
+      hints.push(`Known top-level keys: ${groups.join(", ")}.`);
+    }
+  }
+  return hints;
 }
 
 async function requestJSON(url, options = {}) {
@@ -244,6 +324,11 @@ function updateValidationPane(result, ok) {
   }
 
   const lines = [];
+  const validation = result.validation || {};
+  const errors = Array.isArray(validation.errors) ? validation.errors : [];
+  const warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+  const undeclared = Array.isArray(validation.undeclared_variables) ? validation.undeclared_variables : [];
+
   if (ok) {
     pane.classList.add("ok");
     lines.push("Template is valid.");
@@ -251,19 +336,28 @@ function updateValidationPane(result, ok) {
     pane.classList.add("error");
     lines.push("Template has validation issues.");
   }
+  lines.push(`Counts: ${errors.length} error(s), ${warnings.length} warning(s), ${undeclared.length} undeclared.`);
 
-  const validation = result.validation || {};
-  if (Array.isArray(validation.errors) && validation.errors.length > 0) {
+  if (errors.length > 0) {
     lines.push("Errors:");
-    for (const error of validation.errors) lines.push(`- ${error}`);
+    for (const error of errors) lines.push(`- ${error}`);
   }
-  if (Array.isArray(validation.warnings) && validation.warnings.length > 0) {
+  if (warnings.length > 0) {
     lines.push("Warnings:");
-    for (const warning of validation.warnings) lines.push(`- ${warning}`);
+    for (const warning of warnings) lines.push(`- ${warning}`);
   }
-  if (Array.isArray(validation.undeclared_variables)) {
-    lines.push(`Undeclared variables: ${validation.undeclared_variables.join(", ") || "none"}`);
+  if (undeclared.length > 0) {
+    lines.push(`Undeclared variables: ${undeclared.join(", ")}`);
+  } else {
+    lines.push("Undeclared variables: none");
   }
+
+  const hints = collectValidationHints(validation);
+  if (hints.length > 0) {
+    lines.push("Hints:");
+    for (const hint of hints) lines.push(`- ${hint}`);
+  }
+
   if (result.context_source) {
     lines.push(`Context source: ${result.context_source}`);
   }
@@ -623,6 +717,199 @@ function formatTemplateText(input) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function splitLines(value) {
+  return String(value || "").replace(/\r\n/g, "\n").split("\n");
+}
+
+function computeLineDiff(beforeText, afterText) {
+  const before = splitLines(beforeText);
+  const after = splitLines(afterText);
+  const n = before.length;
+  const m = after.length;
+  const lcs = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      if (before[i] === after[j]) {
+        lcs[i][j] = lcs[i + 1][j + 1] + 1;
+      } else {
+        lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      }
+    }
+  }
+
+  const rows = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (before[i] === after[j]) {
+      rows.push({ type: "context", text: before[i] });
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      rows.push({ type: "removed", text: before[i] });
+      i += 1;
+    } else {
+      rows.push({ type: "added", text: after[j] });
+      j += 1;
+    }
+  }
+  while (i < n) {
+    rows.push({ type: "removed", text: before[i] });
+    i += 1;
+  }
+  while (j < m) {
+    rows.push({ type: "added", text: after[j] });
+    j += 1;
+  }
+  return rows;
+}
+
+function summarizeLineDiff(rows) {
+  let added = 0;
+  let removed = 0;
+  let unchanged = 0;
+  let changed = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (row.type === "added") added += 1;
+    if (row.type === "removed") removed += 1;
+    if (row.type === "context") unchanged += 1;
+    const next = rows[i + 1];
+    if (row.type === "removed" && next && next.type === "added") {
+      changed += 1;
+    }
+    if (row.type === "added" && next && next.type === "removed") {
+      changed += 1;
+    }
+  }
+  return { added, removed, unchanged, changed };
+}
+
+function renderDiffRows(rows, maxRows = 260) {
+  const clipped = rows.slice(0, maxRows);
+  const lines = clipped.map((row) => {
+    if (row.type === "added") return `+ ${row.text}`;
+    if (row.type === "removed") return `- ${row.text}`;
+    return `  ${row.text}`;
+  });
+  if (rows.length > maxRows) {
+    lines.push(`... truncated (${rows.length - maxRows} additional line(s))`);
+  }
+  return lines.join("\n");
+}
+
+function updatePublishConfirmEnabled() {
+  const checkedA = Boolean(elements.publishChecklistReviewed?.checked);
+  const checkedB = Boolean(elements.publishChecklistReplace?.checked);
+  const canPublish = state.publishModalValidationOk && checkedA && checkedB;
+  if (elements.publishConfirmBtn) {
+    elements.publishConfirmBtn.disabled = !canPublish;
+  }
+}
+
+function setPublishValidationSummary(result, ok) {
+  if (!elements.publishValidationSummary) return;
+  elements.publishValidationSummary.classList.remove("ok", "error");
+  elements.publishValidationSummary.classList.add(ok ? "ok" : "error");
+
+  const validation = result.validation || {};
+  const errors = Array.isArray(validation.errors) ? validation.errors : [];
+  const warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
+  const undeclared = Array.isArray(validation.undeclared_variables) ? validation.undeclared_variables : [];
+  const lines = [];
+  lines.push(ok ? "Validation: pass" : "Validation: fail");
+  if (result && result.error) {
+    lines.push(`Error: ${result.error}`);
+  }
+  lines.push(`Errors: ${errors.length} | Warnings: ${warnings.length} | Undeclared: ${undeclared.length}`);
+  if (errors.length > 0) {
+    lines.push("Top errors:");
+    for (const line of errors.slice(0, 3)) lines.push(`- ${line}`);
+  }
+  const hints = collectValidationHints(validation);
+  if (hints.length > 0) {
+    lines.push("Hints:");
+    for (const hint of hints.slice(0, 3)) lines.push(`- ${hint}`);
+  }
+  if (result.context_source) {
+    lines.push(`Context: ${result.context_source}`);
+  }
+  elements.publishValidationSummary.textContent = lines.join("\n");
+}
+
+function setPublishModeBanner() {
+  if (!elements.publishModeBanner) return;
+  const profile = contextModeProfile(elements.previewContextMode.value || "sample");
+  elements.publishModeBanner.classList.remove("safe", "live");
+  elements.publishModeBanner.classList.add(profile.level);
+  elements.publishModeBanner.textContent = `${profile.label}: ${profile.text}`;
+}
+
+function closePublishModal() {
+  if (!elements.publishModal) return;
+  elements.publishModal.classList.remove("open");
+  elements.publishModal.setAttribute("aria-hidden", "true");
+  state.publishModalValidationOk = false;
+  updatePublishConfirmEnabled();
+}
+
+async function openPublishModal() {
+  if (!elements.publishModal) {
+    setStatus("Publish modal unavailable", "error");
+    return;
+  }
+  const candidate = getEditorText();
+  const active = state.templateActive || "";
+  const diffRows = computeLineDiff(active, candidate);
+  const diffSummary = summarizeLineDiff(diffRows);
+
+  if (elements.publishDiffSummary) {
+    elements.publishDiffSummary.textContent =
+      `Diff: +${diffSummary.added} / -${diffSummary.removed} / unchanged ${diffSummary.unchanged} / changed~ ${diffSummary.changed}`;
+  }
+  if (elements.publishDiffView) {
+    elements.publishDiffView.textContent = renderDiffRows(diffRows);
+  }
+
+  if (elements.publishChecklistReviewed) elements.publishChecklistReviewed.checked = false;
+  if (elements.publishChecklistReplace) elements.publishChecklistReplace.checked = false;
+  state.publishModalValidationOk = false;
+  updatePublishConfirmEnabled();
+  setPublishModeBanner();
+  if (elements.publishValidationSummary) {
+    elements.publishValidationSummary.classList.remove("ok", "error");
+    elements.publishValidationSummary.textContent = "Running validation checks...";
+  }
+
+  elements.publishModal.classList.add("open");
+  elements.publishModal.setAttribute("aria-hidden", "false");
+
+  const contextMode = elements.previewContextMode.value || "sample";
+  const fixtureName = selectedFixtureName();
+  const validationRes = await requestJSON("/editor/validate", {
+    method: "POST",
+    body: JSON.stringify({
+      template: candidate,
+      context_mode: contextMode,
+      fixture_name: fixtureName,
+    }),
+  });
+
+  setPublishValidationSummary(validationRes.payload || {}, validationRes.ok);
+  state.publishModalValidationOk = Boolean(validationRes.ok);
+  updatePublishConfirmEnabled();
+
+  if (!validationRes.ok) {
+    updateValidationPane(validationRes.payload || {}, false);
+    setStatus("Publish blocked: validation failed", "error");
+  } else {
+    setStatus("Publish checklist ready", "ok");
+  }
 }
 
 function switchTab(name) {
@@ -994,6 +1281,7 @@ async function loadEditorBootstrap() {
   const isCustom = Boolean(activeRes.payload.is_custom);
   const sourceLabel = state.schemaSource ? ` | schema: ${state.schemaSource}` : "";
   setStatus((isCustom ? "Loaded custom template" : "Loaded default template") + sourceLabel, "ok");
+  renderContextSafetyBanner();
 
   await previewTemplate({ force: true });
 }
@@ -1054,7 +1342,8 @@ function queueAutoPreview() {
   }, 450);
 }
 
-async function saveTemplate() {
+async function saveTemplate(options = {}) {
+  const { source = "editor-ui" } = options;
   const template = getEditorText();
   const author = (elements.templateAuthorInput.value || "editor-user").trim();
   const name = (elements.templateNameInput.value || "Auto Stat Template").trim();
@@ -1063,7 +1352,7 @@ async function saveTemplate() {
     body: JSON.stringify({
       template,
       author: author || "editor-user",
-      source: "editor-ui",
+      source,
       name: name || "Auto Stat Template",
     }),
   });
@@ -1071,7 +1360,7 @@ async function saveTemplate() {
   if (!res.ok) {
     updateValidationPane(res.payload, false);
     setStatus("Save failed", "error");
-    return;
+    return false;
   }
 
   updateValidationPane(res.payload, true);
@@ -1080,6 +1369,7 @@ async function saveTemplate() {
   renderTemplateMeta(state.templateMeta);
   await loadVersionHistory();
   setStatus("Template saved + published", "ok");
+  return true;
 }
 
 async function copyPreview() {
@@ -1127,7 +1417,7 @@ function bindUI() {
 
   document.getElementById("btnValidate").addEventListener("click", validateTemplate);
   document.getElementById("btnPreview").addEventListener("click", () => previewTemplate({ force: true }));
-  document.getElementById("btnSave").addEventListener("click", saveTemplate);
+  document.getElementById("btnSave").addEventListener("click", openPublishModal);
   document.getElementById("btnCopyPreview").addEventListener("click", copyPreview);
   document.getElementById("btnRefreshHistory").addEventListener("click", async () => {
     await loadVersionHistory();
@@ -1173,10 +1463,12 @@ function bindUI() {
   });
 
   elements.previewContextMode.addEventListener("change", () => {
+    renderContextSafetyBanner();
     queueAutoPreview();
   });
 
   elements.previewFixtureName.addEventListener("change", async () => {
+    renderContextSafetyBanner();
     await loadSchema(elements.schemaContextMode.value || "sample");
     queueAutoPreview();
   });
@@ -1206,6 +1498,46 @@ function bindUI() {
     }
   });
 
+  if (elements.publishChecklistReviewed) {
+    elements.publishChecklistReviewed.addEventListener("change", updatePublishConfirmEnabled);
+  }
+  if (elements.publishChecklistReplace) {
+    elements.publishChecklistReplace.addEventListener("change", updatePublishConfirmEnabled);
+  }
+  if (elements.publishCancelBtn) {
+    elements.publishCancelBtn.addEventListener("click", closePublishModal);
+  }
+  if (elements.publishCloseBtn) {
+    elements.publishCloseBtn.addEventListener("click", closePublishModal);
+  }
+  if (elements.publishConfirmBtn) {
+    elements.publishConfirmBtn.addEventListener("click", async () => {
+      if (!state.publishModalValidationOk) {
+        setStatus("Publish blocked: validation failed", "error");
+        return;
+      }
+      elements.publishConfirmBtn.disabled = true;
+      const ok = await saveTemplate({ source: "editor-ui-publish-modal" });
+      if (ok) {
+        closePublishModal();
+      } else {
+        updatePublishConfirmEnabled();
+      }
+    });
+  }
+  if (elements.publishModal) {
+    elements.publishModal.addEventListener("click", (event) => {
+      if (event.target === elements.publishModal) {
+        closePublishModal();
+      }
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && elements.publishModal?.classList.contains("open")) {
+      closePublishModal();
+    }
+  });
+
   if (elements.importTemplateFile) {
     elements.importTemplateFile.addEventListener("change", async () => {
       const file = elements.importTemplateFile.files && elements.importTemplateFile.files[0];
@@ -1218,5 +1550,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   bindUI();
   applyTheme(loadThemePreference());
   updateValidationPane(null, true);
+  renderContextSafetyBanner();
   await loadEditorBootstrap();
 });

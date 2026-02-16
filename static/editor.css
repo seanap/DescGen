@@ -229,6 +229,27 @@ h2 {
   font-size: 0.84rem;
 }
 
+.context-banner {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 9px 11px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.context-banner.safe {
+  border-color: #8dcaa8;
+  background: #eefaf2;
+  color: #1f8f63;
+}
+
+.context-banner.live {
+  border-color: #f0c068;
+  background: #fff8e8;
+  color: #9a5b12;
+}
+
 .catalog {
   margin-top: 12px;
   display: grid;
@@ -546,6 +567,42 @@ body[data-theme="dark"] .snippet-btn {
   word-break: break-word;
 }
 
+.diff-view {
+  min-height: 260px;
+  max-height: 360px;
+}
+
+.modal-shell {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 12, 10, 0.56);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 30;
+}
+
+.modal-shell.open {
+  display: flex;
+}
+
+.modal-card {
+  width: min(980px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 body[data-theme="dark"] .card,
 body[data-theme="dark"] .catalog-group,
 body[data-theme="dark"] .section-row,
@@ -558,12 +615,18 @@ body[data-theme="dark"] .advanced-toolbar select,
 body[data-theme="dark"] .advanced-toolbar input,
 body[data-theme="dark"] .toggle-inline,
 body[data-theme="dark"] .validation,
-body[data-theme="dark"] .tab {
+body[data-theme="dark"] .tab,
+body[data-theme="dark"] .modal-card {
   background: #16221d;
 }
 
 body[data-theme="dark"] .tab.active {
   background: #1a2a24;
+}
+
+body[data-theme="dark"] .context-banner.live {
+  background: #2d2412;
+  color: #f2c87d;
 }
 
 .reveal {
