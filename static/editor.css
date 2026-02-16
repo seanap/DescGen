@@ -375,6 +375,46 @@ h2 {
   font-size: 0.74rem;
 }
 
+.field-badges {
+  margin-top: 3px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.field-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f8fbf9;
+  letter-spacing: 0.02em;
+}
+
+.field-badge-source {
+  color: var(--secondary);
+}
+
+.field-badge-stable {
+  border-color: #8dcaa8;
+  color: #1f8f63;
+  background: #eefaf2;
+}
+
+.field-badge-medium {
+  border-color: #f0c068;
+  color: #9a5b12;
+  background: #fff8e8;
+}
+
+.field-badge-experimental {
+  border-color: #e8a3a3;
+  color: #b94747;
+  background: #fff3f3;
+}
+
 .field-source {
   color: var(--secondary);
   font-size: 0.72rem;
@@ -398,6 +438,18 @@ h2 {
   align-items: center;
 }
 
+.field-favorite {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff9ef;
+  color: #b96a0e;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
 .field-transform {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -414,6 +466,11 @@ body[data-theme="dark"] .field-insert {
 
 body[data-theme="dark"] .field-transform {
   background: #192923;
+}
+
+body[data-theme="dark"] .field-favorite {
+  background: #2d2412;
+  color: #f0c068;
 }
 
 .tabbar {

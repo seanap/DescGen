@@ -45,6 +45,156 @@ def _default_metrics() -> dict[str, Any]:
         "sleep_score": "N/A",
         "fitness_age": "N/A",
         "avg_grade_adjusted_speed": "N/A",
+        "readiness_level": "N/A",
+        "readiness_feedback": "N/A",
+        "recovery_time_hours": "N/A",
+        "readiness_factors": {},
+        "load_tunnel_min": "N/A",
+        "load_tunnel_max": "N/A",
+        "weekly_training_load": "N/A",
+        "fitness_trend": "N/A",
+        "load_level_trend": "N/A",
+        "daily_acwr_ratio": "N/A",
+        "acwr_percent": "N/A",
+        "garmin_last_activity": {},
+        "fitness_age_details": {},
+    }
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _seconds_to_hms(value: Any) -> str:
+    parsed = _as_float(value)
+    if parsed is None or parsed < 0:
+        return "N/A"
+    total = int(round(parsed))
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    seconds = total % 60
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes}:{seconds:02d}"
+
+
+def _meters_to_miles(value: Any) -> str:
+    parsed = _as_float(value)
+    if parsed is None or parsed < 0:
+        return "N/A"
+    return f"{parsed / 1609.34:.2f} mi"
+
+
+def _meters_to_feet(value: Any) -> int | str:
+    parsed = _as_float(value)
+    if parsed is None:
+        return "N/A"
+    return int(round(parsed * 3.28084))
+
+
+def _mps_to_mph(value: Any) -> str:
+    parsed = _as_float(value)
+    if parsed is None or parsed <= 0:
+        return "N/A"
+    return f"{parsed * 2.23694:.1f} mph"
+
+
+def _mps_to_pace(value: Any) -> str:
+    speed_mps = _as_float(value)
+    if speed_mps is None or speed_mps <= 0:
+        return "N/A"
+    pace_min_per_mile = (1609.34 / speed_mps) / 60.0
+    minutes = int(pace_min_per_mile)
+    seconds = int(round((pace_min_per_mile - minutes) * 60))
+    if seconds == 60:
+        minutes += 1
+        seconds = 0
+    return f"{minutes}:{seconds:02d}/mi"
+
+
+def _zone_summary(activity: dict[str, Any], prefix: str) -> str:
+    parts: list[str] = []
+    for zone_id in range(1, 6):
+        value = activity.get(f"{prefix}{zone_id}")
+        seconds = _as_float(value)
+        if seconds is None or seconds <= 0:
+            continue
+        parts.append(f"Z{zone_id} {_seconds_to_hms(seconds)}")
+    return " | ".join(parts) if parts else "N/A"
+
+
+def _build_garmin_last_activity_context(last_activity: dict[str, Any]) -> dict[str, Any]:
+    avg_power = _as_float(last_activity.get("avgPower"))
+    norm_power = _as_float(last_activity.get("normPower"))
+    max_power = _as_float(last_activity.get("maxPower"))
+    return {
+        "activity_name": str(last_activity.get("activityName") or "N/A"),
+        "activity_type": str(safe_get(last_activity, ["activityType", "typeKey"], default="N/A") or "N/A"),
+        "start_local": str(last_activity.get("startTimeLocal") or "N/A"),
+        "distance_miles": _meters_to_miles(last_activity.get("distance")),
+        "duration": _seconds_to_hms(last_activity.get("duration")),
+        "moving_time": _seconds_to_hms(last_activity.get("movingDuration")),
+        "elapsed_time": _seconds_to_hms(last_activity.get("elapsedDuration")),
+        "average_pace": _mps_to_pace(last_activity.get("averageSpeed")),
+        "average_speed_mph": _mps_to_mph(last_activity.get("averageSpeed")),
+        "max_speed_mph": _mps_to_mph(last_activity.get("maxSpeed")),
+        "gap_pace": _mps_to_pace(last_activity.get("avgGradeAdjustedSpeed")),
+        "elevation_gain_feet": _meters_to_feet(last_activity.get("elevationGain")),
+        "elevation_loss_feet": _meters_to_feet(last_activity.get("elevationLoss")),
+        "avg_elevation_feet": _meters_to_feet(last_activity.get("avgElevation")),
+        "max_elevation_feet": _meters_to_feet(last_activity.get("maxElevation")),
+        "min_elevation_feet": _meters_to_feet(last_activity.get("minElevation")),
+        "average_hr": int(round(_as_float(last_activity.get("averageHR")) or 0))
+        if isinstance(last_activity.get("averageHR"), (int, float))
+        else "N/A",
+        "max_hr": int(round(_as_float(last_activity.get("maxHR")) or 0))
+        if isinstance(last_activity.get("maxHR"), (int, float))
+        else "N/A",
+        "avg_power_w": int(round(avg_power)) if avg_power is not None else "N/A",
+        "norm_power_w": int(round(norm_power)) if norm_power is not None else "N/A",
+        "max_power_w": int(round(max_power)) if max_power is not None else "N/A",
+        "avg_ground_contact_time_ms": int(round(_as_float(last_activity.get("avgGroundContactTime")) or 0))
+        if isinstance(last_activity.get("avgGroundContactTime"), (int, float))
+        else "N/A",
+        "avg_vertical_ratio_pct": (
+            f"{(_as_float(last_activity.get('avgVerticalRatio')) or 0.0):.1f}%"
+            if isinstance(last_activity.get("avgVerticalRatio"), (int, float))
+            else "N/A"
+        ),
+        "avg_vertical_oscillation_mm": int(round(_as_float(last_activity.get("avgVerticalOscillation")) or 0))
+        if isinstance(last_activity.get("avgVerticalOscillation"), (int, float))
+        else "N/A",
+        "avg_stride_length_m": (
+            f"{(_as_float(last_activity.get('avgStrideLength')) or 0.0):.2f} m"
+            if isinstance(last_activity.get("avgStrideLength"), (int, float))
+            else "N/A"
+        ),
+        "avg_respiration_rate": (
+            f"{(_as_float(last_activity.get('avgRespirationRate')) or 0.0):.1f} brpm"
+            if isinstance(last_activity.get("avgRespirationRate"), (int, float))
+            else "N/A"
+        ),
+        "max_respiration_rate": (
+            f"{(_as_float(last_activity.get('maxRespirationRate')) or 0.0):.1f} brpm"
+            if isinstance(last_activity.get("maxRespirationRate"), (int, float))
+            else "N/A"
+        ),
+        "steps": int(round(_as_float(last_activity.get("steps")) or 0))
+        if isinstance(last_activity.get("steps"), (int, float))
+        else "N/A",
+        "lap_count": int(round(_as_float(last_activity.get("lapCount")) or 0))
+        if isinstance(last_activity.get("lapCount"), (int, float))
+        else "N/A",
+        "hr_zone_summary": _zone_summary(last_activity, "hrTimeInZone_"),
+        "power_zone_summary": _zone_summary(last_activity, "powerTimeInZone_"),
+        "is_pr": bool(last_activity.get("pr")),
     }
 
 
@@ -76,6 +226,17 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         logger.error("Failed to fetch Garmin training status: %s", exc)
         training_status = {}
 
+    latest_status_data = safe_get(
+        training_status,
+        ["mostRecentTrainingStatus", "latestTrainingStatusData", "3417115846"],
+        default={},
+    )
+    if not isinstance(latest_status_data, dict):
+        latest_status_data = {}
+    acute_load_dto = latest_status_data.get("acuteTrainingLoadDTO")
+    if not isinstance(acute_load_dto, dict):
+        acute_load_dto = {}
+
     feedback = safe_get(
         training_status,
         ["mostRecentTrainingStatus", "latestTrainingStatusData", "3417115846", "trainingStatusFeedbackPhrase"],
@@ -94,6 +255,13 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         training_status,
         ["mostRecentTrainingStatus", "latestTrainingStatusData", "3417115846", "acuteTrainingLoadDTO", "dailyTrainingLoadAcute"],
     )
+    metrics["load_tunnel_min"] = latest_status_data.get("loadTunnelMin", "N/A")
+    metrics["load_tunnel_max"] = latest_status_data.get("loadTunnelMax", "N/A")
+    metrics["weekly_training_load"] = latest_status_data.get("weeklyTrainingLoad", "N/A")
+    metrics["fitness_trend"] = latest_status_data.get("fitnessTrend", "N/A")
+    metrics["load_level_trend"] = latest_status_data.get("loadLevelTrend", "N/A")
+    metrics["daily_acwr_ratio"] = acute_load_dto.get("dailyAcuteChronicWorkloadRatio", "N/A")
+    metrics["acwr_percent"] = acute_load_dto.get("acwrPercent", "N/A")
 
     status_text = feedback.split("_")[0].capitalize() if isinstance(feedback, str) and feedback else "N/A"
     metrics["training_status_key"] = status_text
@@ -132,6 +300,7 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         if isinstance(last_activity.get("avgGradeAdjustedSpeed"), (int, float))
         else "N/A"
     )
+    metrics["garmin_last_activity"] = _build_garmin_last_activity_context(last_activity)
 
     try:
         resting_hr_data = client.get_rhr_day(start_date)
@@ -147,6 +316,29 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         readiness_level = safe_get(readiness_entry, ["level"], default="N/A")
         metrics["training_readiness_score"] = safe_get(readiness_entry, ["score"], default="N/A")
         metrics["sleep_score"] = safe_get(readiness_entry, ["sleepScore"], default="N/A")
+        metrics["readiness_level"] = readiness_level
+        readiness_feedback = readiness_entry.get("feedbackShort") or readiness_entry.get("feedbackLong")
+        metrics["readiness_feedback"] = (
+            str(readiness_feedback)
+            if isinstance(readiness_feedback, str) and readiness_feedback.strip()
+            else "N/A"
+        )
+        recovery_seconds = readiness_entry.get("recoveryTime")
+        recovery_float = _as_float(recovery_seconds)
+        metrics["recovery_time_hours"] = (
+            round(recovery_float / 3600.0, 1)
+            if recovery_float is not None and recovery_float >= 0
+            else "N/A"
+        )
+        readiness_factors = {
+            "sleep_score_factor_pct": readiness_entry.get("sleepScoreFactorPercent", "N/A"),
+            "sleep_history_factor_pct": readiness_entry.get("sleepHistoryFactorPercent", "N/A"),
+            "hrv_factor_pct": readiness_entry.get("hrvFactorPercent", "N/A"),
+            "stress_history_factor_pct": readiness_entry.get("stressHistoryFactorPercent", "N/A"),
+            "acwr_factor_pct": readiness_entry.get("acwrFactorPercent", "N/A"),
+            "recovery_time_factor_pct": readiness_entry.get("recoveryTimeFactorPercent", "N/A"),
+        }
+        metrics["readiness_factors"] = readiness_factors
         metrics["training_readiness_emoji"] = {
             "POOR": "💀",
             "LOW": "😵‍💫",
@@ -177,6 +369,20 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         fitness_age_data = client.get_fitnessage_data(date.today().isoformat())
         age_value = fitness_age_data.get("fitnessAge") if isinstance(fitness_age_data, dict) else None
         metrics["fitness_age"] = f"{age_value} yr" if age_value is not None else "N/A"
+        if isinstance(fitness_age_data, dict):
+            components = fitness_age_data.get("components")
+            if not isinstance(components, dict):
+                components = {}
+            metrics["fitness_age_details"] = {
+                "fitness_age": age_value if age_value is not None else "N/A",
+                "chronological_age": fitness_age_data.get("chronologicalAge", "N/A"),
+                "achievable_fitness_age": fitness_age_data.get("achievableFitnessAge", "N/A"),
+                "previous_fitness_age": fitness_age_data.get("previousFitnessAge", "N/A"),
+                "body_fat_pct": safe_get(components, ["bodyFat", "value"], default="N/A"),
+                "rhr": safe_get(components, ["rhr", "value"], default="N/A"),
+                "vigorous_days_avg": safe_get(components, ["vigorousDaysAvg", "value"], default="N/A"),
+                "vigorous_minutes_avg": safe_get(components, ["vigorousMinutesAvg", "value"], default="N/A"),
+            }
     except Exception as exc:
         logger.debug("Garmin fitness age unavailable: %s", exc)
 

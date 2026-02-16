@@ -81,6 +81,10 @@ class Settings:
     service_retry_backoff_seconds: int
     service_cooldown_base_seconds: int
     service_cooldown_max_seconds: int
+    enable_service_call_budget: bool
+    max_optional_service_calls_per_cycle: int
+    enable_service_result_cache: bool
+    service_cache_ttl_seconds: int
 
     state_dir: Path
     processed_log_file: Path
@@ -148,6 +152,10 @@ class Settings:
             service_retry_backoff_seconds=_int_env("SERVICE_RETRY_BACKOFF_SECONDS", 2, minimum=1, maximum=120),
             service_cooldown_base_seconds=_int_env("SERVICE_COOLDOWN_BASE_SECONDS", 60, minimum=5, maximum=3600),
             service_cooldown_max_seconds=_int_env("SERVICE_COOLDOWN_MAX_SECONDS", 1800, minimum=30, maximum=86400),
+            enable_service_call_budget=_bool_env("ENABLE_SERVICE_CALL_BUDGET", True),
+            max_optional_service_calls_per_cycle=_int_env("MAX_OPTIONAL_SERVICE_CALLS_PER_CYCLE", 10, minimum=0, maximum=50),
+            enable_service_result_cache=_bool_env("ENABLE_SERVICE_RESULT_CACHE", True),
+            service_cache_ttl_seconds=_int_env("SERVICE_CACHE_TTL_SECONDS", 600, minimum=0, maximum=86400),
             state_dir=state_dir,
             processed_log_file=processed_log_file,
             latest_json_file=latest_json_file,

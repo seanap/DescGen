@@ -62,6 +62,13 @@ class TestApiServer(unittest.TestCase):
         self.assertIn(payload["status"], {"ready", "not_ready"})
         self.assertIn("checks", payload)
 
+    def test_service_metrics_endpoint(self) -> None:
+        response = self.client.get("/service-metrics")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn("cycle_service_calls", payload)
+
     def test_editor_schema_sample_context_endpoint(self) -> None:
         response = self.client.get("/editor/schema?context_mode=sample")
         self.assertEqual(response.status_code, 200)
