@@ -269,6 +269,34 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "error")
 
+    def test_editor_template_put_respects_context_mode(self) -> None:
+        response = self.client.put(
+            "/editor/template",
+            json={
+                "template": "Fitness {{ intervals.fitness }}",
+                "author": "tester",
+                "name": "Mode Aware Template",
+                "source": "test",
+                "context_mode": "sample",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(str(payload.get("context_source")).startswith("sample"))
+
+    def test_editor_template_put_rejects_invalid_context_mode(self) -> None:
+        response = self.client.put(
+            "/editor/template",
+            json={
+                "template": "Miles {{ activity.distance_miles }}",
+                "context_mode": "nope",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "error")
+
     def test_editor_template_versions_and_rollback_endpoints(self) -> None:
         put_response = self.client.put(
             "/editor/template",

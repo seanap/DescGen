@@ -639,6 +639,21 @@ def _icu_class_from_form(
     return transition_label
 
 
+def _icu_emoji_from_form(form_percent: Any) -> str:
+    form_value = _as_float(form_percent)
+    if form_value is None:
+        return "⚪"
+    if form_value < -30:
+        return "⚠️"
+    if form_value <= -10:
+        return "🦾"
+    if form_value <= 5:
+        return "⛔"
+    if form_value <= 20:
+        return "🏁"
+    return "❄️"
+
+
 @pass_context
 def icu_form_class(
     context: Any,
@@ -678,18 +693,60 @@ def icu_form_emoji(context: Any, form_percent: Any | None = None) -> str:
     if form_percent is None:
         intervals = context.get("intervals", {}) if isinstance(context, dict) else {}
         form_percent = intervals.get("form_percent")
-    form_value = _as_float(form_percent)
-    if form_value is None:
-        return "⚪"
-    if form_value < -30:
-        return "⚠️"
-    if form_value <= -10:
-        return "🦾"
-    if form_value <= 5:
-        return "⛔"
-    if form_value <= 20:
-        return "🏁"
-    return "❄️"
+    return _icu_emoji_from_form(form_percent)
+
+
+def normalize_template_context(context: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(context)
+
+    intervals = normalized.get("intervals")
+    if isinstance(intervals, dict):
+        training = normalized.get("training")
+        activity = normalized.get("activity")
+
+        if "fitness" not in intervals:
+            intervals["fitness"] = intervals.get(
+                "ctl",
+                training.get("chronic_load", "N/A") if isinstance(training, dict) else "N/A",
+            )
+        if "fatigue" not in intervals:
+            intervals["fatigue"] = intervals.get(
+                "atl",
+                training.get("acute_load", "N/A") if isinstance(training, dict) else "N/A",
+            )
+        if "load" not in intervals:
+            intervals["load"] = intervals.get("training_load", "N/A")
+        if "ramp_display" not in intervals:
+            ramp_value = intervals.get("ramp")
+            intervals["ramp_display"] = str(ramp_value) if ramp_value is not None else "N/A"
+
+        if "form_percent" not in intervals:
+            form_percent = _icu_calc_form_value(intervals.get("fitness"), intervals.get("fatigue"))
+            intervals["form_percent"] = form_percent if form_percent is not None else "N/A"
+        if "form_percent_display" not in intervals:
+            form_value = _as_float(intervals.get("form_percent"))
+            intervals["form_percent_display"] = f"{int(round(form_value))}%" if form_value is not None else "N/A"
+        if "form_class" not in intervals:
+            intervals["form_class"] = _icu_class_from_form(intervals.get("form_percent"))
+        if "form_class_emoji" not in intervals:
+            intervals["form_class_emoji"] = _icu_emoji_from_form(intervals.get("form_percent"))
+
+        if isinstance(activity, dict):
+            for key in (
+                "fitness",
+                "fatigue",
+                "load",
+                "ramp",
+                "ramp_display",
+                "form_percent",
+                "form_percent_display",
+                "form_class",
+                "form_class_emoji",
+            ):
+                if key not in activity and key in intervals:
+                    activity[key] = intervals[key]
+
+    return normalized
 
 
 def _template_environment() -> SandboxedEnvironment:
@@ -1369,6 +1426,8 @@ def _lint_template_text(template_text: str) -> tuple[list[str], list[str]]:
 def validate_template_text(template_text: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
     env = _template_environment()
     template_text = _normalize_template_text(template_text)
+    if context is not None:
+        context = normalize_template_context(context)
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -1425,6 +1484,7 @@ def validate_template_text(template_text: str, context: dict[str, Any] | None = 
 def render_template_text(template_text: str, context: dict[str, Any]) -> dict[str, Any]:
     env = _template_environment()
     template_text = _normalize_template_text(template_text)
+    context = normalize_template_context(context)
     try:
         template = env.from_string(template_text)
         rendered = template.render(context)

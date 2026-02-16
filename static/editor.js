@@ -2740,6 +2740,8 @@ async function saveTemplate(options = {}) {
   const template = getEditorText();
   const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim();
   const name = (elements.repoTemplateNameInput?.value || "Auto Stat Template").trim();
+  const contextMode = elements.previewContextMode.value || "sample";
+  const fixtureName = selectedFixtureName();
   const res = await requestJSON("/editor/template", {
     method: "PUT",
     body: JSON.stringify({
@@ -2747,6 +2749,8 @@ async function saveTemplate(options = {}) {
       author: author || "editor-user",
       source,
       name: name || "Auto Stat Template",
+      context_mode: contextMode,
+      fixture_name: fixtureName,
     }),
   });
 
