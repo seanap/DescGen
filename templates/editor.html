@@ -67,21 +67,39 @@
   </aside>
   <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
+  <div class="side-launcher card">
+    <button id="btnDrawerToggle" class="side-launcher-btn" type="button" aria-label="Open workspace panel">☰</button>
+    <span>Workspace</span>
+  </div>
+
   <div class="theme-corner">
-    <label class="theme-switch" for="themeToggle" title="Toggle light and dark mode">
-      <input id="themeToggle" type="checkbox" checked>
-      <span class="theme-switch-track">
-        <span class="theme-switch-icon theme-switch-icon-sun">☀</span>
-        <span class="theme-switch-icon theme-switch-icon-moon">☾</span>
-        <span class="theme-switch-thumb"></span>
-      </span>
-    </label>
+    <button id="btnSettingsToggle" class="settings-btn" type="button" aria-label="Open display and context settings">⚙</button>
+    <div id="settingsPanel" class="settings-panel" aria-hidden="true">
+      <div class="settings-head">
+        <h3>Display & Context</h3>
+        <button id="btnSettingsClose" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <label class="theme-switch" for="themeToggle" title="Toggle light and dark mode">
+        <input id="themeToggle" type="checkbox" checked>
+        <span class="theme-switch-track">
+          <span class="theme-switch-icon theme-switch-icon-sun">☀</span>
+          <span class="theme-switch-icon theme-switch-icon-moon">☾</span>
+          <span class="theme-switch-thumb"></span>
+        </span>
+      </label>
+      <div class="settings-lines">
+        <div class="settings-line"><span>Preview</span><span id="contextModeValue">sample</span></div>
+        <div class="settings-line"><span>Fixture</span><span id="contextFixtureValue">default</span></div>
+        <div class="settings-line"><span>Catalog</span><span id="contextSchemaValue">sample</span></div>
+        <div class="settings-line"><span>Template</span><span id="contextSaveValue">saved</span></div>
+        <div class="settings-line"><span>Publish</span><span id="contextPublishValue">not checked</span></div>
+      </div>
+    </div>
   </div>
 
   <div class="app-shell">
     <header class="topbar card">
       <div class="title-row">
-        <button id="btnDrawerToggle" class="hamburger" type="button" aria-label="Open menu">☰</button>
         <div>
           <p class="eyebrow">Auto Stat Description</p>
           <h1>Description Editor</h1>
@@ -90,14 +108,6 @@
       </div>
       <div class="status-block" id="topStatus">Ready</div>
     </header>
-
-    <section class="context-bar card">
-      <div class="context-chip" id="contextModeChip">Mode: Sample</div>
-      <div class="context-chip" id="contextFixtureChip">Fixture: default</div>
-      <div class="context-chip" id="contextSchemaChip">Catalog: sample</div>
-      <div class="context-chip" id="contextSaveChip">Template: Loaded</div>
-      <div class="context-chip" id="contextPublishChip">Publish: Not checked</div>
-    </section>
 
     <section class="actions card">
       <div class="action-group">
@@ -238,18 +248,7 @@
               <option value="latest_or_sample">Latest or Sample</option>
             </select>
           </div>
-          <div>
-            <label class="stack-label" for="schemaPreset">Preset</label>
-            <select id="schemaPreset" class="search">
-              <option value="beginner" selected>Beginner</option>
-              <option value="power_user">Power User</option>
-              <option value="weather_nerd">Weather Nerd</option>
-              <option value="nutrition">Nutrition</option>
-              <option value="performance">Performance</option>
-            </select>
-          </div>
           <div class="inline-actions">
-            <button id="btnApplySchemaPreset" class="btn btn-ghost" type="button">Apply Preset</button>
             <button id="btnCatalogResetFilters" class="btn btn-ghost" type="button">Reset Filters</button>
           </div>
         </div>
@@ -296,18 +295,7 @@
             <label class="stack-label" for="schemaFreshnessFilter">Freshness</label>
             <select id="schemaFreshnessFilter" class="search"><option value="all" selected>All Freshness</option></select>
           </div>
-          <div class="toggle-row">
-            <label class="toggle-inline" for="schemaCuratedOnly"><input id="schemaCuratedOnly" type="checkbox">Curated</label>
-            <label class="toggle-inline" for="schemaStableOnly"><input id="schemaStableOnly" type="checkbox" checked>Stable</label>
-            <label class="toggle-inline" for="schemaFavoritesOnly"><input id="schemaFavoritesOnly" type="checkbox">Favorites</label>
-            <label class="toggle-inline" for="schemaInTemplateOnly"><input id="schemaInTemplateOnly" type="checkbox">In Template</label>
-          </div>
         </div>
-
-        <div id="catalogQuickPicks" class="meta">No recent inserts yet.</div>
-        <div id="schemaMeta" class="meta"></div>
-        <div id="catalogDiagnostics" class="meta">No diagnostics yet.</div>
-        <div id="schemaKeyboardHint" class="meta">Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect</div>
 
         <div class="data-grid-layout">
           <div id="schemaList" class="catalog table-catalog"></div>
@@ -315,6 +303,12 @@
             <h3>Field Inspector</h3>
             <p class="subtext">Select a field from the table to inspect details.</p>
           </aside>
+        </div>
+        <div class="catalog-footer-status">
+          <div id="catalogQuickPicks" class="meta">Favorites: none · Recent inserts: none</div>
+          <div id="schemaMeta" class="meta">0 fields shown</div>
+          <div id="catalogDiagnostics" class="meta">Groups: 0 · Fields: 0 · Curated: 0 · Stable: 0</div>
+          <div id="schemaKeyboardHint" class="meta">Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect · Ctrl+K commands</div>
         </div>
       </section>
     </main>
