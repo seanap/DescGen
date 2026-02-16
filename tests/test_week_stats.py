@@ -36,6 +36,8 @@ class TestWeekStats(unittest.TestCase):
         self.assertEqual(summary["duration"], "0h:16m")
         self.assertEqual(summary["elevation"], 1234.0)
         self.assertEqual(summary["beers_earned"], 3.0)
+        self.assertEqual(summary["calories"], 450.0)
+        self.assertEqual(summary["run_count"], 2)
 
     def test_get_period_stats_uses_local_calendar_days(self) -> None:
         # Fixed "now" in UTC: 2026-02-15 05:00Z == 2026-02-15 00:00 in America/New_York (EST).
@@ -92,6 +94,8 @@ class TestWeekStats(unittest.TestCase):
         summary = summarize_period(activities, start_utc, end_utc, elevation_feet=0.0)
 
         self.assertEqual(summary["beers_earned"], 0.0)
+        self.assertEqual(summary["calories"], 0.0)
+        self.assertEqual(summary["run_count"], 1)
 
     def test_period_stats_apply_garmin_fallback_for_gap_and_beers(self) -> None:
         activities = [
@@ -125,6 +129,7 @@ class TestWeekStats(unittest.TestCase):
         self.assertEqual(period_stats["week"]["beers_earned"], 36.0)
         self.assertEqual(period_stats["month"]["beers_earned"], 155.0)
         self.assertEqual(period_stats["year"]["beers_earned"], 230.0)
+        self.assertEqual(period_stats["week"]["run_count"], 1)
 
     def test_get_garmin_period_fallback_from_activity_list(self) -> None:
         class DummyClient:

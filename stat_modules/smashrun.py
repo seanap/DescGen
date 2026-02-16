@@ -176,7 +176,7 @@ def get_notables(access_token: str | None, latest_activity_id: int | None = None
     return [n.get("description", "").strip() for n in notables if n.get("description")]
 
 
-def get_longest_streak(access_token: str | None) -> int | None:
+def get_stats(access_token: str | None) -> dict[str, Any] | None:
     if not access_token:
         return None
     try:
@@ -189,6 +189,15 @@ def get_longest_streak(access_token: str | None) -> int | None:
         payload = response.json()
     except requests.RequestException as exc:
         logger.error("Smashrun stats fetch failed: %s", exc)
+        return None
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
+def get_longest_streak(access_token: str | None) -> int | None:
+    payload = get_stats(access_token)
+    if not payload:
         return None
     value = payload.get("longestStreak")
     if isinstance(value, int):
@@ -230,10 +239,10 @@ def _extract_activity_datetime(activity: dict[str, Any]) -> datetime | None:
     )
 
 
-def get_activity_elevation_feet(
+def get_activity_record(
     activities: list[dict[str, Any]],
     strava_activity: dict[str, Any],
-) -> float | None:
+) -> dict[str, Any] | None:
     if not activities:
         return None
 
@@ -245,23 +254,20 @@ def get_activity_elevation_feet(
                 if candidate_id is None:
                     continue
                 if str(candidate_id) == str(strava_id):
-                    return _extract_elevation_feet(activity)
+                    return activity
 
     strava_start = _parse_datetime(
         strava_activity.get("start_date")
         or strava_activity.get("start_date_local")
     )
     if strava_start is None:
-        return get_latest_elevation_feet(activities)
+        return activities[0]
 
     strava_distance = _to_float(strava_activity.get("distance"))
     best_score = None
-    best_elevation = None
+    best_activity = None
 
     for activity in activities:
-        elevation_feet = _extract_elevation_feet(activity)
-        if elevation_feet is None:
-            continue
         activity_time = _extract_activity_datetime(activity)
         if activity_time is None:
             continue
@@ -277,10 +283,23 @@ def get_activity_elevation_feet(
 
         if best_score is None or score < best_score:
             best_score = score
-            best_elevation = elevation_feet
+            best_activity = activity
 
-    if best_elevation is not None:
-        return best_elevation
+    if best_activity is not None:
+        return best_activity
+    return activities[0]
+
+
+def get_activity_elevation_feet(
+    activities: list[dict[str, Any]],
+    strava_activity: dict[str, Any],
+) -> float | None:
+    matched = get_activity_record(activities, strava_activity)
+    if matched is None:
+        return None
+    elevation_feet = _extract_elevation_feet(matched)
+    if elevation_feet is not None:
+        return elevation_feet
     return get_latest_elevation_feet(activities)
 
 

@@ -62,6 +62,56 @@ class TestIntervalsData(unittest.TestCase):
         assert result is not None
         self.assertEqual(result["achievements"], [])
         self.assertEqual(result["norm_power"], "N/A")
+        self.assertEqual(result["avg_pace"], "N/A")
+        self.assertEqual(result["zone_summary"], "N/A")
+
+    @patch("stat_modules.intervals_data.requests.get")
+    def test_formats_extended_metrics(self, mock_get) -> None:
+        mock_get.side_effect = [
+            _response_with_json([{"id": 888}]),
+            _response_with_json(
+                {
+                    "icu_ctl": 71.6,
+                    "icu_atl": 78.2,
+                    "icu_training_load": 129.4,
+                    "strain_score": 143.3,
+                    "pace_load": 55.9,
+                    "hr_load": 60.1,
+                    "power_load": 58.8,
+                    "average_speed": 3.5,
+                    "max_speed": 5.5,
+                    "distance": 10000,
+                    "moving_time": 2488,
+                    "elapsed_time": 2610,
+                    "average_heartrate": 149,
+                    "max_heartrate": 173,
+                    "total_elevation_gain": 190.5,
+                    "total_elevation_loss": 183.2,
+                    "average_temp": 63.2,
+                    "max_temp": 67.4,
+                    "min_temp": 58.1,
+                    "icu_zone_times": [{"id": 1, "secs": 320}, {"id": 2, "secs": 821}],
+                    "icu_hr_zone_times": [280, 901, 0],
+                    "pace_zone_times": [601, 702],
+                    "gap_zone_times": [450, 640],
+                    "icu_achievements": [],
+                }
+            ),
+        ]
+
+        result = get_intervals_activity_data("athlete", "apikey")
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["ctl"], 72)
+        self.assertEqual(result["atl"], 78)
+        self.assertEqual(result["training_load"], 129)
+        self.assertEqual(result["avg_pace"], "7:40/mi")
+        self.assertEqual(result["distance_miles"], "6.21 mi")
+        self.assertEqual(result["moving_time"], "41:28")
+        self.assertEqual(result["elevation_gain_feet"], 625)
+        self.assertEqual(result["average_temp_f"], "63.2F")
+        self.assertIn("Z1", result["zone_summary"])
 
 
 if __name__ == "__main__":

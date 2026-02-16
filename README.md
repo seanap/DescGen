@@ -11,6 +11,13 @@ Turn every Strava activity into a rich, auto-generated training report.
 - Includes optional Crono nutrition/energy-balance stats in the description.
 - Quiet hours support (default: skip polling from `00:00` to `04:00`).
 - Local API endpoint to read latest output and force reruns.
+- Template editor now supports saved version history + rollback.
+- Fixture-based preview modes for safe template testing without live calls.
+- Export/import template bundles so you can move configs between instances.
+- Mandatory publish confirmation with checklist + diff before replacing active template.
+- Safe/Live context banner to make preview data mode explicit.
+- First-run guided tour for onboarding new users.
+- Starter template gallery + inline source/doc reference links.
 
 ## Sample Output (What Your Strava Description Can Look Like)
 ```text
@@ -127,12 +134,18 @@ services:
       - .env
     volumes:
       - ./data:/app/state
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,sys; from pathlib import Path; from storage import is_worker_healthy; state=Path(os.getenv('STATE_DIR','state')); log=state / os.getenv('PROCESSED_LOG_FILE','processed_activities.log'); age=int(os.getenv('WORKER_HEALTH_MAX_AGE_SECONDS','900')); sys.exit(0 if is_worker_healthy(log, age) else 1)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
     restart: unless-stopped
 
   auto-stat-api:
     image: seanap/auto-stat-description:latest
     container_name: auto-stat-api
-    command: ["python", "api_server.py"]
+    command: ["/bin/sh", "-c", "gunicorn --bind 0.0.0.0:${API_PORT:-1609} --workers ${API_WORKERS:-2} --threads ${API_THREADS:-4} --timeout ${API_TIMEOUT_SECONDS:-120} api_server:app"]
     network_mode: bridge
     env_file:
       - .env
@@ -140,6 +153,12 @@ services:
       - ./data:/app/state
     ports:
       - "1609:1609"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os,sys,urllib.request; p=os.getenv('API_PORT','1609'); u='http://127.0.0.1:%s/ready' % p; r=urllib.request.urlopen(u, timeout=5); sys.exit(0 if getattr(r, 'status', 200) == 200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
 ```
 
@@ -173,6 +192,24 @@ STATE_DIR=state
 PROCESSED_LOG_FILE=processed_activities.log
 LATEST_JSON_FILE=latest_activity.json
 STRAVA_TOKEN_FILE=strava_tokens.json
+RUNTIME_DB_FILE=runtime_state.db
+
+# API runtime (gunicorn)
+API_WORKERS=2
+API_THREADS=4
+API_TIMEOUT_SECONDS=120
+
+# Hardening
+WORKER_HEALTH_MAX_AGE_SECONDS=900
+RUN_LOCK_TTL_SECONDS=900
+SERVICE_RETRY_COUNT=2
+SERVICE_RETRY_BACKOFF_SECONDS=2
+SERVICE_COOLDOWN_BASE_SECONDS=60
+SERVICE_COOLDOWN_MAX_SECONDS=1800
+ENABLE_SERVICE_CALL_BUDGET=true
+MAX_OPTIONAL_SERVICE_CALLS_PER_CYCLE=10
+ENABLE_SERVICE_RESULT_CACHE=true
+SERVICE_CACHE_TTL_SECONDS=600
 
 # Feature flags
 ENABLE_GARMIN=true
@@ -192,6 +229,7 @@ DOCKER_IMAGE=seanap/auto-stat-description:latest
 
 ```bash
 curl http://localhost:1609/health
+curl http://localhost:1609/ready
 curl http://localhost:1609/latest
 ```
 
@@ -203,16 +241,50 @@ docker network prune -f
 
 ## API Endpoints
 - `GET /health`
+- `GET /ready`
 - `GET /latest`
+- `GET /service-metrics`
 - `POST /rerun/latest` (rerun most recent activity)
 - `POST /rerun/activity/<activity_id>` (rerun specific Strava activity)
 - `POST /rerun` with optional JSON body: `{ "activity_id": 1234567890 }`
+- `GET /editor/schema?context_mode=latest_or_sample` (available template data keys)
+- `GET /editor/fixtures` (pinned sample fixtures for preview/testing)
+- `GET /editor/template` (active template, default or custom)
+- `GET /editor/template/default` (factory template)
+- `GET /editor/template/export` (downloadable JSON bundle of active template)
+- `GET /editor/template/versions` (saved template version history)
+- `GET /editor/template/version/<version_id>` (specific saved template)
+- `GET /editor/snippets` (quick insert snippets for the web editor)
+- `GET /editor/starter-templates` (curated starter layouts for quick setup)
+- `GET /editor/context/sample` (sample context payload for testing)
+- `PUT /editor/template` (save custom template)
+- `POST /editor/template/import` (import and publish template from bundle JSON)
+- `POST /editor/template/rollback` (rollback active template to a prior version)
+- `POST /editor/validate` (validate a template string; optional `context_mode`)
+- `POST /editor/preview` (render preview; optional `context_mode`)
+
+Editor UI:
+- `GET /editor` (web UI with builder, snippet palette, click-to-insert fields, and preview context switcher)
 
 Examples:
 ```bash
 curl -X POST http://localhost:1609/rerun/latest
 curl -X POST http://localhost:1609/rerun/activity/1234567890
 curl -X POST http://localhost:1609/rerun -H "Content-Type: application/json" -d '{"activity_id":1234567890}'
+curl "http://localhost:1609/editor/schema?context_mode=latest_or_sample"
+curl http://localhost:1609/editor/fixtures
+curl http://localhost:1609/editor/template
+curl http://localhost:1609/editor/template/export
+curl http://localhost:1609/editor/template/versions
+curl http://localhost:1609/editor/snippets
+curl http://localhost:1609/editor/starter-templates
+curl http://localhost:1609/editor/context/sample
+curl http://localhost:1609/editor/context/sample?fixture=winter_grind
+curl -X POST http://localhost:1609/editor/template/import -H "Content-Type: application/json" -d '{"bundle":{"template":"{{ activity.gap_pace }}","name":"Imported Template"},"author":"cli-user","context_mode":"sample"}'
+curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"context_mode":"sample","template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
+curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"context_mode":"fixture","fixture_name":"humid_hammer","template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
+curl -X POST http://localhost:1609/editor/template/rollback -H "Content-Type: application/json" -d '{"version_id":"vYYYYMMDDTHHMMSSffffffZ-abcdef1234"}'
+open http://localhost:1609/editor
 ```
 
 ## Step-by-Step API Setup

@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto Stat Description Editor</title>
+  <link rel="stylesheet" href="/static/editor.css">
+</head>
+<body>
+  <div class="bg-shape bg-shape-a"></div>
+  <div class="bg-shape bg-shape-b"></div>
+
+  <aside id="leftDrawer" class="left-drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <h2>Workspace</h2>
+      <button id="btnDrawerClose" class="btn btn-ghost" type="button">Close</button>
+    </div>
+
+    <section class="drawer-section">
+      <h3>Template Controls</h3>
+      <p class="subtext">Load and manage local working drafts.</p>
+      <div class="inline-actions">
+        <button id="btnLoadActive" class="btn btn-ghost" type="button">Load Active</button>
+        <button id="btnLoadDefault" class="btn btn-ghost" type="button">Load Default</button>
+        <button id="btnLoadDraft" class="btn btn-ghost" type="button" title="Load your locally saved browser draft">Load Draft</button>
+        <button id="btnSaveDraft" class="btn btn-ghost" type="button" title="Save current editor content locally in your browser">Save Draft</button>
+      </div>
+    </section>
+
+    <section class="drawer-section">
+      <h3>Template Repository</h3>
+      <p class="subtext">Load, save, duplicate, import, and export templates.</p>
+      <div class="advanced-toolbar repository-select-row">
+        <label for="repositoryTemplateSelect">Library</label>
+        <select id="repositoryTemplateSelect">
+          <option value="" selected>Loading templates...</option>
+        </select>
+        <button id="btnRepoLoad" class="btn btn-secondary" type="button">Load Highlighted</button>
+      </div>
+      <div class="advanced-toolbar repository-meta-row">
+        <label for="repoTemplateNameInput">Title</label>
+        <input id="repoTemplateNameInput" type="text" placeholder="Template title">
+        <label for="repoTemplateAuthorInput">Author</label>
+        <input id="repoTemplateAuthorInput" type="text" placeholder="Template author">
+      </div>
+      <div id="repositoryTemplateMeta" class="meta">No repository template selected.</div>
+      <div class="inline-actions">
+        <button id="btnRepoSave" class="btn btn-secondary" type="button">Save</button>
+        <button id="btnRepoSaveAs" class="btn btn-ghost" type="button">Save As</button>
+        <button id="btnRepoDuplicate" class="btn btn-ghost" type="button">Duplicate</button>
+        <button id="btnRepoImport" class="btn btn-ghost" type="button">Import</button>
+        <button id="btnRepoExport" class="btn btn-ghost" type="button">Export</button>
+      </div>
+      <input id="importTemplateFile" type="file" accept="application/json,.json" hidden>
+    </section>
+
+    <section class="drawer-section">
+      <div class="drawer-row">
+        <h3>Template History</h3>
+        <button id="btnRefreshHistory" class="btn btn-ghost" type="button">Refresh</button>
+      </div>
+      <p class="subtext">Browse previous versions and rollback safely.</p>
+      <div id="templateMeta" class="meta">No template metadata.</div>
+      <div id="versionList" class="catalog"></div>
+    </section>
+
+    <section class="drawer-section">
+      <h3>Reference Links</h3>
+      <p class="subtext">Source docs and Jinja references.</p>
+      <div class="help-links">
+        <a href="https://developers.strava.com/docs/reference/" target="_blank" rel="noopener noreferrer">Strava API Docs</a>
+        <a href="https://intervals.icu/api-docs.html" target="_blank" rel="noopener noreferrer">Intervals.icu API</a>
+        <a href="https://www.weatherapi.com/docs/" target="_blank" rel="noopener noreferrer">WeatherAPI Docs</a>
+        <a href="https://api.smashrun.com/v1/documentation" target="_blank" rel="noopener noreferrer">Smashrun API Docs</a>
+        <a href="https://jinja.palletsprojects.com/en/stable/templates/" target="_blank" rel="noopener noreferrer">Jinja Template Reference</a>
+      </div>
+    </section>
+  </aside>
+  <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+
+  <div class="theme-corner">
+    <button id="btnSettingsToggle" class="settings-btn" type="button" aria-label="Open display and context settings">⚙</button>
+    <div id="settingsPanel" class="settings-panel" aria-hidden="true">
+      <div class="settings-head">
+        <h3>Display & Context</h3>
+        <button id="btnSettingsClose" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <label class="theme-switch" for="themeToggle" title="Toggle light and dark mode">
+        <input id="themeToggle" type="checkbox" checked>
+        <span class="theme-switch-track">
+          <span class="theme-switch-icon theme-switch-icon-sun">☀</span>
+          <span class="theme-switch-icon theme-switch-icon-moon">☾</span>
+          <span class="theme-switch-thumb"></span>
+        </span>
+      </label>
+      <label class="toggle-inline settings-toggle" for="autoPreviewToggle">
+        <input id="autoPreviewToggle" type="checkbox" checked>
+        Auto-preview
+      </label>
+      <button id="btnTour" class="btn btn-ghost" type="button" title="Open quick onboarding tour">Tour</button>
+      <div class="settings-lines">
+        <div class="settings-line"><span>Preview</span><span id="contextModeValue">sample</span></div>
+        <div class="settings-line"><span>Fixture</span><span id="contextFixtureValue">default</span></div>
+        <div class="settings-line"><span>Catalog</span><span id="contextSchemaValue">sample</span></div>
+        <div class="settings-line"><span>Template</span><span id="contextSaveValue">saved</span></div>
+        <div class="settings-line"><span>Publish</span><span id="contextPublishValue">not checked</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <header class="topbar card">
+      <div class="title-row">
+        <div>
+          <p class="eyebrow">Auto Stat Description</p>
+          <h1>Description Editor</h1>
+          <p class="subtext">Build, validate, preview, and publish activity templates quickly.</p>
+        </div>
+      </div>
+      <div class="status-block" id="topStatus">Ready</div>
+    </header>
+
+    <main class="main-layout">
+      <section class="workspace-row">
+        <section class="panel card editor-panel reveal" style="--delay:0.03s">
+          <button id="btnDrawerToggle" class="workspace-tab" type="button" aria-label="Open template workspace">Template Workspace</button>
+          <div class="template-current-line">
+            <span class="stack-label">Current Template</span>
+            <strong id="currentTemplateDisplay">Auto Stat Template</strong>
+          </div>
+          <div class="tabbar">
+            <button class="tab active" data-tab="simple">Simple Builder</button>
+            <button class="tab" data-tab="advanced">Advanced Template</button>
+          </div>
+
+          <div id="tabSimple" class="tabpanel active">
+            <p class="subtext">Toggle sections, reorder them, then apply to the advanced editor.</p>
+            <div id="simpleSections" class="sections"></div>
+            <div class="inline-actions">
+              <button id="btnSimpleApply" class="btn btn-secondary">Apply To Advanced</button>
+              <button id="btnSimpleReset" class="btn btn-ghost">Reset Builder</button>
+            </div>
+          </div>
+
+          <div id="tabAdvanced" class="tabpanel">
+            <div class="advanced-toolbar">
+              <label for="previewContextMode">Preview Context</label>
+              <select id="previewContextMode">
+                <option value="sample" selected>Sample Only</option>
+                <option value="fixture">Fixture</option>
+                <option value="latest_or_sample">Latest or Sample</option>
+                <option value="latest">Latest Only</option>
+              </select>
+              <label for="previewFixtureName">Fixture</label>
+              <select id="previewFixtureName">
+                <option value="default" selected>default</option>
+              </select>
+            </div>
+            <div id="contextSafetyBanner" class="context-banner safe">SAFE mode: sample/fixture preview with no live payload dependency.</div>
+
+            <label for="templateEditor">Jinja Template</label>
+            <textarea id="templateEditor" spellcheck="false"></textarea>
+
+            <div class="snippet-shell">
+              <div class="snippet-head">
+                <h3>Snippet Palette</h3>
+                <p class="subtext">Insert snippet blocks at your cursor.</p>
+              </div>
+              <div id="snippetList" class="snippets"></div>
+            </div>
+            <div class="inline-actions builder-run-actions">
+              <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
+              <button id="btnValidate" class="btn btn-secondary">Validate</button>
+              <button id="btnPreview" class="btn btn-secondary">Preview</button>
+            </div>
+            <div id="validationPane" class="validation"></div>
+          </div>
+        </section>
+
+        <section class="panel card preview-panel reveal" style="--delay:0.07s">
+          <div class="preview-head">
+            <div>
+              <h2>Preview</h2>
+              <p class="subtext">Rendered from selected context mode.</p>
+            </div>
+            <div class="char-meter-wrap">
+              <label for="previewCharLimit" class="stack-label">Char Limit</label>
+              <input id="previewCharLimit" class="char-limit-input" type="number" min="100" max="20000" step="50" value="2200">
+            </div>
+          </div>
+          <div class="inline-actions preview-tools">
+            <label class="toggle-inline" for="previewDiffToggle">
+              <input id="previewDiffToggle" type="checkbox">
+              Show Diff vs Active Output
+            </label>
+          </div>
+          <div class="char-meter" aria-hidden="true">
+            <div id="previewCharMeterFill" class="char-meter-fill"></div>
+          </div>
+          <div id="previewCharCount" class="meta">0 / 2200 chars</div>
+          <div class="meta" id="previewMeta">No preview yet.</div>
+          <pre id="previewText" class="preview"></pre>
+          <div id="previewDiffMeta" class="meta">Diff disabled.</div>
+          <div class="inline-actions preview-publish-actions">
+            <span class="group-label">Publish</span>
+            <button id="btnSave" class="btn btn-primary" type="button">Save + Publish</button>
+            <button id="btnCopyPreview" class="btn btn-ghost" type="button">Copy Preview</button>
+          </div>
+          <pre id="previewDiffText" class="preview diff-view is-hidden"></pre>
+        </section>
+      </section>
+
+      <section class="panel card data-browser reveal" style="--delay:0.1s">
+        <div class="data-browser-head">
+          <div>
+            <h2>Available Data</h2>
+            <p class="subtext">Search, filter, inspect, and insert fields.</p>
+          </div>
+        </div>
+
+        <div class="filters-grid">
+          <div>
+            <label class="stack-label" for="schemaSearch">Search</label>
+            <input id="schemaSearch" class="search" type="search" placeholder="Search fields...">
+          </div>
+          <div>
+            <label class="stack-label" for="schemaContextMode">Catalog Context</label>
+            <select id="schemaContextMode" class="search">
+              <option value="sample" selected>Sample Only</option>
+              <option value="fixture">Fixture</option>
+              <option value="latest">Latest Only</option>
+              <option value="latest_or_sample">Latest or Sample</option>
+            </select>
+          </div>
+          <div class="inline-actions">
+            <button id="btnCatalogResetFilters" class="btn btn-ghost" type="button">Reset Filters</button>
+          </div>
+        </div>
+        <div class="scope-pills" id="catalogScopePills">
+          <button class="scope-pill is-active" data-scope="all" type="button">All</button>
+          <button class="scope-pill" data-scope="curated" type="button">Curated</button>
+          <button class="scope-pill" data-scope="favorites" type="button">Favorites</button>
+          <button class="scope-pill" data-scope="in_template" type="button">In Template</button>
+          <button class="scope-pill" data-scope="stable" type="button">Stable</button>
+        </div>
+
+        <div class="filters-grid filters-advanced">
+          <div class="inline-actions advanced-filter-actions">
+            <button id="btnToggleAdvancedFilters" class="btn btn-ghost" type="button">Hide Advanced Filters</button>
+          </div>
+        </div>
+
+        <div id="advancedFiltersWrap" class="filters-grid filters-advanced">
+          <div>
+            <label class="stack-label" for="schemaSourceFilter">Source</label>
+            <select id="schemaSourceFilter" class="search"><option value="all" selected>All Sources</option></select>
+          </div>
+          <div>
+            <label class="stack-label" for="schemaGroupFilter">Group</label>
+            <select id="schemaGroupFilter" class="search"><option value="all" selected>All Groups</option></select>
+          </div>
+          <div>
+            <label class="stack-label" for="schemaTypeFilter">Type</label>
+            <select id="schemaTypeFilter" class="search"><option value="all" selected>All Types</option></select>
+          </div>
+          <div>
+            <label class="stack-label" for="schemaTagFilter">Tag</label>
+            <select id="schemaTagFilter" class="search"><option value="all" selected>All Tags</option></select>
+          </div>
+          <div>
+            <label class="stack-label" for="schemaStabilityFilter">Stability</label>
+            <select id="schemaStabilityFilter" class="search"><option value="all" selected>All Stability Levels</option></select>
+          </div>
+          <div>
+            <label class="stack-label" for="schemaCostTierFilter">Cost Tier</label>
+            <select id="schemaCostTierFilter" class="search"><option value="all" selected>All Cost Tiers</option></select>
+          </div>
+          <div>
+            <label class="stack-label" for="schemaFreshnessFilter">Freshness</label>
+            <select id="schemaFreshnessFilter" class="search"><option value="all" selected>All Freshness</option></select>
+          </div>
+        </div>
+
+        <div class="data-grid-layout">
+          <div id="schemaList" class="catalog table-catalog"></div>
+          <aside id="schemaInspector" class="schema-inspector">
+            <h3>Field Inspector</h3>
+            <p class="subtext">Select a field from the table to inspect details.</p>
+          </aside>
+        </div>
+        <div class="catalog-footer-status">
+          <div id="catalogQuickPicks" class="meta">Favorites: none · Recent inserts: none</div>
+          <div id="schemaMeta" class="meta">0 fields shown</div>
+          <div id="catalogDiagnostics" class="meta">Groups: 0 · Fields: 0 · Curated: 0 · Stable: 0</div>
+          <div id="schemaKeyboardHint" class="meta">Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect · Ctrl+K commands</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="tourModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card tour-card" role="dialog" aria-modal="true" aria-labelledby="tourStepTitle">
+      <div class="modal-head">
+        <h2 id="tourStepTitle">Welcome</h2>
+        <button id="btnTourSkip" class="btn btn-ghost" type="button">Skip</button>
+      </div>
+      <div id="tourStepCounter" class="meta">Step 1 / 4</div>
+      <div id="tourStepBody" class="tour-body">Use this editor to design and publish your activity description template.</div>
+      <div class="inline-actions">
+        <button id="btnTourPrev" class="btn btn-ghost" type="button">Back</button>
+        <button id="btnTourNext" class="btn btn-secondary" type="button">Next</button>
+        <button id="btnTourDone" class="btn btn-primary" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="publishModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card" role="dialog" aria-modal="true" aria-labelledby="publishModalTitle">
+      <div class="modal-head">
+        <h2 id="publishModalTitle">Confirm Publish</h2>
+        <button id="publishCloseBtn" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <p class="subtext">Publishing replaces the active template used by the worker/API.</p>
+      <div id="publishModeBanner" class="context-banner safe">SAFE</div>
+      <div id="publishValidationSummary" class="validation"></div>
+      <div id="publishDiffSummary" class="meta"></div>
+      <pre id="publishDiffView" class="preview diff-view"></pre>
+      <label class="toggle-inline" for="publishChecklistReviewed">
+        <input id="publishChecklistReviewed" type="checkbox">
+        I reviewed the diff
+      </label>
+      <label class="toggle-inline" for="publishChecklistReplace">
+        <input id="publishChecklistReplace" type="checkbox">
+        I understand this replaces the active template
+      </label>
+      <div class="inline-actions">
+        <button id="publishCancelBtn" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="publishConfirmBtn" class="btn btn-primary" type="button" disabled>Publish Now</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="versionDiffModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card" role="dialog" aria-modal="true" aria-labelledby="versionDiffTitle">
+      <div class="modal-head">
+        <h2 id="versionDiffTitle">Version Diff</h2>
+        <button id="versionDiffCloseBtn" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <div id="versionDiffMeta" class="meta">No diff loaded.</div>
+      <pre id="versionDiffView" class="preview diff-view"></pre>
+    </div>
+  </div>
+
+  <div id="commandPaletteModal" class="modal-shell" aria-hidden="true">
+    <div class="modal-card card command-palette-card" role="dialog" aria-modal="true" aria-labelledby="commandPaletteTitle">
+      <div class="modal-head">
+        <h2 id="commandPaletteTitle">Command Palette</h2>
+        <button id="commandPaletteCloseBtn" class="btn btn-ghost" type="button">Close</button>
+      </div>
+      <input id="commandPaletteSearch" class="search" type="search" placeholder="Type a command...">
+      <div id="commandPaletteMeta" class="meta">Use ↑/↓ and Enter to run. Esc closes.</div>
+      <div id="commandPaletteList" class="catalog command-palette-list"></div>
+    </div>
+  </div>
+
+  <script src="/static/editor.js"></script>
+</body>
+</html>
