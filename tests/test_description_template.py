@@ -89,6 +89,25 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["description"], "-8|Grey Zone")
 
+    def test_validate_and_render_with_legacy_intervals_context(self) -> None:
+        context = {
+            "intervals": {
+                "ctl": 72,
+                "atl": 78,
+                "training_load": 126,
+            },
+            "activity": {},
+        }
+        template = "{{ intervals.fitness }}|{{ intervals.fatigue }}|{{ intervals.load }}|{{ intervals.form_percent_display }}|{{ activity.fitness }}"
+        validation = validate_template_text(template, context)
+        self.assertTrue(validation["valid"])
+
+        result = render_template_text(template, context)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["description"], "72|78|126|-8%|72")
+        self.assertNotIn("fitness", context["intervals"])
+        self.assertNotIn("fitness", context["activity"])
+
     def test_validate_rejects_forbidden_constructs(self) -> None:
         context = {"value": "ok"}
         validation = validate_template_text("{% include 'x' %}", context)

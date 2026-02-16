@@ -21,6 +21,7 @@ from description_template import (
     list_sample_template_fixtures,
     list_template_repository_templates,
     list_template_versions,
+    normalize_template_context,
     rollback_template_version,
     render_template_text,
     save_active_template,
@@ -59,7 +60,7 @@ def _latest_template_context() -> dict | None:
         return None
     context = payload.get("template_context")
     if isinstance(context, dict):
-        return context
+        return normalize_template_context(context)
     return None
 
 
@@ -569,10 +570,22 @@ def editor_template_put() -> tuple[dict, int]:
     if not isinstance(template_text, str) or not template_text.strip():
         return {"status": "error", "error": "template must be a non-empty string."}, 400
 
-    context = _latest_template_context()
+    try:
+        context_mode = _resolve_context_mode(body.get("context_mode", "latest_or_sample"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(
+        context_mode,
+        fixture_name=body.get("fixture_name"),
+    )
     validation = validate_template_text(template_text, context)
     if not validation["valid"]:
-        return {"status": "error", "validation": validation}, 400
+        return {
+            "status": "error",
+            "context_source": context_source if context is not None else None,
+            "validation": validation,
+        }, 400
 
     author = str(body.get("author") or "editor-user")
     source = str(body.get("source") or "editor-ui")
@@ -588,6 +601,7 @@ def editor_template_put() -> tuple[dict, int]:
     )
     return {
         "status": "ok",
+        "context_source": context_source if context is not None else None,
         "template_path": str(saved.get("path")),
         "saved_version": saved.get("saved_version"),
         "active": saved,
