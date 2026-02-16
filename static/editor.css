@@ -96,18 +96,6 @@ body[data-theme="dark"] {
   gap: 12px;
 }
 
-.hamburger {
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
-  color: var(--secondary);
-  font-size: 1.08rem;
-  cursor: pointer;
-  font-weight: 700;
-}
-
 .eyebrow {
   margin: 0;
   font-size: 0.74rem;
@@ -158,24 +146,6 @@ h3 {
   border-color: #e8a3a3;
   background: #fff3f3;
   color: #b94747;
-}
-
-.context-bar {
-  margin-top: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.context-chip {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.77rem;
-  font-weight: 700;
-  color: var(--secondary);
-  background: #f8fcfa;
 }
 
 .actions {
@@ -415,7 +385,7 @@ label[for="templateEditor"] {
 .filters-grid {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
+  grid-template-columns: 2fr 1fr auto;
   gap: 8px;
   align-items: end;
 }
@@ -452,13 +422,6 @@ label[for="templateEditor"] {
   background: #eef6f3;
 }
 
-.toggle-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
 .stack-label {
   display: block;
   margin-bottom: 5px;
@@ -491,6 +454,21 @@ label[for="templateEditor"] {
   display: grid;
   grid-template-columns: minmax(720px, 1fr) minmax(280px, 0.38fr);
   gap: 10px;
+}
+
+.catalog-footer-status {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.catalog-footer-status .meta {
+  margin-top: 0;
+  white-space: normal;
+  font-size: 0.76rem;
 }
 
 .table-catalog {
@@ -922,11 +900,108 @@ label[for="templateEditor"] {
   pointer-events: auto;
 }
 
+.side-launcher {
+  position: fixed;
+  left: 12px;
+  top: 82px;
+  z-index: 58;
+  width: 66px;
+  padding: 8px 6px;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border-radius: 14px;
+}
+
+.side-launcher span {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.side-launcher-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--secondary);
+  font-size: 1.08rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .theme-corner {
   position: fixed;
   top: 10px;
   right: 14px;
   z-index: 70;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.settings-btn {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--secondary);
+  font-size: 1.08rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.settings-panel {
+  width: min(340px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 95%, white);
+  box-shadow: var(--shadow);
+  padding: 10px;
+  display: none;
+  gap: 10px;
+}
+
+.settings-panel.open {
+  display: grid;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-lines {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+
+.settings-line span:first-child {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.settings-line span:last-child {
+  color: var(--secondary);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
 }
 
 .theme-switch {
@@ -1098,6 +1173,7 @@ body[data-theme="dark"] .tab,
 body[data-theme="dark"] .modal-card,
 body[data-theme="dark"] .left-drawer,
 body[data-theme="dark"] .drawer-section,
+body[data-theme="dark"] .settings-panel,
 body[data-theme="dark"] .action-group,
 body[data-theme="dark"] .char-limit-input {
   background: #16221d;
@@ -1134,7 +1210,8 @@ body[data-theme="dark"] .field {
 
 body[data-theme="dark"] .field-insert,
 body[data-theme="dark"] .field-transform,
-body[data-theme="dark"] .hamburger,
+body[data-theme="dark"] .side-launcher-btn,
+body[data-theme="dark"] .settings-btn,
 body[data-theme="dark"] .mini-btn {
   background: #192923;
 }
@@ -1145,6 +1222,10 @@ body[data-theme="dark"] .theme-switch-track {
 
 body[data-theme="dark"] .theme-switch-thumb {
   background: #22332b;
+}
+
+body[data-theme="dark"] .settings-line {
+  background: #1a2a24;
 }
 
 body[data-theme="dark"] .command-item {
@@ -1217,7 +1298,8 @@ body[data-theme="dark"] .tour-body {
     grid-template-columns: 1fr;
   }
 
-  .context-bar {
-    gap: 6px;
+  .side-launcher {
+    left: 8px;
+    top: 74px;
   }
 }

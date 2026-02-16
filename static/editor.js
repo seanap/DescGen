@@ -280,12 +280,15 @@ const elements = {
   drawerBackdrop: document.getElementById("drawerBackdrop"),
   btnDrawerToggle: document.getElementById("btnDrawerToggle"),
   btnDrawerClose: document.getElementById("btnDrawerClose"),
+  btnSettingsToggle: document.getElementById("btnSettingsToggle"),
+  btnSettingsClose: document.getElementById("btnSettingsClose"),
+  settingsPanel: document.getElementById("settingsPanel"),
   topStatus: document.getElementById("topStatus"),
-  contextModeChip: document.getElementById("contextModeChip"),
-  contextFixtureChip: document.getElementById("contextFixtureChip"),
-  contextSchemaChip: document.getElementById("contextSchemaChip"),
-  contextSaveChip: document.getElementById("contextSaveChip"),
-  contextPublishChip: document.getElementById("contextPublishChip"),
+  contextModeValue: document.getElementById("contextModeValue"),
+  contextFixtureValue: document.getElementById("contextFixtureValue"),
+  contextSchemaValue: document.getElementById("contextSchemaValue"),
+  contextSaveValue: document.getElementById("contextSaveValue"),
+  contextPublishValue: document.getElementById("contextPublishValue"),
   templateEditor: document.getElementById("templateEditor"),
   previewText: document.getElementById("previewText"),
   previewMeta: document.getElementById("previewMeta"),
@@ -308,11 +311,6 @@ const elements = {
   schemaStabilityFilter: document.getElementById("schemaStabilityFilter"),
   schemaCostTierFilter: document.getElementById("schemaCostTierFilter"),
   schemaFreshnessFilter: document.getElementById("schemaFreshnessFilter"),
-  schemaCuratedOnly: document.getElementById("schemaCuratedOnly"),
-  schemaStableOnly: document.getElementById("schemaStableOnly"),
-  schemaFavoritesOnly: document.getElementById("schemaFavoritesOnly"),
-  schemaInTemplateOnly: document.getElementById("schemaInTemplateOnly"),
-  schemaPreset: document.getElementById("schemaPreset"),
   advancedFiltersWrap: document.getElementById("advancedFiltersWrap"),
   btnToggleAdvancedFilters: document.getElementById("btnToggleAdvancedFilters"),
   catalogScopePills: document.getElementById("catalogScopePills"),
@@ -378,24 +376,24 @@ function updateContextChips() {
   const fixture = selectedFixtureName();
   const schemaSource = state.schemaSource ? ` (${state.schemaSource})` : "";
 
-  if (elements.contextModeChip) {
-    elements.contextModeChip.textContent = `Preview: ${previewMode}`;
+  if (elements.contextModeValue) {
+    elements.contextModeValue.textContent = previewMode;
   }
-  if (elements.contextFixtureChip) {
-    elements.contextFixtureChip.textContent = `Fixture: ${fixture}`;
+  if (elements.contextFixtureValue) {
+    elements.contextFixtureValue.textContent = fixture;
   }
-  if (elements.contextSchemaChip) {
-    elements.contextSchemaChip.textContent = `Catalog: ${schemaMode}${schemaSource}`;
+  if (elements.contextSchemaValue) {
+    elements.contextSchemaValue.textContent = `${schemaMode}${schemaSource}`;
   }
-  if (elements.contextSaveChip) {
+  if (elements.contextSaveValue) {
     const dirty = state.editorTouched ? "Dirty" : "Saved";
-    elements.contextSaveChip.textContent = `Template: ${dirty}`;
+    elements.contextSaveValue.textContent = dirty;
   }
-  if (elements.contextPublishChip) {
+  if (elements.contextPublishValue) {
     let publish = "Not checked";
     if (state.lastValidationOk === true) publish = "Ready";
     if (state.lastValidationOk === false) publish = "Blocked";
-    elements.contextPublishChip.textContent = `Publish: ${publish}`;
+    elements.contextPublishValue.textContent = publish;
   }
 }
 
@@ -455,6 +453,28 @@ function toggleDrawer() {
     closeDrawer();
   } else {
     openDrawer();
+  }
+}
+
+function closeSettingsPanel() {
+  if (!elements.settingsPanel) return;
+  elements.settingsPanel.classList.remove("open");
+  elements.settingsPanel.setAttribute("aria-hidden", "true");
+}
+
+function openSettingsPanel() {
+  if (!elements.settingsPanel) return;
+  elements.settingsPanel.classList.add("open");
+  elements.settingsPanel.setAttribute("aria-hidden", "false");
+}
+
+function toggleSettingsPanel() {
+  if (!elements.settingsPanel) return;
+  const open = elements.settingsPanel.classList.contains("open");
+  if (open) {
+    closeSettingsPanel();
+  } else {
+    openSettingsPanel();
   }
 }
 
@@ -632,18 +652,13 @@ function renderCatalogQuickPicks() {
   if (!elements.catalogQuickPicks) return;
   const favorites = Array.from(state.catalogFavorites.values()).slice(0, 8);
   const recents = state.catalogRecents.slice(0, 8);
-  const lines = [];
-  lines.push(
-    favorites.length > 0
-      ? `Favorites (${state.catalogFavorites.size}): ${favorites.join(", ")}`
-      : "Favorites: none yet",
-  );
-  lines.push(
-    recents.length > 0
-      ? `Recent inserts: ${recents.join(", ")}`
-      : "Recent inserts: none yet",
-  );
-  elements.catalogQuickPicks.textContent = lines.join("\n");
+  const favoritesText = favorites.length > 0
+    ? `Favorites (${state.catalogFavorites.size}): ${favorites.join(", ")}`
+    : "Favorites: none";
+  const recentsText = recents.length > 0
+    ? `Recent inserts: ${recents.join(", ")}`
+    : "Recent inserts: none";
+  elements.catalogQuickPicks.textContent = `${favoritesText} • ${recentsText}`;
 }
 
 function contextModeProfile(mode) {
@@ -845,19 +860,16 @@ function renderCatalogDiagnostics() {
       if (stability === "experimental") experimentalCount += 1;
     }
   }
-  const lines = [];
-  lines.push(`Groups: ${(facets.groups || []).length} | Fields: ${schema.field_count || 0}`);
-  lines.push(`Curated fields: ${curatedCount}`);
-  lines.push(`Stable fields: ${stableCount} | Experimental fields: ${experimentalCount}`);
-  lines.push(`Favorites: ${state.catalogFavorites.size} | Recent inserts: ${state.catalogRecents.length}`);
-  lines.push(`Sources: ${(facets.sources || []).length} | Tags: ${(facets.tags || []).length}`);
-  lines.push(`Cost tiers: ${(facets.cost_tiers || []).length} | Freshness buckets: ${(facets.freshness || []).length}`);
-  lines.push(`Metric overlaps: ${overlaps.length}`);
-  if (overlaps.length > 0) {
-    const sample = overlaps.slice(0, 3).map((item) => item.metric_key).join(", ");
-    lines.push(`Overlap sample: ${sample}`);
-  }
-  elements.catalogDiagnostics.textContent = lines.join("\n");
+  const parts = [];
+  parts.push(`Groups: ${(facets.groups || []).length}`);
+  parts.push(`Fields: ${schema.field_count || 0}`);
+  parts.push(`Curated: ${curatedCount}`);
+  parts.push(`Stable: ${stableCount}`);
+  parts.push(`Experimental: ${experimentalCount}`);
+  parts.push(`Sources: ${(facets.sources || []).length}`);
+  parts.push(`Tags: ${(facets.tags || []).length}`);
+  parts.push(`Overlaps: ${overlaps.length}`);
+  elements.catalogDiagnostics.textContent = parts.join(" • ");
 }
 
 function refreshSourceFilterOptions() {
@@ -944,10 +956,6 @@ function applyCatalogPreset(presetId, options = {}) {
   setSelectValueIfPresent(elements.schemaStabilityFilter, preset.stability);
   setSelectValueIfPresent(elements.schemaCostTierFilter, preset.costTier);
   setSelectValueIfPresent(elements.schemaFreshnessFilter, preset.freshness);
-  if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = Boolean(preset.curatedOnly);
-  if (elements.schemaStableOnly) elements.schemaStableOnly.checked = Boolean(preset.stableOnly);
-  if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = Boolean(preset.favoritesOnly);
-  if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = Boolean(preset.inTemplateOnly);
   if (preset.curatedOnly) state.catalogScope = "curated";
   else if (preset.stableOnly) state.catalogScope = "stable";
   else if (preset.favoritesOnly) state.catalogScope = "favorites";
@@ -970,10 +978,6 @@ function resetCatalogFilters(options = {}) {
   setSelectValueIfPresent(elements.schemaStabilityFilter, "all");
   setSelectValueIfPresent(elements.schemaCostTierFilter, "all");
   setSelectValueIfPresent(elements.schemaFreshnessFilter, "all");
-  if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = false;
-  if (elements.schemaStableOnly) elements.schemaStableOnly.checked = false;
-  if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = false;
-  if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = false;
   state.catalogScope = "all";
   updateScopePills();
   renderSchemaCatalog(elements.schemaSearch.value || "");
@@ -991,39 +995,10 @@ function updateScopePills() {
   }
 }
 
-function syncScopeFromFilterToggles() {
-  const curated = Boolean(elements.schemaCuratedOnly?.checked);
-  const stable = Boolean(elements.schemaStableOnly?.checked);
-  const favorites = Boolean(elements.schemaFavoritesOnly?.checked);
-  const inTemplate = Boolean(elements.schemaInTemplateOnly?.checked);
-  const enabled = [curated, stable, favorites, inTemplate].filter(Boolean).length;
-  if (enabled === 0) {
-    state.catalogScope = "all";
-  } else if (enabled === 1) {
-    if (curated) state.catalogScope = "curated";
-    if (stable) state.catalogScope = "stable";
-    if (favorites) state.catalogScope = "favorites";
-    if (inTemplate) state.catalogScope = "in_template";
-  } else {
-    state.catalogScope = "custom";
-  }
-  updateScopePills();
-}
-
 function applyCatalogScope(scope, options = {}) {
   const { announce = true } = options;
   const value = String(scope || "all");
   state.catalogScope = value;
-  if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = value === "curated";
-  if (elements.schemaStableOnly) elements.schemaStableOnly.checked = value === "stable";
-  if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = value === "favorites";
-  if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = value === "in_template";
-  if (value === "all") {
-    if (elements.schemaCuratedOnly) elements.schemaCuratedOnly.checked = false;
-    if (elements.schemaStableOnly) elements.schemaStableOnly.checked = false;
-    if (elements.schemaFavoritesOnly) elements.schemaFavoritesOnly.checked = false;
-    if (elements.schemaInTemplateOnly) elements.schemaInTemplateOnly.checked = false;
-  }
   updateScopePills();
   renderSchemaCatalog(elements.schemaSearch.value || "");
   if (announce) {
@@ -1148,10 +1123,10 @@ function getFilteredSchemaRows(filterText = "") {
   const stabilityFilter = elements.schemaStabilityFilter.value || "all";
   const costTierFilter = elements.schemaCostTierFilter.value || "all";
   const freshnessFilter = elements.schemaFreshnessFilter.value || "all";
-  const curatedOnly = Boolean(elements.schemaCuratedOnly.checked);
-  const stableOnly = Boolean(elements.schemaStableOnly.checked);
-  const favoritesOnly = Boolean(elements.schemaFavoritesOnly.checked);
-  const inTemplateOnly = Boolean(elements.schemaInTemplateOnly?.checked);
+  const curatedOnly = state.catalogScope === "curated";
+  const stableOnly = state.catalogScope === "stable";
+  const favoritesOnly = state.catalogScope === "favorites";
+  const inTemplateOnly = state.catalogScope === "in_template";
   const templateText = inTemplateOnly ? getEditorText() : "";
 
   const rows = [];
@@ -1363,7 +1338,7 @@ function renderSchemaCatalog(filterText = "", options = {}) {
       `No schema fields available. Try context mode '${contextMode}' or run one worker cycle to populate latest payload context.`;
     state.catalogRows = [];
     if (elements.schemaKeyboardHint) {
-      elements.schemaKeyboardHint.textContent = "Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect";
+      elements.schemaKeyboardHint.textContent = "Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect · Ctrl+K commands";
     }
     renderSchemaInspector(null);
     return;
@@ -1386,16 +1361,13 @@ function renderSchemaCatalog(filterText = "", options = {}) {
     if (elements.schemaStabilityFilter.value !== "all") activeFilters.push(`stability=${elements.schemaStabilityFilter.value}`);
     if (elements.schemaCostTierFilter.value !== "all") activeFilters.push(`cost=${elements.schemaCostTierFilter.value}`);
     if (elements.schemaFreshnessFilter.value !== "all") activeFilters.push(`freshness=${elements.schemaFreshnessFilter.value}`);
-    if (elements.schemaCuratedOnly.checked) activeFilters.push("curated_only=true");
-    if (elements.schemaStableOnly.checked) activeFilters.push("stable_only=true");
-    if (elements.schemaFavoritesOnly.checked) activeFilters.push("favorites_only=true");
-    if (elements.schemaInTemplateOnly?.checked) activeFilters.push("in_template_only=true");
+    if (state.catalogScope !== "all") activeFilters.push(`scope=${state.catalogScope}`);
     const filterTextLabel = activeFilters.length > 0 ? ` with filters (${activeFilters.join(", ")})` : "";
     elements.schemaMeta.textContent = `No fields matched${filterTextLabel}${sourceText}.`;
     state.selectedCatalogPath = "";
     state.catalogRows = [];
     if (elements.schemaKeyboardHint) {
-      elements.schemaKeyboardHint.textContent = "Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect | 0 rows";
+      elements.schemaKeyboardHint.textContent = "Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect · Ctrl+K commands | 0 rows";
     }
     renderSchemaInspector(null);
     return;
@@ -1545,7 +1517,7 @@ function renderSchemaCatalog(filterText = "", options = {}) {
   elements.schemaMeta.textContent = `${rows.length} fields shown${sourceText}`;
   if (elements.schemaKeyboardHint) {
     elements.schemaKeyboardHint.textContent =
-      `Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect | ${rows.length} rows`;
+      `Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect · Ctrl+K commands | ${rows.length} rows`;
   }
 
   if (!selectedRecord && rows.length > 0) {
@@ -2865,8 +2837,8 @@ async function loadEditorBootstrap() {
   }
 
   refreshSourceFilterOptions();
-  const selectedPreset = elements.schemaPreset?.value || "beginner";
-  applyCatalogPreset(selectedPreset, { announce: false });
+  state.catalogScope = "all";
+  updateScopePills();
   renderCatalogQuickPicks();
   renderSchemaCatalog("");
   renderSimpleSections();
@@ -3027,6 +2999,20 @@ function bindUI() {
   if (elements.drawerBackdrop) {
     elements.drawerBackdrop.addEventListener("click", closeDrawer);
   }
+  if (elements.btnSettingsToggle) {
+    elements.btnSettingsToggle.addEventListener("click", toggleSettingsPanel);
+  }
+  if (elements.btnSettingsClose) {
+    elements.btnSettingsClose.addEventListener("click", closeSettingsPanel);
+  }
+  document.addEventListener("click", (event) => {
+    if (!elements.settingsPanel?.classList.contains("open")) return;
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+    if (elements.settingsPanel.contains(target)) return;
+    if (elements.btnSettingsToggle?.contains(target)) return;
+    closeSettingsPanel();
+  });
   if (elements.btnToggleAdvancedFilters && elements.advancedFiltersWrap) {
     elements.btnToggleAdvancedFilters.addEventListener("click", () => {
       const isHidden = elements.advancedFiltersWrap.classList.toggle("is-hidden");
@@ -3176,35 +3162,6 @@ function bindUI() {
   elements.schemaFreshnessFilter.addEventListener("change", () => {
     renderSchemaCatalog(elements.schemaSearch.value || "");
   });
-  elements.schemaCuratedOnly.addEventListener("change", () => {
-    syncScopeFromFilterToggles();
-    renderSchemaCatalog(elements.schemaSearch.value || "");
-  });
-  elements.schemaStableOnly.addEventListener("change", () => {
-    syncScopeFromFilterToggles();
-    renderSchemaCatalog(elements.schemaSearch.value || "");
-  });
-  elements.schemaFavoritesOnly.addEventListener("change", () => {
-    syncScopeFromFilterToggles();
-    renderSchemaCatalog(elements.schemaSearch.value || "");
-  });
-  if (elements.schemaInTemplateOnly) {
-    elements.schemaInTemplateOnly.addEventListener("change", () => {
-      syncScopeFromFilterToggles();
-      renderSchemaCatalog(elements.schemaSearch.value || "");
-    });
-  }
-  if (elements.schemaPreset) {
-    elements.schemaPreset.addEventListener("change", () => {
-      applyCatalogPreset(elements.schemaPreset.value || "beginner", { announce: true });
-    });
-  }
-  const btnApplySchemaPreset = document.getElementById("btnApplySchemaPreset");
-  if (btnApplySchemaPreset) {
-    btnApplySchemaPreset.addEventListener("click", () => {
-      applyCatalogPreset(elements.schemaPreset?.value || "beginner", { announce: true });
-    });
-  }
   const btnCatalogResetFilters = document.getElementById("btnCatalogResetFilters");
   if (btnCatalogResetFilters) {
     btnCatalogResetFilters.addEventListener("click", () => {
@@ -3264,7 +3221,7 @@ function bindUI() {
 
   elements.templateEditor.addEventListener("input", () => {
     setEditorDirty(true);
-    if (elements.schemaInTemplateOnly?.checked) {
+    if (state.catalogScope === "in_template") {
       renderSchemaCatalog(elements.schemaSearch.value || "");
     }
     queueAutoPreview();
@@ -3427,6 +3384,10 @@ function bindUI() {
     }
     if (event.key === "Escape" && elements.leftDrawer?.classList.contains("open")) {
       closeDrawer();
+      return;
+    }
+    if (event.key === "Escape" && elements.settingsPanel?.classList.contains("open")) {
+      closeSettingsPanel();
       return;
     }
     if (hasAnyModalOpen()) {
