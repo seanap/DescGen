@@ -86,6 +86,76 @@ class TestApiServer(unittest.TestCase):
         self.assertIn("count", payload)
         self.assertGreaterEqual(payload["count"], 1)
 
+    def test_editor_repository_endpoints(self) -> None:
+        list_response = self.client.get("/editor/repository/templates")
+        self.assertEqual(list_response.status_code, 200)
+        list_payload = list_response.get_json()
+        self.assertEqual(list_payload["status"], "ok")
+        self.assertIn("templates", list_payload)
+
+        save_as_response = self.client.post(
+            "/editor/repository/save_as",
+            json={
+                "template": "Repo {{ activity.distance_miles }}",
+                "name": "Repo Template",
+                "author": "tester",
+                "context_mode": "sample",
+            },
+        )
+        self.assertEqual(save_as_response.status_code, 200)
+        save_payload = save_as_response.get_json()
+        self.assertEqual(save_payload["status"], "ok")
+        template_id = save_payload["template_record"]["template_id"]
+
+        get_response = self.client.get(f"/editor/repository/template/{template_id}")
+        self.assertEqual(get_response.status_code, 200)
+        get_payload = get_response.get_json()
+        self.assertEqual(get_payload["status"], "ok")
+        self.assertEqual(get_payload["template_record"]["name"], "Repo Template")
+
+        update_response = self.client.put(
+            f"/editor/repository/template/{template_id}",
+            json={
+                "template": "Repo Updated {{ activity.distance_miles }}",
+                "name": "Repo Template v2",
+                "author": "tester2",
+                "context_mode": "sample",
+            },
+        )
+        self.assertEqual(update_response.status_code, 200)
+        update_payload = update_response.get_json()
+        self.assertEqual(update_payload["status"], "ok")
+        self.assertEqual(update_payload["template_record"]["author"], "tester2")
+
+        duplicate_response = self.client.post(
+            f"/editor/repository/template/{template_id}/duplicate",
+            json={"name": "Repo Copy"},
+        )
+        self.assertEqual(duplicate_response.status_code, 200)
+        duplicate_payload = duplicate_response.get_json()
+        self.assertEqual(duplicate_payload["status"], "ok")
+        self.assertNotEqual(duplicate_payload["template_record"]["template_id"], template_id)
+
+        export_response = self.client.get(f"/editor/repository/template/{template_id}/export")
+        self.assertEqual(export_response.status_code, 200)
+        export_payload = export_response.get_json()
+        self.assertEqual(export_payload["status"], "ok")
+        self.assertEqual(export_payload["name"], "Repo Template v2")
+        self.assertEqual(export_payload["author"], "tester2")
+
+        import_response = self.client.post(
+            "/editor/repository/import",
+            json={
+                "bundle": export_payload,
+                "author": "importer",
+                "context_mode": "sample",
+            },
+        )
+        self.assertEqual(import_response.status_code, 200)
+        import_payload = import_response.get_json()
+        self.assertEqual(import_payload["status"], "ok")
+        self.assertIn("template_id", import_payload["template_record"])
+
     def test_editor_sample_context_endpoint(self) -> None:
         response = self.client.get("/editor/context/sample")
         self.assertEqual(response.status_code, 200)

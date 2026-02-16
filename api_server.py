@@ -7,17 +7,24 @@ from flask import Flask, render_template, request
 
 from description_template import (
     build_context_schema,
+    create_template_repository_template,
+    duplicate_template_repository_template,
+    export_template_repository_bundle,
     get_editor_snippets,
+    get_template_repository_template,
     get_starter_templates,
     get_default_template,
     get_active_template,
     get_sample_template_context,
     get_template_version,
+    import_template_repository_bundle,
     list_sample_template_fixtures,
+    list_template_repository_templates,
     list_template_versions,
     rollback_template_version,
     render_template_text,
     save_active_template,
+    update_template_repository_template,
     validate_template_text,
 )
 from main_strava_update import run_once
@@ -184,6 +191,7 @@ def editor_template_versions_get() -> tuple[dict, int]:
 
 @app.get("/editor/template/export")
 def editor_template_export_get() -> tuple[dict, int]:
+    template_id = str(request.args.get("template_id") or "").strip()
     include_versions_raw = str(request.args.get("include_versions", "false")).strip().lower()
     include_versions = include_versions_raw in {"1", "true", "yes", "on"}
     limit_raw = request.args.get("limit", "30")
@@ -191,6 +199,19 @@ def editor_template_export_get() -> tuple[dict, int]:
         limit = max(1, min(200, int(limit_raw)))
     except ValueError:
         limit = 30
+
+    if template_id:
+        try:
+            payload = export_template_repository_bundle(
+                settings,
+                template_id=template_id,
+                include_versions=include_versions,
+                versions_limit=limit,
+            )
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 404
+        payload["status"] = "ok"
+        return payload, 200
 
     active = get_active_template(settings)
     payload = {
@@ -206,6 +227,210 @@ def editor_template_export_get() -> tuple[dict, int]:
     if include_versions:
         payload["versions"] = list_template_versions(settings, limit=limit)
     return payload, 200
+
+
+@app.get("/editor/repository/templates")
+def editor_repository_templates_get() -> tuple[dict, int]:
+    templates = list_template_repository_templates(settings)
+    return {
+        "status": "ok",
+        "templates": templates,
+        "count": len(templates),
+    }, 200
+
+
+@app.get("/editor/repository/template/<string:template_id>")
+def editor_repository_template_get(template_id: str) -> tuple[dict, int]:
+    template = get_template_repository_template(settings, template_id)
+    if not template:
+        return {"status": "error", "error": "Unknown template_id."}, 404
+    return {
+        "status": "ok",
+        "template_record": template,
+    }, 200
+
+
+@app.post("/editor/repository/template/<string:template_id>/load")
+def editor_repository_template_load_post(template_id: str) -> tuple[dict, int]:
+    template = get_template_repository_template(settings, template_id)
+    if not template:
+        return {"status": "error", "error": "Unknown template_id."}, 404
+    return {
+        "status": "ok",
+        "template_record": template,
+    }, 200
+
+
+@app.post("/editor/repository/save_as")
+def editor_repository_save_as_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    template_text = body.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        return {"status": "error", "error": "template must be a non-empty string."}, 400
+
+    context_mode = body.get("context_mode", "sample")
+    fixture_name = body.get("fixture_name")
+    try:
+        mode = _resolve_context_mode(context_mode)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(mode, fixture_name=fixture_name)
+    validation = validate_template_text(template_text, context)
+    if not validation["valid"]:
+        return {
+            "status": "error",
+            "context_source": context_source if context is not None else None,
+            "validation": validation,
+        }, 400
+
+    try:
+        created = create_template_repository_template(
+            settings,
+            template_text=template_text,
+            name=str(body.get("name") or "Untitled Template"),
+            author=str(body.get("author") or "editor-user"),
+            description=str(body.get("description") or ""),
+            source=str(body.get("source") or "editor-repository-save-as"),
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {
+        "status": "ok",
+        "context_source": context_source if context is not None else None,
+        "template_record": created,
+        "validation": validation,
+    }, 200
+
+
+@app.put("/editor/repository/template/<string:template_id>")
+def editor_repository_template_put(template_id: str) -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    template_text = body.get("template")
+    if template_text is not None and (not isinstance(template_text, str) or not template_text.strip()):
+        return {"status": "error", "error": "template must be a non-empty string when provided."}, 400
+
+    context_mode = body.get("context_mode", "sample")
+    fixture_name = body.get("fixture_name")
+    try:
+        mode = _resolve_context_mode(context_mode)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(mode, fixture_name=fixture_name)
+    if isinstance(template_text, str) and template_text.strip():
+        validation = validate_template_text(template_text, context)
+        if not validation["valid"]:
+            return {
+                "status": "error",
+                "context_source": context_source if context is not None else None,
+                "validation": validation,
+            }, 400
+    else:
+        validation = {"valid": True, "warnings": [], "errors": [], "undeclared_variables": []}
+
+    try:
+        updated = update_template_repository_template(
+            settings,
+            template_id=template_id,
+            template_text=template_text,
+            name=str(body.get("name")) if body.get("name") is not None else None,
+            author=str(body.get("author")) if body.get("author") is not None else None,
+            description=str(body.get("description")) if body.get("description") is not None else None,
+            source=str(body.get("source") or "editor-repository-save"),
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {
+        "status": "ok",
+        "context_source": context_source if context is not None else None,
+        "template_record": updated,
+        "validation": validation,
+    }, 200
+
+
+@app.post("/editor/repository/template/<string:template_id>/duplicate")
+def editor_repository_template_duplicate_post(template_id: str) -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    try:
+        duplicated = duplicate_template_repository_template(
+            settings,
+            template_id=template_id,
+            name=str(body.get("name")) if body.get("name") is not None else None,
+            author=str(body.get("author")) if body.get("author") is not None else None,
+            source=str(body.get("source") or "editor-repository-duplicate"),
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {"status": "ok", "template_record": duplicated}, 200
+
+
+@app.get("/editor/repository/template/<string:template_id>/export")
+def editor_repository_template_export_get(template_id: str) -> tuple[dict, int]:
+    include_versions_raw = str(request.args.get("include_versions", "false")).strip().lower()
+    include_versions = include_versions_raw in {"1", "true", "yes", "on"}
+    limit_raw = request.args.get("limit", "30")
+    try:
+        limit = max(1, min(200, int(limit_raw)))
+    except ValueError:
+        limit = 30
+
+    try:
+        payload = export_template_repository_bundle(
+            settings,
+            template_id=template_id,
+            include_versions=include_versions,
+            versions_limit=limit,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 404
+    payload["status"] = "ok"
+    return payload, 200
+
+
+@app.post("/editor/repository/import")
+def editor_repository_import_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    bundle = body.get("bundle")
+    if not isinstance(bundle, dict):
+        return {"status": "error", "error": "bundle must be a JSON object."}, 400
+
+    template_text = bundle.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        return {"status": "error", "error": "bundle.template must be a non-empty string."}, 400
+
+    context_mode = body.get("context_mode", "sample")
+    fixture_name = body.get("fixture_name")
+    try:
+        mode = _resolve_context_mode(context_mode)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    context, context_source = _context_for_mode(mode, fixture_name=fixture_name)
+    validation = validate_template_text(template_text, context)
+    if not validation["valid"]:
+        return {
+            "status": "error",
+            "context_source": context_source if context is not None else None,
+            "validation": validation,
+        }, 400
+
+    try:
+        imported = import_template_repository_bundle(
+            settings,
+            bundle=bundle,
+            author=str(body.get("author")) if body.get("author") is not None else None,
+            source=str(body.get("source") or "editor-repository-import"),
+            name=str(body.get("name")) if body.get("name") is not None else None,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {
+        "status": "ok",
+        "context_source": context_source if context is not None else None,
+        "template_record": imported,
+        "validation": validation,
+    }, 200
 
 
 @app.get("/editor/template/version/<string:version_id>")

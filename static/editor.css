@@ -73,6 +73,69 @@ body[data-theme="dark"] {
   z-index: 1;
 }
 
+.theme-corner {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 40;
+}
+
+.theme-switch {
+  display: inline-block;
+  cursor: pointer;
+  position: relative;
+}
+
+.theme-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.theme-switch-track {
+  width: 70px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f6f8f7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  position: relative;
+  box-shadow: var(--shadow);
+}
+
+.theme-switch-icon {
+  font-size: 0.88rem;
+  color: var(--muted);
+  user-select: none;
+}
+
+.theme-switch-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  transition: transform 0.16s ease;
+}
+
+.theme-switch input:checked + .theme-switch-track .theme-switch-thumb {
+  transform: translateX(34px);
+}
+
+.theme-switch input:checked + .theme-switch-track .theme-switch-icon-sun {
+  opacity: 0.45;
+}
+
+.theme-switch input:not(:checked) + .theme-switch-track .theme-switch-icon-moon {
+  opacity: 0.45;
+}
+
 .card {
   background: color-mix(in srgb, var(--panel) 88%, white);
   border: 1px solid var(--line);
@@ -434,6 +497,7 @@ body[data-theme="dark"] .field-transform {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .advanced-toolbar label {
@@ -461,6 +525,20 @@ body[data-theme="dark"] .field-transform {
   background: #fff;
   color: var(--ink);
   min-width: 160px;
+}
+
+.repository-shell {
+  margin-bottom: 12px;
+  background: color-mix(in srgb, #f9fcfa 92%, var(--panel));
+}
+
+.repository-select-row select {
+  flex: 1;
+  min-width: 220px;
+}
+
+.repository-meta-row input {
+  min-width: 180px;
 }
 
 label[for="templateEditor"] {
@@ -648,6 +726,14 @@ body[data-theme="dark"] .validation,
 body[data-theme="dark"] .tab,
 body[data-theme="dark"] .modal-card {
   background: #16221d;
+}
+
+body[data-theme="dark"] .theme-switch-track {
+  background: #16221d;
+}
+
+body[data-theme="dark"] .theme-switch-thumb {
+  background: #22332b;
 }
 
 body[data-theme="dark"] .tab.active {

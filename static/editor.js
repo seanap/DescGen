@@ -165,6 +165,9 @@ const state = {
   templateDefault: "",
   templateName: "Auto Stat Template",
   templateMeta: null,
+  repositoryTemplates: [],
+  repositorySelectedId: "",
+  repositoryLoadedTemplateId: "",
   versions: [],
   fixtures: [],
   starterTemplates: [],
@@ -200,10 +203,12 @@ const elements = {
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
   contextSafetyBanner: document.getElementById("contextSafetyBanner"),
+  repositoryTemplateSelect: document.getElementById("repositoryTemplateSelect"),
+  repositoryTemplateMeta: document.getElementById("repositoryTemplateMeta"),
+  repoTemplateNameInput: document.getElementById("repoTemplateNameInput"),
+  repoTemplateAuthorInput: document.getElementById("repoTemplateAuthorInput"),
   starterTemplateSelect: document.getElementById("starterTemplateSelect"),
   starterTemplateMeta: document.getElementById("starterTemplateMeta"),
-  templateNameInput: document.getElementById("templateNameInput"),
-  templateAuthorInput: document.getElementById("templateAuthorInput"),
   importTemplateFile: document.getElementById("importTemplateFile"),
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
@@ -1012,6 +1017,147 @@ function renderTemplateMeta(meta) {
   elements.templateMeta.textContent = lines.join("\n");
 }
 
+function repositorySelectedId() {
+  return String(elements.repositoryTemplateSelect?.value || "").trim();
+}
+
+function findRepositoryTemplateSummary(templateId) {
+  if (!templateId) return null;
+  return state.repositoryTemplates.find((item) => String(item.template_id || "") === String(templateId)) || null;
+}
+
+function setRepositoryFormValues(options = {}) {
+  const { name = "", author = "" } = options;
+  if (elements.repoTemplateNameInput) {
+    elements.repoTemplateNameInput.value = String(name || "").trim();
+  }
+  if (elements.repoTemplateAuthorInput) {
+    elements.repoTemplateAuthorInput.value = String(author || "").trim();
+  }
+}
+
+function renderRepositoryMeta(record = null) {
+  if (!elements.repositoryTemplateMeta) return;
+  if (!record) {
+    elements.repositoryTemplateMeta.textContent = "No repository template selected.";
+    return;
+  }
+  const lines = [];
+  lines.push(`${record.name || "Untitled Template"} (${record.template_id || "unknown"})`);
+  lines.push(`Author: ${record.author || "unknown"} | Source: ${record.source || "unknown"}`);
+  if (record.description) {
+    lines.push(record.description);
+  }
+  if (record.updated_at_utc) {
+    lines.push(`Updated: ${record.updated_at_utc}`);
+  }
+  if (record.created_at_utc) {
+    lines.push(`Created: ${record.created_at_utc}`);
+  }
+  if (typeof record.template_chars === "number") {
+    lines.push(`Template length: ${record.template_chars} chars`);
+  } else if (typeof record.template === "string") {
+    lines.push(`Template length: ${record.template.length} chars`);
+  }
+  if (record.is_builtin) {
+    lines.push("Built-in template: Save As to create an editable copy.");
+  }
+  elements.repositoryTemplateMeta.textContent = lines.join("\n");
+}
+
+function renderRepositoryOptions() {
+  if (!elements.repositoryTemplateSelect) return;
+  const select = elements.repositoryTemplateSelect;
+  const previous = state.repositorySelectedId || String(select.value || "");
+  select.innerHTML = "";
+
+  if (!Array.isArray(state.repositoryTemplates) || state.repositoryTemplates.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No templates in repository";
+    select.appendChild(option);
+    state.repositorySelectedId = "";
+    renderRepositoryMeta(null);
+    return;
+  }
+
+  for (const item of state.repositoryTemplates) {
+    const option = document.createElement("option");
+    option.value = String(item.template_id || "");
+    const locked = item.is_builtin ? " [built-in]" : "";
+    option.textContent = `${item.name || item.template_id}${locked}`;
+    option.title = item.description || item.name || item.template_id;
+    select.appendChild(option);
+  }
+
+  const validPrevious = state.repositoryTemplates.some(
+    (item) => String(item.template_id || "") === previous
+  );
+  select.value = validPrevious ? previous : String(state.repositoryTemplates[0].template_id || "");
+  state.repositorySelectedId = String(select.value || "");
+  const selected = findRepositoryTemplateSummary(state.repositorySelectedId);
+  renderRepositoryMeta(selected);
+  if (selected) {
+    setRepositoryFormValues({ name: selected.name, author: selected.author });
+  }
+}
+
+async function loadRepositoryTemplates(options = {}) {
+  const { preferTemplateId = "" } = options;
+  const res = await requestJSON("/editor/repository/templates");
+  if (!res.ok || !Array.isArray(res.payload.templates)) {
+    state.repositoryTemplates = [];
+    renderRepositoryOptions();
+    setStatus("Failed to load template repository", "error");
+    return;
+  }
+  state.repositoryTemplates = res.payload.templates;
+  if (preferTemplateId) {
+    state.repositorySelectedId = String(preferTemplateId);
+  }
+  renderRepositoryOptions();
+}
+
+async function loadRepositoryTemplateIntoEditor(templateId, options = {}) {
+  const { promptIfOverwrite = true } = options;
+  const targetId = String(templateId || repositorySelectedId()).trim();
+  if (!targetId) {
+    setStatus("Select a repository template first", "error");
+    return;
+  }
+  const res = await requestJSON(`/editor/repository/template/${encodeURIComponent(targetId)}`);
+  if (!res.ok) {
+    setStatus("Failed to load repository template", "error");
+    return;
+  }
+  const record = res.payload.template_record || null;
+  if (!record || typeof record.template !== "string") {
+    setStatus("Repository template payload missing template text", "error");
+    return;
+  }
+  if (promptIfOverwrite) {
+    const current = getEditorText().trim();
+    const incoming = String(record.template || "").trim();
+    if (current && current !== incoming) {
+      const confirmed = window.confirm(
+        `Replace current editor content with repository template "${record.name || targetId}"?`
+      );
+      if (!confirmed) return;
+    }
+  }
+  state.repositorySelectedId = String(record.template_id || targetId);
+  state.repositoryLoadedTemplateId = state.repositorySelectedId;
+  if (elements.repositoryTemplateSelect) {
+    elements.repositoryTemplateSelect.value = state.repositorySelectedId;
+  }
+  setEditorText(record.template || "");
+  setRepositoryFormValues({ name: record.name, author: record.author });
+  renderRepositoryMeta(record);
+  switchTab("advanced");
+  setStatus(`Loaded repository template: ${record.name || targetId}`, "ok");
+  queueAutoPreview();
+}
+
 function renderVersionHistory() {
   elements.versionList.innerHTML = "";
   if (!Array.isArray(state.versions) || state.versions.length === 0) {
@@ -1128,7 +1274,7 @@ async function rollbackTemplateVersion(versionId) {
     method: "POST",
     body: JSON.stringify({
       version_id: versionId,
-      author: elements.templateAuthorInput.value || "editor-user",
+      author: elements.repoTemplateAuthorInput?.value || "editor-user",
       source: "editor-rollback",
     }),
   });
@@ -1350,7 +1496,12 @@ function buildExportFilename(name) {
 }
 
 async function exportTemplateBundle() {
-  const res = await requestJSON("/editor/template/export?include_versions=false");
+  const selectedId = repositorySelectedId();
+  if (!selectedId) {
+    setStatus("Select a repository template to export", "error");
+    return;
+  }
+  const res = await requestJSON(`/editor/repository/template/${encodeURIComponent(selectedId)}/export?include_versions=false`);
   if (!res.ok) {
     setStatus("Template export failed", "error");
     return;
@@ -1370,6 +1521,114 @@ function triggerImportTemplateFile() {
   elements.importTemplateFile.click();
 }
 
+async function saveRepositoryTemplate() {
+  const selectedId = repositorySelectedId();
+  if (!selectedId) {
+    setStatus("Select a repository template first", "error");
+    return;
+  }
+  const summary = findRepositoryTemplateSummary(selectedId);
+  if (summary && summary.is_builtin) {
+    setStatus("Built-in templates are read-only. Use Save As.", "error");
+    return;
+  }
+  if (
+    state.repositoryLoadedTemplateId &&
+    selectedId !== state.repositoryLoadedTemplateId
+  ) {
+    const confirmed = window.confirm(
+      "You are about to overwrite a repository template that is not the one currently loaded. Continue?"
+    );
+    if (!confirmed) return;
+  }
+
+  const template = getEditorText();
+  const name = (elements.repoTemplateNameInput?.value || "Untitled Template").trim() || "Untitled Template";
+  const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim() || "editor-user";
+  const res = await requestJSON(`/editor/repository/template/${encodeURIComponent(selectedId)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      template,
+      name,
+      author,
+      source: "editor-repository-save",
+      context_mode: elements.previewContextMode.value || "sample",
+      fixture_name: selectedFixtureName(),
+    }),
+  });
+  if (!res.ok) {
+    updateValidationPane(res.payload, false);
+    setStatus("Repository save failed", "error");
+    return;
+  }
+  await loadRepositoryTemplates({ preferTemplateId: selectedId });
+  const loaded = await requestJSON(`/editor/repository/template/${encodeURIComponent(selectedId)}`);
+  if (loaded.ok) {
+    renderRepositoryMeta(loaded.payload.template_record || null);
+  }
+  state.repositoryLoadedTemplateId = selectedId;
+  setStatus("Repository template saved", "ok");
+}
+
+async function saveRepositoryTemplateAs() {
+  const template = getEditorText();
+  const name = (elements.repoTemplateNameInput?.value || "Untitled Template").trim() || "Untitled Template";
+  const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim() || "editor-user";
+  const res = await requestJSON("/editor/repository/save_as", {
+    method: "POST",
+    body: JSON.stringify({
+      template,
+      name,
+      author,
+      source: "editor-repository-save-as",
+      context_mode: elements.previewContextMode.value || "sample",
+      fixture_name: selectedFixtureName(),
+    }),
+  });
+  if (!res.ok) {
+    updateValidationPane(res.payload, false);
+    setStatus("Repository Save As failed", "error");
+    return;
+  }
+  const created = res.payload.template_record || {};
+  const createdId = String(created.template_id || "");
+  await loadRepositoryTemplates({ preferTemplateId: createdId });
+  state.repositoryLoadedTemplateId = createdId;
+  renderRepositoryMeta(created);
+  setStatus(`Repository template saved as: ${created.name || createdId}`, "ok");
+}
+
+async function duplicateRepositoryTemplate() {
+  const selectedId = repositorySelectedId();
+  if (!selectedId) {
+    setStatus("Select a repository template first", "error");
+    return;
+  }
+  const summary = findRepositoryTemplateSummary(selectedId);
+  const defaultName = `${summary?.name || "Template"} Copy`;
+  const name = window.prompt("Duplicate template as:", defaultName);
+  if (name === null) return;
+  const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim() || "editor-user";
+  const res = await requestJSON(`/editor/repository/template/${encodeURIComponent(selectedId)}/duplicate`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: name.trim() || defaultName,
+      author,
+      source: "editor-repository-duplicate",
+    }),
+  });
+  if (!res.ok) {
+    setStatus("Template duplicate failed", "error");
+    return;
+  }
+  const duplicated = res.payload.template_record || {};
+  const duplicatedId = String(duplicated.template_id || "");
+  await loadRepositoryTemplates({ preferTemplateId: duplicatedId });
+  state.repositoryLoadedTemplateId = duplicatedId;
+  renderRepositoryMeta(duplicated);
+  setStatus(`Template duplicated: ${duplicated.name || duplicatedId}`, "ok");
+}
+
 async function importTemplateBundleFromFile(file) {
   if (!file) return;
   let parsed;
@@ -1385,13 +1644,15 @@ async function importTemplateBundleFromFile(file) {
     return;
   }
 
-  const author = (elements.templateAuthorInput.value || "editor-user").trim() || "editor-user";
-  const res = await requestJSON("/editor/template/import", {
+  const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim() || "editor-user";
+  const name = (elements.repoTemplateNameInput?.value || "").trim();
+  const res = await requestJSON("/editor/repository/import", {
     method: "POST",
     body: JSON.stringify({
       bundle: parsed,
       author,
-      source: "editor-ui-import",
+      name: name || undefined,
+      source: "editor-repository-import",
       context_mode: elements.previewContextMode.value || "sample",
       fixture_name: selectedFixtureName(),
     }),
@@ -1402,15 +1663,16 @@ async function importTemplateBundleFromFile(file) {
     return;
   }
 
-  const active = res.payload.active || {};
-  state.templateActive = decodeEscapedNewlines(active.template || parsed.template || "");
-  state.templateMeta = active || state.templateMeta;
-  state.templateName = String(active.name || parsed.name || state.templateName || "Auto Stat Template");
-  setEditorText(state.templateActive);
-  elements.templateNameInput.value = state.templateName;
-  renderTemplateMeta(state.templateMeta);
-  await loadVersionHistory();
-  setStatus("Template imported + published", "ok");
+  const record = res.payload.template_record || {};
+  const importedId = String(record.template_id || "");
+  await loadRepositoryTemplates({ preferTemplateId: importedId });
+  state.repositoryLoadedTemplateId = importedId;
+  if (typeof record.template === "string") {
+    setEditorText(record.template);
+  }
+  setRepositoryFormValues({ name: record.name, author: record.author });
+  renderRepositoryMeta(record);
+  setStatus("Template imported into repository", "ok");
   queueAutoPreview();
 }
 
@@ -1442,7 +1704,7 @@ async function loadEditorBootstrap() {
 
   const schemaMode = elements.schemaContextMode.value || "sample";
   const fixtureName = selectedFixtureName();
-  const [activeRes, defaultRes, schemaRes, snippetRes, starterRes, fixtureRes, versionsRes] = await Promise.all([
+  const [activeRes, defaultRes, schemaRes, snippetRes, starterRes, fixtureRes, versionsRes, repositoryRes] = await Promise.all([
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
     requestJSON(`/editor/catalog?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
@@ -1450,6 +1712,7 @@ async function loadEditorBootstrap() {
     requestJSON("/editor/starter-templates"),
     requestJSON("/editor/fixtures"),
     requestJSON("/editor/template/versions?limit=40"),
+    requestJSON("/editor/repository/templates"),
   ]);
 
   if (!activeRes.ok || !defaultRes.ok) {
@@ -1463,10 +1726,8 @@ async function loadEditorBootstrap() {
   state.templateName = String(activeRes.payload.name || "Auto Stat Template");
 
   setEditorText(state.templateActive);
-  elements.templateNameInput.value = state.templateName;
-  if (!elements.templateAuthorInput.value.trim()) {
-    elements.templateAuthorInput.value = String(activeRes.payload.updated_by || "editor-user");
-  }
+  const activeAuthor = String(activeRes.payload.updated_by || "editor-user");
+  setRepositoryFormValues({ name: state.templateName, author: activeAuthor });
 
   if (schemaRes.ok) {
     state.schema = schemaRes.payload.catalog || null;
@@ -1489,6 +1750,27 @@ async function loadEditorBootstrap() {
   }
   if (versionsRes.ok && Array.isArray(versionsRes.payload.versions)) {
     state.versions = versionsRes.payload.versions;
+  }
+  if (repositoryRes.ok && Array.isArray(repositoryRes.payload.templates)) {
+    state.repositoryTemplates = repositoryRes.payload.templates;
+    const byName = state.repositoryTemplates.find(
+      (item) => String(item.name || "") === state.templateName
+    );
+    if (byName) {
+      state.repositorySelectedId = String(byName.template_id || "");
+      setRepositoryFormValues({
+        name: byName.name || state.templateName,
+        author: byName.author || activeAuthor,
+      });
+      state.repositoryLoadedTemplateId = state.repositorySelectedId;
+    }
+    renderRepositoryOptions();
+    if (!byName) {
+      setRepositoryFormValues({ name: state.templateName, author: activeAuthor });
+    }
+  } else {
+    state.repositoryTemplates = [];
+    renderRepositoryOptions();
   }
 
   refreshSourceFilterOptions();
@@ -1580,8 +1862,8 @@ function queueAutoPreview() {
 async function saveTemplate(options = {}) {
   const { source = "editor-ui" } = options;
   const template = getEditorText();
-  const author = (elements.templateAuthorInput.value || "editor-user").trim();
-  const name = (elements.templateNameInput.value || "Auto Stat Template").trim();
+  const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim();
+  const name = (elements.repoTemplateNameInput?.value || "Auto Stat Template").trim();
   const res = await requestJSON("/editor/template", {
     method: "PUT",
     body: JSON.stringify({
@@ -1641,8 +1923,6 @@ function bindUI() {
 
   document.getElementById("btnSaveDraft").addEventListener("click", saveDraft);
   document.getElementById("btnLoadDraft").addEventListener("click", loadDraft);
-  document.getElementById("btnExportTemplate").addEventListener("click", exportTemplateBundle);
-  document.getElementById("btnImportTemplate").addEventListener("click", triggerImportTemplateFile);
   if (elements.btnTour) {
     elements.btnTour.addEventListener("click", () => {
       openTour(0);
@@ -1669,11 +1949,46 @@ function bindUI() {
   if (starterApplyBtn) {
     starterApplyBtn.addEventListener("click", applySelectedStarterTemplate);
   }
+  const repoLoadBtn = document.getElementById("btnRepoLoad");
+  if (repoLoadBtn) {
+    repoLoadBtn.addEventListener("click", () => loadRepositoryTemplateIntoEditor(repositorySelectedId(), { promptIfOverwrite: true }));
+  }
+  const repoSaveBtn = document.getElementById("btnRepoSave");
+  if (repoSaveBtn) {
+    repoSaveBtn.addEventListener("click", saveRepositoryTemplate);
+  }
+  const repoSaveAsBtn = document.getElementById("btnRepoSaveAs");
+  if (repoSaveAsBtn) {
+    repoSaveAsBtn.addEventListener("click", saveRepositoryTemplateAs);
+  }
+  const repoDuplicateBtn = document.getElementById("btnRepoDuplicate");
+  if (repoDuplicateBtn) {
+    repoDuplicateBtn.addEventListener("click", duplicateRepositoryTemplate);
+  }
+  const repoImportBtn = document.getElementById("btnRepoImport");
+  if (repoImportBtn) {
+    repoImportBtn.addEventListener("click", triggerImportTemplateFile);
+  }
+  const repoExportBtn = document.getElementById("btnRepoExport");
+  if (repoExportBtn) {
+    repoExportBtn.addEventListener("click", exportTemplateBundle);
+  }
   document.getElementById("btnCopyPreview").addEventListener("click", copyPreview);
   document.getElementById("btnRefreshHistory").addEventListener("click", async () => {
     await loadVersionHistory();
     setStatus("Template history refreshed", "ok");
   });
+
+  if (elements.repositoryTemplateSelect) {
+    elements.repositoryTemplateSelect.addEventListener("change", () => {
+      state.repositorySelectedId = repositorySelectedId();
+      const summary = findRepositoryTemplateSummary(state.repositorySelectedId);
+      renderRepositoryMeta(summary);
+      if (summary) {
+        setRepositoryFormValues({ name: summary.name, author: summary.author });
+      }
+    });
+  }
 
   document.getElementById("btnSimpleApply").addEventListener("click", () => {
     setEditorText(buildTemplateFromSimple());

@@ -9,6 +9,16 @@
 <body>
   <div class="bg-shape bg-shape-a"></div>
   <div class="bg-shape bg-shape-b"></div>
+  <div class="theme-corner">
+    <label class="theme-switch" for="themeToggle" title="Toggle light and dark mode">
+      <input id="themeToggle" type="checkbox" checked>
+      <span class="theme-switch-track">
+        <span class="theme-switch-icon theme-switch-icon-sun">☀</span>
+        <span class="theme-switch-icon theme-switch-icon-moon">☾</span>
+        <span class="theme-switch-thumb"></span>
+      </span>
+    </label>
+  </div>
   <div class="app-shell">
     <header class="topbar card">
       <div>
@@ -24,8 +34,6 @@
       <button id="btnLoadDefault" class="btn btn-ghost">Load Default</button>
       <button id="btnLoadDraft" class="btn btn-ghost" title="Load your locally saved browser draft">Load Draft</button>
       <button id="btnSaveDraft" class="btn btn-ghost" title="Save current editor content locally in your browser">Save Draft</button>
-      <button id="btnExportTemplate" class="btn btn-ghost" title="Download active template as JSON bundle">Export Template</button>
-      <button id="btnImportTemplate" class="btn btn-ghost" title="Import template from JSON bundle">Import Template</button>
       <button id="btnTour" class="btn btn-ghost" title="Open quick onboarding tour">Tour</button>
       <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
       <button id="btnValidate" class="btn btn-secondary">Validate</button>
@@ -36,11 +44,6 @@
         <input id="autoPreviewToggle" type="checkbox" checked>
         Auto-preview
       </label>
-      <label class="toggle-inline" for="themeToggle">
-        <input id="themeToggle" type="checkbox" checked>
-        Dark Mode
-      </label>
-      <input id="importTemplateFile" type="file" accept="application/json,.json" hidden>
     </section>
 
     <main class="layout">
@@ -81,6 +84,34 @@
       </aside>
 
       <section class="panel card reveal" style="--delay:0.07s">
+        <div class="snippet-shell repository-shell">
+          <div class="snippet-head">
+            <h3>Template Repository</h3>
+            <p class="subtext">Save, organize, import, export, and load templates from persistent storage.</p>
+          </div>
+          <div class="advanced-toolbar repository-select-row">
+            <label for="repositoryTemplateSelect">Library</label>
+            <select id="repositoryTemplateSelect">
+              <option value="" selected>Loading templates...</option>
+            </select>
+            <button id="btnRepoLoad" class="btn btn-secondary" type="button">Load Highlighted</button>
+          </div>
+          <div class="advanced-toolbar repository-meta-row">
+            <label for="repoTemplateNameInput">Title</label>
+            <input id="repoTemplateNameInput" type="text" placeholder="Template title">
+            <label for="repoTemplateAuthorInput">Author</label>
+            <input id="repoTemplateAuthorInput" type="text" placeholder="Template author">
+          </div>
+          <div id="repositoryTemplateMeta" class="meta">No repository template selected.</div>
+          <div class="inline-actions">
+            <button id="btnRepoSave" class="btn btn-secondary" type="button">Save</button>
+            <button id="btnRepoSaveAs" class="btn btn-ghost" type="button">Save As</button>
+            <button id="btnRepoDuplicate" class="btn btn-ghost" type="button">Duplicate</button>
+            <button id="btnRepoImport" class="btn btn-ghost" type="button">Import</button>
+            <button id="btnRepoExport" class="btn btn-ghost" type="button">Export</button>
+          </div>
+          <input id="importTemplateFile" type="file" accept="application/json,.json" hidden>
+        </div>
         <div class="tabbar">
           <button class="tab active" data-tab="simple">Simple Builder</button>
           <button class="tab" data-tab="advanced">Advanced Template</button>
@@ -124,12 +155,6 @@
               <button id="btnStarterApply" class="btn btn-ghost" type="button">Apply Starter</button>
             </div>
             <div id="starterTemplateMeta" class="meta">No starter selected.</div>
-          </div>
-          <div class="advanced-toolbar">
-            <label for="templateNameInput">Template Name</label>
-            <input id="templateNameInput" type="text" placeholder="Auto Stat Template">
-            <label for="templateAuthorInput">Author</label>
-            <input id="templateAuthorInput" type="text" placeholder="editor-user">
           </div>
           <label for="templateEditor">Jinja Template</label>
           <textarea id="templateEditor" spellcheck="false"></textarea>

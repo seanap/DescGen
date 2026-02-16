@@ -5,18 +5,25 @@ from types import SimpleNamespace
 
 from description_template import (
     build_context_schema,
+    create_template_repository_template,
+    duplicate_template_repository_template,
+    export_template_repository_bundle,
+    get_template_repository_template,
     get_template_version,
     get_editor_snippets,
     get_starter_templates,
     get_active_template,
     get_default_template,
     get_sample_template_context,
+    import_template_repository_bundle,
     list_sample_template_fixtures,
+    list_template_repository_templates,
     list_template_versions,
     render_template_text,
     render_with_active_template,
     rollback_template_version,
     save_active_template,
+    update_template_repository_template,
     validate_template_text,
 )
 
@@ -234,6 +241,62 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("label", first)
         self.assertIn("description", first)
         self.assertIn("template", first)
+
+    def test_template_repository_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            created = create_template_repository_template(
+                settings,
+                template_text="Hello {{ activity.distance_miles }}",
+                name="My Template",
+                author="tester",
+                description="Repository template",
+            )
+            self.assertIn("template_id", created)
+            self.assertFalse(created["is_builtin"])
+
+            listed = list_template_repository_templates(settings)
+            self.assertGreaterEqual(len(listed), 1)
+            self.assertTrue(any(item["template_id"] == created["template_id"] for item in listed))
+
+            loaded = get_template_repository_template(settings, created["template_id"])
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            self.assertEqual(loaded["name"], "My Template")
+            self.assertEqual(loaded["author"], "tester")
+
+            updated = update_template_repository_template(
+                settings,
+                template_id=created["template_id"],
+                template_text="Hi {{ activity.distance_miles }}",
+                name="My Template v2",
+                author="tester2",
+            )
+            self.assertEqual(updated["name"], "My Template v2")
+            self.assertEqual(updated["author"], "tester2")
+
+            duplicated = duplicate_template_repository_template(
+                settings,
+                template_id=created["template_id"],
+            )
+            self.assertNotEqual(duplicated["template_id"], created["template_id"])
+
+            exported = export_template_repository_bundle(
+                settings,
+                template_id=created["template_id"],
+            )
+            self.assertEqual(exported["name"], "My Template v2")
+            self.assertEqual(exported["author"], "tester2")
+            self.assertIn("template", exported)
+
+            imported = import_template_repository_bundle(
+                settings,
+                bundle=exported,
+            )
+            self.assertIn("template_id", imported)
+            self.assertEqual(imported["name"], "My Template v2")
 
 
 if __name__ == "__main__":

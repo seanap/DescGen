@@ -357,6 +357,354 @@ def _template_versions_dir(settings: Settings) -> Path:
     return _template_path(settings).parent / "template_versions"
 
 
+def _template_repository_dir(settings: Settings) -> Path:
+    return _template_path(settings).parent / "template_repository"
+
+
+def _normalize_template_id(raw_id: str | None) -> str:
+    value = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(raw_id or "").strip().lower()).strip("-")
+    return value
+
+
+def _template_repository_builtin_records() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = [
+        {
+            "template_id": "builtin-default",
+            "name": "Default - Full Data Rich",
+            "author": "system",
+            "description": "Project default template (full data rich layout).",
+            "template": get_default_template(),
+            "source": "builtin-default",
+            "created_at_utc": None,
+            "updated_at_utc": None,
+            "is_builtin": True,
+            "can_overwrite": False,
+        }
+    ]
+    for starter in get_starter_templates():
+        starter_id = _normalize_template_id(starter.get("id"))
+        if not starter_id:
+            continue
+        records.append(
+            {
+                "template_id": f"starter-{starter_id}",
+                "name": str(starter.get("label") or starter_id),
+                "author": "system",
+                "description": str(starter.get("description") or ""),
+                "template": _normalize_template_text(str(starter.get("template") or "")),
+                "source": f"builtin-starter:{starter_id}",
+                "created_at_utc": None,
+                "updated_at_utc": None,
+                "is_builtin": True,
+                "can_overwrite": False,
+            }
+        )
+    return records
+
+
+def _template_repository_record_shape(
+    record: dict[str, Any] | None,
+    *,
+    fallback_id: str | None = None,
+    default_source: str = "repository",
+) -> dict[str, Any] | None:
+    if not isinstance(record, dict):
+        return None
+
+    template_text = record.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        return None
+
+    raw_id = record.get("template_id")
+    if raw_id is None:
+        raw_id = record.get("id")
+    if raw_id is None:
+        raw_id = fallback_id
+    template_id = _normalize_template_id(str(raw_id or ""))
+    if not template_id:
+        return None
+
+    name = str(record.get("name") or "Untitled Template").strip() or "Untitled Template"
+    author = str(record.get("author") or "unknown").strip() or "unknown"
+    description_raw = record.get("description")
+    description = str(description_raw).strip() if description_raw is not None else ""
+    source = str(record.get("source") or default_source).strip() or default_source
+    created_at_utc = record.get("created_at_utc")
+    updated_at_utc = record.get("updated_at_utc")
+    is_builtin = bool(record.get("is_builtin"))
+
+    return {
+        "template_id": template_id,
+        "name": name,
+        "author": author,
+        "description": description,
+        "template": _normalize_template_text(template_text),
+        "source": source,
+        "created_at_utc": created_at_utc if isinstance(created_at_utc, str) else None,
+        "updated_at_utc": updated_at_utc if isinstance(updated_at_utc, str) else None,
+        "is_builtin": is_builtin,
+        "can_overwrite": not is_builtin,
+    }
+
+
+def _template_repository_summary(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "template_id": record["template_id"],
+        "name": record["name"],
+        "author": record["author"],
+        "description": record["description"],
+        "source": record["source"],
+        "created_at_utc": record["created_at_utc"],
+        "updated_at_utc": record["updated_at_utc"],
+        "is_builtin": record["is_builtin"],
+        "can_overwrite": record["can_overwrite"],
+        "template_chars": len(str(record.get("template") or "")),
+    }
+
+
+def _template_repository_path(settings: Settings, template_id: str) -> Path:
+    safe_id = _normalize_template_id(template_id)
+    if not safe_id:
+        raise ValueError("template_id is required.")
+    return _template_repository_dir(settings) / f"{safe_id}.json"
+
+
+def _new_template_repository_id(name: str, template_text: str) -> str:
+    slug = _normalize_template_id(name) or "template"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    digest = hashlib.sha256((name + "\n" + template_text).encode("utf-8")).hexdigest()[:8]
+    return f"tpl-{slug[:40]}-{stamp}-{digest}".lower()
+
+
+def list_template_repository_templates(settings: Settings) -> list[dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for builtin in _template_repository_builtin_records():
+        records[builtin["template_id"]] = builtin
+
+    repo_dir = _template_repository_dir(settings)
+    if repo_dir.exists():
+        for path in sorted(repo_dir.glob("*.json")):
+            loaded = _template_repository_record_shape(_read_json_file(path), fallback_id=path.stem)
+            if not loaded:
+                continue
+            records[loaded["template_id"]] = loaded
+
+    ordered = sorted(
+        records.values(),
+        key=lambda item: (
+            0 if item.get("is_builtin") else 1,
+            str(item.get("name") or "").lower(),
+            str(item.get("template_id") or ""),
+        ),
+    )
+    return [_template_repository_summary(item) for item in ordered]
+
+
+def get_template_repository_template(settings: Settings, template_id: str) -> dict[str, Any] | None:
+    normalized_id = _normalize_template_id(template_id)
+    if not normalized_id:
+        return None
+
+    for builtin in _template_repository_builtin_records():
+        if builtin["template_id"] == normalized_id:
+            return deepcopy(builtin)
+
+    loaded = _template_repository_record_shape(
+        _read_json_file(_template_repository_path(settings, normalized_id)),
+        fallback_id=normalized_id,
+    )
+    if loaded is None:
+        return None
+    return loaded
+
+
+def create_template_repository_template(
+    settings: Settings,
+    *,
+    template_text: str,
+    name: str | None,
+    author: str | None,
+    description: str | None = None,
+    source: str = "editor-save-as",
+) -> dict[str, Any]:
+    normalized = _normalize_template_text(template_text)
+    if not normalized:
+        raise ValueError("template_text must not be empty.")
+
+    base_name = str(name or "Untitled Template").strip() or "Untitled Template"
+    base_author = str(author or "unknown").strip() or "unknown"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    template_id = _new_template_repository_id(base_name, normalized)
+    path = _template_repository_path(settings, template_id)
+    while path.exists():
+        template_id = _new_template_repository_id(base_name, normalized + now_iso)
+        path = _template_repository_path(settings, template_id)
+
+    record = {
+        "template_id": template_id,
+        "name": base_name,
+        "author": base_author,
+        "description": str(description or "").strip(),
+        "template": normalized,
+        "source": str(source or "editor-save-as").strip() or "editor-save-as",
+        "created_at_utc": now_iso,
+        "updated_at_utc": now_iso,
+        "is_builtin": False,
+        "can_overwrite": True,
+    }
+    _write_json_file(path, record)
+    return record
+
+
+def update_template_repository_template(
+    settings: Settings,
+    *,
+    template_id: str,
+    template_text: str | None = None,
+    name: str | None = None,
+    author: str | None = None,
+    description: str | None = None,
+    source: str = "editor-save",
+) -> dict[str, Any]:
+    current = get_template_repository_template(settings, template_id)
+    if not current:
+        raise ValueError(f"Unknown template_id: {template_id}")
+    if current.get("is_builtin"):
+        raise ValueError("Built-in templates cannot be overwritten. Use Save As instead.")
+
+    normalized_template = (
+        _normalize_template_text(template_text)
+        if template_text is not None
+        else str(current.get("template") or "")
+    )
+    if not normalized_template:
+        raise ValueError("template_text must not be empty.")
+
+    updated = {
+        "template_id": str(current["template_id"]),
+        "name": (
+            str(name).strip()
+            if name is not None
+            else str(current.get("name") or "Untitled Template")
+        )
+        or "Untitled Template",
+        "author": (
+            str(author).strip()
+            if author is not None
+            else str(current.get("author") or "unknown")
+        )
+        or "unknown",
+        "description": (
+            str(description).strip()
+            if description is not None
+            else str(current.get("description") or "")
+        ),
+        "template": normalized_template,
+        "source": str(source or current.get("source") or "editor-save").strip()
+        or "editor-save",
+        "created_at_utc": current.get("created_at_utc"),
+        "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "is_builtin": False,
+        "can_overwrite": True,
+    }
+    _write_json_file(_template_repository_path(settings, updated["template_id"]), updated)
+    return updated
+
+
+def duplicate_template_repository_template(
+    settings: Settings,
+    *,
+    template_id: str,
+    name: str | None = None,
+    author: str | None = None,
+    source: str = "editor-duplicate",
+) -> dict[str, Any]:
+    base = get_template_repository_template(settings, template_id)
+    if not base:
+        raise ValueError(f"Unknown template_id: {template_id}")
+    duplicate_name = str(name or f"{base['name']} Copy").strip() or f"{base['name']} Copy"
+    duplicate_author = str(author or base.get("author") or "unknown").strip() or "unknown"
+    return create_template_repository_template(
+        settings,
+        template_text=str(base.get("template") or ""),
+        name=duplicate_name,
+        author=duplicate_author,
+        description=str(base.get("description") or ""),
+        source=source,
+    )
+
+
+def export_template_repository_bundle(
+    settings: Settings,
+    *,
+    template_id: str,
+    include_versions: bool = False,
+    versions_limit: int = 30,
+) -> dict[str, Any]:
+    record = get_template_repository_template(settings, template_id)
+    if not record:
+        raise ValueError(f"Unknown template_id: {template_id}")
+
+    payload: dict[str, Any] = {
+        "bundle_version": 2,
+        "exported_at_utc": datetime.now(timezone.utc).isoformat(),
+        "template_id": record.get("template_id"),
+        "template": record.get("template"),
+        "name": record.get("name"),
+        "author": record.get("author"),
+        "description": record.get("description"),
+        "source": record.get("source"),
+        "is_builtin": bool(record.get("is_builtin")),
+        "metadata": {
+            "updated_by": record.get("author"),
+            "updated_at_utc": record.get("updated_at_utc"),
+            "source": record.get("source"),
+        },
+    }
+    if include_versions:
+        payload["versions"] = list_template_versions(
+            settings,
+            limit=max(1, min(200, int(versions_limit))),
+        )
+    return payload
+
+
+def import_template_repository_bundle(
+    settings: Settings,
+    *,
+    bundle: dict[str, Any],
+    author: str | None = None,
+    source: str = "editor-import",
+    name: str | None = None,
+) -> dict[str, Any]:
+    template_text = bundle.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        raise ValueError("bundle.template must be a non-empty string.")
+
+    metadata = bundle.get("metadata")
+    metadata_author = None
+    if isinstance(metadata, dict):
+        metadata_author = metadata.get("updated_by")
+
+    resolved_name = str(
+        name
+        or bundle.get("name")
+        or bundle.get("template_name")
+        or "Imported Template"
+    )
+    resolved_author = str(author or bundle.get("author") or metadata_author or "unknown")
+    resolved_description = str(bundle.get("description") or "")
+    imported = create_template_repository_template(
+        settings,
+        template_text=template_text,
+        name=resolved_name,
+        author=resolved_author,
+        description=resolved_description,
+        source=source,
+    )
+    return imported
+
+
 def _read_json_file(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
