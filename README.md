@@ -166,6 +166,7 @@ http://localhost:1609/editor
 <details>
 
 <summary> Full Endpoint List </summary>
+
 - `GET /health`
 - `GET /ready`
 - `GET /latest`
