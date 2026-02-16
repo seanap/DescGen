@@ -486,6 +486,11 @@ label[for="templateEditor"] {
   overflow: auto;
 }
 
+.schema-inspector:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--secondary) 70%, white);
+  outline-offset: 2px;
+}
+
 .inspector-path {
   margin-top: 8px;
   border: 1px solid var(--line);
@@ -555,6 +560,11 @@ label[for="templateEditor"] {
 
 .data-table tbody tr.is-selected {
   background: #eef8f2;
+}
+
+.data-table tbody tr:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--secondary) 70%, white);
+  outline-offset: -2px;
 }
 
 .data-table .mono {
@@ -981,6 +991,14 @@ label[for="templateEditor"] {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
   }
 }
 

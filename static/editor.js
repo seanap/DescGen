@@ -249,6 +249,8 @@ const state = {
   helperTransforms: [],
   schema: null,
   schemaSource: null,
+  schemaSearchTimer: null,
+  catalogRows: [],
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
   snippets: FALLBACK_SNIPPETS,
   autoPreview: true,
@@ -309,6 +311,7 @@ const elements = {
   advancedFiltersWrap: document.getElementById("advancedFiltersWrap"),
   btnToggleAdvancedFilters: document.getElementById("btnToggleAdvancedFilters"),
   catalogQuickPicks: document.getElementById("catalogQuickPicks"),
+  schemaKeyboardHint: document.getElementById("schemaKeyboardHint"),
   schemaInspector: document.getElementById("schemaInspector"),
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
@@ -966,6 +969,70 @@ function fieldAppearsInTemplate(path, templateText) {
   return pattern.test(haystack);
 }
 
+function selectedCatalogIndex() {
+  if (!Array.isArray(state.catalogRows) || state.catalogRows.length === 0) return -1;
+  return state.catalogRows.findIndex((row) => String(row.field.path || "") === state.selectedCatalogPath);
+}
+
+function selectCatalogIndex(index, options = {}) {
+  if (!Array.isArray(state.catalogRows) || state.catalogRows.length === 0) return;
+  const { ensureVisible = true } = options;
+  const bounded = Math.max(0, Math.min(state.catalogRows.length - 1, Number(index) || 0));
+  const target = state.catalogRows[bounded];
+  const path = String(target?.field?.path || "");
+  if (!path) return;
+  state.selectedCatalogPath = path;
+  renderSchemaCatalog(elements.schemaSearch.value || "", { ensureSelectionVisible: ensureVisible });
+}
+
+function moveCatalogSelection(delta) {
+  if (!Array.isArray(state.catalogRows) || state.catalogRows.length === 0) return;
+  const current = selectedCatalogIndex();
+  const start = current >= 0 ? current : 0;
+  selectCatalogIndex(start + delta, { ensureVisible: true });
+}
+
+function insertSelectedCatalogField() {
+  const index = selectedCatalogIndex();
+  if (index < 0) return;
+  const record = state.catalogRows[index];
+  const path = String(record?.field?.path || "");
+  if (!path) return;
+  insertFieldWithTransform(path, "{{ {path} }}");
+}
+
+function focusSchemaSearch() {
+  if (!elements.schemaSearch) return;
+  elements.schemaSearch.focus();
+  elements.schemaSearch.select();
+}
+
+function hasAnyModalOpen() {
+  return Boolean(
+    elements.publishModal?.classList.contains("open") ||
+    elements.tourModal?.classList.contains("open"),
+  );
+}
+
+function isTypingContext(target) {
+  if (!target) return false;
+  const tag = String(target.tagName || "").toLowerCase();
+  if (target.isContentEditable) return true;
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  return false;
+}
+
+function isCatalogFocusContext() {
+  const active = document.activeElement;
+  if (!active) return false;
+  if (active === document.body) return true;
+  if (active === elements.schemaList || active === elements.schemaInspector || active === elements.schemaSearch) {
+    return true;
+  }
+  if (elements.schemaList?.contains(active) || elements.schemaInspector?.contains(active)) return true;
+  return false;
+}
+
 function getFilteredSchemaRows(filterText = "") {
   const schema = state.schema;
   if (!schema || !Array.isArray(schema.groups) || schema.groups.length === 0) {
@@ -1179,7 +1246,8 @@ function renderSchemaInspector(record) {
   pane.appendChild(details);
 }
 
-function renderSchemaCatalog(filterText = "") {
+function renderSchemaCatalog(filterText = "", options = {}) {
+  const { ensureSelectionVisible = false } = options;
   const schema = state.schema;
   elements.schemaList.innerHTML = "";
 
@@ -1187,11 +1255,16 @@ function renderSchemaCatalog(filterText = "") {
     const contextMode = elements.schemaContextMode.value || "sample";
     elements.schemaMeta.textContent =
       `No schema fields available. Try context mode '${contextMode}' or run one worker cycle to populate latest payload context.`;
+    state.catalogRows = [];
+    if (elements.schemaKeyboardHint) {
+      elements.schemaKeyboardHint.textContent = "Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect";
+    }
     renderSchemaInspector(null);
     return;
   }
 
   const rows = getFilteredSchemaRows(filterText);
+  state.catalogRows = rows.slice();
   const sourceText = state.schemaSource ? ` | context: ${state.schemaSource}` : "";
 
   if (rows.length === 0) {
@@ -1214,6 +1287,10 @@ function renderSchemaCatalog(filterText = "") {
     const filterTextLabel = activeFilters.length > 0 ? ` with filters (${activeFilters.join(", ")})` : "";
     elements.schemaMeta.textContent = `No fields matched${filterTextLabel}${sourceText}.`;
     state.selectedCatalogPath = "";
+    state.catalogRows = [];
+    if (elements.schemaKeyboardHint) {
+      elements.schemaKeyboardHint.textContent = "Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect | 0 rows";
+    }
     renderSchemaInspector(null);
     return;
   }
@@ -1250,6 +1327,8 @@ function renderSchemaCatalog(filterText = "") {
     const { field, group, source } = record;
     const path = String(field.path || "");
     const row = document.createElement("tr");
+    row.tabIndex = 0;
+    row.dataset.path = path;
     if (path === state.selectedCatalogPath) {
       row.classList.add("is-selected");
       selectedRecord = record;
@@ -1340,11 +1419,20 @@ function renderSchemaCatalog(filterText = "") {
   table.appendChild(tbody);
   elements.schemaList.appendChild(table);
   elements.schemaMeta.textContent = `${rows.length} fields shown${sourceText}`;
+  if (elements.schemaKeyboardHint) {
+    elements.schemaKeyboardHint.textContent =
+      `Keyboard: Ctrl+F search · ↑/↓ navigate · Enter insert · → inspect | ${rows.length} rows`;
+  }
 
   if (!selectedRecord && rows.length > 0) {
     selectedRecord = rows[0];
   }
   renderSchemaInspector(selectedRecord);
+  if (ensureSelectionVisible) {
+    const selectedRow = elements.schemaList.querySelector("tbody tr.is-selected");
+    selectedRow?.scrollIntoView({ block: "nearest" });
+    selectedRow?.focus({ preventScroll: true });
+  }
 }
 
 function renderSnippets() {
@@ -2596,6 +2684,9 @@ async function copyPreview() {
 }
 
 function bindUI() {
+  if (elements.schemaInspector) {
+    elements.schemaInspector.tabIndex = -1;
+  }
   if (elements.btnDrawerToggle) {
     elements.btnDrawerToggle.addEventListener("click", toggleDrawer);
   }
@@ -2715,7 +2806,13 @@ function bindUI() {
   });
 
   elements.schemaSearch.addEventListener("input", (event) => {
-    renderSchemaCatalog(event.target.value || "");
+    if (state.schemaSearchTimer) {
+      clearTimeout(state.schemaSearchTimer);
+    }
+    const value = event.target.value || "";
+    state.schemaSearchTimer = setTimeout(() => {
+      renderSchemaCatalog(value);
+    }, 130);
   });
 
   elements.schemaSourceFilter.addEventListener("change", () => {
@@ -2905,6 +3002,13 @@ function bindUI() {
     });
   }
   document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && !hasAnyModalOpen()) {
+      if (!isTypingContext(event.target)) {
+        event.preventDefault();
+        focusSchemaSearch();
+      }
+      return;
+    }
     if (event.key === "Escape" && elements.publishModal?.classList.contains("open")) {
       closePublishModal();
       return;
@@ -2915,6 +3019,35 @@ function bindUI() {
     }
     if (event.key === "Escape" && elements.leftDrawer?.classList.contains("open")) {
       closeDrawer();
+      return;
+    }
+    if (hasAnyModalOpen()) {
+      return;
+    }
+    if (isTypingContext(event.target)) {
+      return;
+    }
+    if (!isCatalogFocusContext()) {
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveCatalogSelection(1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveCatalogSelection(-1);
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      insertSelectedCatalogField();
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      elements.schemaInspector?.focus();
     }
   });
 
