@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from jinja2 import StrictUndefined, TemplateError, meta
+from jinja2 import StrictUndefined, TemplateError, meta, pass_context
 from jinja2.sandbox import SandboxedEnvironment
 
 from config import Settings
@@ -25,7 +25,7 @@ DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
 👟👣 {{ activity.cadence_spm }}spm | 💼 {{ activity.work }} | ⚡ {{ activity.norm_power }} | 💓 {{ activity.average_hr }} | ⚙️{{ activity.efficiency }}
 🚄 {{ training.status_emoji }} {{ training.status_key }} | {{ training.aerobic_te }} : {{ training.anaerobic_te }} - {{ training.te_label }}
 🚄 {{ intervals.summary }}
-🚄 🏋️ {{ training.chronic_load }} | 💦 {{ training.acute_load }} | 🗿 {{ training.load_ratio }} - {{ training.acwr_status }} {{ training.acwr_status_emoji }}
+🚄 🏋️ {{ intervals.fitness }} | 💦 {{ intervals.fatigue }} | 🎯 {{ intervals.load }} | 📈 {{ intervals.ramp_display }} | 🗿 {{ intervals.form_percent_display }} - {{ intervals.form_class }} {{ intervals.form_class_emoji }}
 ❤️‍🔥 {{ training.vo2 }} | ♾ Endur: {{ training.endurance_score }} | 🗻 Hill: {{ training.hill_score }}
 
 7️⃣ Past 7 days:
@@ -277,7 +277,16 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "summary": "CTL 72 | ATL 78 | Form -6",
         "ctl": 72,
         "atl": 78,
+        "fitness": 72,
+        "fatigue": 78,
         "training_load": 126,
+        "load": 126,
+        "ramp": -3.6,
+        "ramp_display": "-3.6",
+        "form_percent": -8,
+        "form_percent_display": "-8%",
+        "form_class": "Grey Zone",
+        "form_class_emoji": "⛔",
         "strain_score": 142,
         "pace_load": 57,
         "hr_load": 61,
@@ -575,14 +584,126 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
 SAMPLE_TEMPLATE_FIXTURES = _build_sample_fixtures()
 
 
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _icu_calc_form_value(fitness: Any, fatigue: Any) -> int | None:
+    fitness_value = _as_float(fitness)
+    fatigue_value = _as_float(fatigue)
+    if fitness_value is None or fatigue_value is None or fitness_value == 0:
+        return None
+    return int(round(((fitness_value - fatigue_value) / fitness_value) * 100.0))
+
+
+@pass_context
+def icu_calc_form(context: Any, fitness: Any | None = None, fatigue: Any | None = None) -> int | str:
+    if fitness is None or fatigue is None:
+        intervals = context.get("intervals", {}) if isinstance(context, dict) else {}
+        if fitness is None:
+            fitness = intervals.get("fitness")
+        if fatigue is None:
+            fatigue = intervals.get("fatigue")
+    form_value = _icu_calc_form_value(fitness, fatigue)
+    if form_value is None:
+        return "N/A"
+    return form_value
+
+
+def _icu_class_from_form(
+    form_percent: Any,
+    transition_label: str = "Transition",
+    fresh_label: str = "Fresh",
+    grey_zone_label: str = "Grey Zone",
+    optimal_label: str = "Optimal",
+    high_risk_label: str = "High Risk",
+) -> str:
+    form_value = _as_float(form_percent)
+    if form_value is None:
+        return "N/A"
+    if form_value < -30:
+        return high_risk_label
+    if form_value <= -10:
+        return optimal_label
+    if form_value <= 5:
+        return grey_zone_label
+    if form_value <= 20:
+        return fresh_label
+    return transition_label
+
+
+@pass_context
+def icu_form_class(
+    context: Any,
+    form_percent: Any | None = None,
+    transition_label: str = "Transition",
+    fresh_label: str = "Fresh",
+    grey_zone_label: str = "Grey Zone",
+    optimal_label: str = "Optimal",
+    high_risk_label: str = "High Risk",
+) -> str:
+    if form_percent is not None and _as_float(form_percent) is None:
+        labels = [
+            str(form_percent),
+            str(transition_label),
+            str(fresh_label),
+            str(grey_zone_label),
+            str(optimal_label),
+        ]
+        transition_label, fresh_label, grey_zone_label, optimal_label, high_risk_label = labels
+        form_percent = None
+
+    if form_percent is None:
+        intervals = context.get("intervals", {}) if isinstance(context, dict) else {}
+        form_percent = intervals.get("form_percent")
+    return _icu_class_from_form(
+        form_percent,
+        transition_label=transition_label,
+        fresh_label=fresh_label,
+        grey_zone_label=grey_zone_label,
+        optimal_label=optimal_label,
+        high_risk_label=high_risk_label,
+    )
+
+
+@pass_context
+def icu_form_emoji(context: Any, form_percent: Any | None = None) -> str:
+    if form_percent is None:
+        intervals = context.get("intervals", {}) if isinstance(context, dict) else {}
+        form_percent = intervals.get("form_percent")
+    form_value = _as_float(form_percent)
+    if form_value is None:
+        return "⚪"
+    if form_value < -30:
+        return "⚠️"
+    if form_value <= -10:
+        return "🦾"
+    if form_value <= 5:
+        return "⛔"
+    if form_value <= 20:
+        return "🏁"
+    return "❄️"
+
+
 def _template_environment() -> SandboxedEnvironment:
-    return SandboxedEnvironment(
+    env = SandboxedEnvironment(
         autoescape=False,
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=False,
         undefined=StrictUndefined,
     )
+    env.globals["icu_calc_form"] = icu_calc_form
+    env.globals["icu_form_class"] = icu_form_class
+    env.globals["icu_form_emoji"] = icu_form_emoji
+    return env
 
 
 def _normalize_template_text(template_text: str) -> str:
@@ -1761,6 +1882,54 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "tags": ["intervals", "load", "training"],
         "metric_key": "intervals_training_load",
     },
+    "intervals.fitness": {
+        "source": "Intervals.icu",
+        "source_note": "Fitness (CTL) from Intervals activity detail payload.",
+        "label": "Intervals Fitness",
+        "description": "Intervals CTL fitness value.",
+        "tags": ["intervals", "fitness", "load"],
+        "metric_key": "intervals_fitness",
+    },
+    "intervals.fatigue": {
+        "source": "Intervals.icu",
+        "source_note": "Fatigue (ATL) from Intervals activity detail payload.",
+        "label": "Intervals Fatigue",
+        "description": "Intervals ATL fatigue value.",
+        "tags": ["intervals", "fatigue", "load"],
+        "metric_key": "intervals_fatigue",
+    },
+    "intervals.load": {
+        "source": "Intervals.icu",
+        "source_note": "Primary load score from Intervals activity detail payload.",
+        "label": "Intervals Load",
+        "description": "Intervals load score (alias of training load).",
+        "tags": ["intervals", "load", "training"],
+        "metric_key": "intervals_load",
+    },
+    "intervals.ramp": {
+        "source": "Intervals.icu",
+        "source_note": "Ramp rate value from Intervals activity detail payload when available.",
+        "label": "Intervals Ramp",
+        "description": "Intervals ramp-rate metric for load trend.",
+        "tags": ["intervals", "load", "trend"],
+        "metric_key": "intervals_ramp",
+    },
+    "intervals.form_percent": {
+        "source": "Derived",
+        "source_note": "Computed as ((fitness - fatigue) / fitness) * 100.",
+        "label": "Intervals Form %",
+        "description": "Calculated Intervals form percentage.",
+        "tags": ["intervals", "form", "derived"],
+        "metric_key": "intervals_form_percent",
+    },
+    "intervals.form_class": {
+        "source": "Derived",
+        "source_note": "Classified from Intervals form thresholds.",
+        "label": "Intervals Form Class",
+        "description": "Form class bucket from Intervals form percentage.",
+        "tags": ["intervals", "form", "derived"],
+        "metric_key": "intervals_form_class",
+    },
     "intervals.strain_score": {
         "source": "Intervals.icu",
         "source_note": "Load and strain values from Intervals detail payload.",
@@ -2052,6 +2221,8 @@ _CATALOG_HELPER_TRANSFORMS: list[dict[str, str]] = [
     {"id": "round1", "label": "Round 1", "template": "{{ {path} | round(1) }}"},
     {"id": "int", "label": "Int", "template": "{{ {path} | int }}"},
     {"id": "if_present", "label": "If Present", "template": "{% if {path} %}{{ {path} }}{% endif %}"},
+    {"id": "icu_calc_form", "label": "ICU Form %", "template": "{{ icu_calc_form(intervals.fitness, intervals.fatigue) }}"},
+    {"id": "icu_form_class", "label": "ICU Form Class", "template": "{{ icu_form_class(intervals.form_percent) }}"},
 ]
 
 

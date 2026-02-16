@@ -15,6 +15,9 @@ from description_template import (
     get_active_template,
     get_default_template,
     get_sample_template_context,
+    icu_calc_form,
+    icu_form_class,
+    icu_form_emoji,
     import_template_repository_bundle,
     list_sample_template_fixtures,
     list_template_repository_templates,
@@ -58,7 +61,33 @@ class TestDescriptionTemplate(unittest.TestCase):
 
         result = render_template_text("Hello {{ name }}", context)
         self.assertTrue(result["ok"])
-        self.assertEqual(result["description"], "Hello Runner")
+
+    def test_icu_helpers(self) -> None:
+        self.assertEqual(icu_calc_form({}, 72, 78), -8)
+        self.assertEqual(icu_calc_form({}, "N/A", 78), "N/A")
+
+        self.assertEqual(icu_form_class({}, -35), "High Risk")
+        self.assertEqual(icu_form_class({}, -20), "Optimal")
+        self.assertEqual(icu_form_class({}, -5), "Grey Zone")
+        self.assertEqual(icu_form_class({}, 8), "Fresh")
+        self.assertEqual(icu_form_class({}, 25), "Transition")
+        self.assertEqual(
+            icu_form_class({"intervals": {"form_percent": -22}}, "Transition", "Fresh", "Grey Zone", "Optimal", "High Risk"),
+            "Optimal",
+        )
+
+        self.assertEqual(icu_form_emoji({}, -35), "⚠️")
+        self.assertEqual(icu_form_emoji({}, -20), "🦾")
+        self.assertEqual(icu_form_emoji({}, -5), "⛔")
+        self.assertEqual(icu_form_emoji({}, 8), "🏁")
+        self.assertEqual(icu_form_emoji({}, 25), "❄️")
+
+    def test_render_template_with_icu_helpers(self) -> None:
+        context = {"intervals": {"fitness": 72, "fatigue": 78}}
+        template = "{{ icu_calc_form(intervals.fitness, intervals.fatigue) }}|{{ icu_form_class(icu_calc_form(intervals.fitness, intervals.fatigue)) }}"
+        result = render_template_text(template, context)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["description"], "-8|Grey Zone")
 
     def test_validate_rejects_forbidden_constructs(self) -> None:
         context = {"value": "ok"}
@@ -120,7 +149,16 @@ class TestDescriptionTemplate(unittest.TestCase):
                     "average_hr": "N/A",
                     "efficiency": "N/A",
                 },
-                "intervals": {"summary": "N/A"},
+                "intervals": {
+                    "summary": "N/A",
+                    "fitness": "N/A",
+                    "fatigue": "N/A",
+                    "load": "N/A",
+                    "ramp_display": "N/A",
+                    "form_percent_display": "N/A",
+                    "form_class": "N/A",
+                    "form_class_emoji": "⚪",
+                },
                 "periods": {
                     "week": {
                         "gap": "N/A",

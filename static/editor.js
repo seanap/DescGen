@@ -70,7 +70,7 @@ const SECTION_LIBRARY = [
     label: "Load Balance",
     enabled: true,
     template:
-      "🚄 🏋️ {{ training.chronic_load }} | 💦 {{ training.acute_load }} | 🗿 {{ training.load_ratio }} - {{ training.acwr_status }} {{ training.acwr_status_emoji }}",
+      "🚄 🏋️ {{ intervals.fitness }} | 💦 {{ intervals.fatigue }} | 🎯 {{ intervals.load }} | 📈 {{ intervals.ramp_display }} | 🗿 {{ intervals.form_percent_display }} - {{ intervals.form_class }} {{ intervals.form_class_emoji }}",
   },
   {
     id: "vo2",

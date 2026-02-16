@@ -841,6 +841,13 @@ def _build_description(
     work = intervals_payload.get("work", "N/A") if intervals_payload else "N/A"
     efficiency = intervals_payload.get("efficiency", "N/A") if intervals_payload else "N/A"
     icu_summary = intervals_payload.get("icu_summary", "N/A") if intervals_payload else "N/A"
+    icu_fitness = intervals_payload.get("fitness", "N/A") if intervals_payload else "N/A"
+    icu_fatigue = intervals_payload.get("fatigue", "N/A") if intervals_payload else "N/A"
+    icu_load = intervals_payload.get("load", intervals_payload.get("training_load", "N/A")) if intervals_payload else "N/A"
+    icu_ramp = intervals_payload.get("ramp_display", intervals_payload.get("ramp", "N/A")) if intervals_payload else "N/A"
+    icu_form_percent = intervals_payload.get("form_percent_display", "N/A") if intervals_payload else "N/A"
+    icu_form_class = intervals_payload.get("form_class", "N/A") if intervals_payload else "N/A"
+    icu_form_emoji = intervals_payload.get("form_class_emoji", "⚪") if intervals_payload else "⚪"
 
     distance_miles = round(float(detailed_activity.get("distance", 0) or 0) / 1609.34, 2)
     elapsed_seconds = int(
@@ -869,13 +876,6 @@ def _build_description(
             elevation_feet = float(strava_elevation_m) * 3.28084
 
     average_hr, running_cadence = _merge_hr_cadence_from_strava(training, detailed_activity)
-
-    chronic_load = training.get("chronic_load")
-    acute_load = training.get("acute_load")
-    if isinstance(chronic_load, (int, float)) and isinstance(acute_load, (int, float)) and chronic_load != 0:
-        load_ratio = round(acute_load / chronic_load, 1)
-    else:
-        load_ratio = "N/A"
 
     misery_display = misery_index if misery_index is not None else "N/A"
     misery_desc_display = misery_index_description or ""
@@ -923,8 +923,8 @@ def _build_description(
 
     description += f"🚄 {icu_summary}\n"
     description += (
-        f"🚄 🏋️ {training.get('chronic_load', 'N/A')} | 💦 {training.get('acute_load', 'N/A')} | "
-        f"🗿 {load_ratio} - {training.get('acwr_status', 'N/A')} {training.get('acwr_status_emoji', '⚪')}\n"
+        f"🚄 🏋️ {icu_fitness} | 💦 {icu_fatigue} | 🎯 {icu_load} | 📈 {icu_ramp} | "
+        f"🗿 {icu_form_percent} - {icu_form_class} {icu_form_emoji}\n"
     )
 
     description += (
@@ -1194,7 +1194,16 @@ def _build_description_context(
             "summary": icu_summary,
             "ctl": intervals_payload.get("ctl", "N/A"),
             "atl": intervals_payload.get("atl", "N/A"),
+            "fitness": intervals_payload.get("fitness", intervals_payload.get("ctl", "N/A")),
+            "fatigue": intervals_payload.get("fatigue", intervals_payload.get("atl", "N/A")),
             "training_load": intervals_payload.get("training_load", "N/A"),
+            "load": intervals_payload.get("load", intervals_payload.get("training_load", "N/A")),
+            "ramp": intervals_payload.get("ramp", "N/A"),
+            "ramp_display": intervals_payload.get("ramp_display", "N/A"),
+            "form_percent": intervals_payload.get("form_percent", "N/A"),
+            "form_percent_display": intervals_payload.get("form_percent_display", "N/A"),
+            "form_class": intervals_payload.get("form_class", "N/A"),
+            "form_class_emoji": intervals_payload.get("form_class_emoji", "⚪"),
             "strain_score": intervals_payload.get("strain_score", "N/A"),
             "pace_load": intervals_payload.get("pace_load", "N/A"),
             "hr_load": intervals_payload.get("hr_load", "N/A"),

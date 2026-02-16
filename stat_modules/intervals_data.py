@@ -134,26 +134,48 @@ def _format_zone_summary(value: Any) -> str:
     return " | ".join(parts)
 
 
+def _calc_form_percent(ctl: Any, atl: Any) -> float | None:
+    ctl_value = _as_float(ctl)
+    atl_value = _as_float(atl)
+    if ctl_value is None or atl_value is None or ctl_value == 0:
+        return None
+    return ((ctl_value - atl_value) / ctl_value) * 100.0
+
+
+def _classify_form(form_percent: Any) -> tuple[str, str]:
+    form_value = _as_float(form_percent)
+    if form_value is None:
+        return "N/A", "⚪"
+
+    if form_value < -30:
+        return "High Risk", "⚠️"
+    if form_value <= -10:
+        return "Optimal", "🦾"
+    if form_value <= 5:
+        return "Grey Zone", "⛔"
+    if form_value <= 20:
+        return "Fresh", "🏁"
+    return "Transition", "❄️"
+
+
 def _format_icu_summary(ctl: float | None, atl: float | None) -> str:
-    if ctl is None or atl is None or ctl == 0:
+    form_raw = _calc_form_percent(ctl, atl)
+    if form_raw is None:
         return "N/A"
 
-    form_raw = ((ctl - atl) / ctl) * 100
     fitness = int(round(ctl))
     fatigue = int(round(atl))
     form = int(round(form_raw))
+    form_class, form_emoji = _classify_form(form)
+    return f"🏋️ {fitness} | 💦 {fatigue} | 🗿 {form}% - {form_class} {form_emoji}"
 
-    if form < -30:
-        form_class = "High Risk ⚠️"
-    elif -30 <= form <= -10:
-        form_class = "Optimal 🟢"
-    elif -10 < form <= 5:
-        form_class = "Grey Zone ⛔"
-    elif 5 < form <= 20:
-        form_class = "Fresh 🏁"
-    else:
-        form_class = "Too Light ❄"
-    return f"🏋️  {fitness}  | 💦  {fatigue}  | 🗿 {form}% - {form_class}"
+
+def _first_numeric(*values: Any) -> float | None:
+    for value in values:
+        parsed = _as_float(value)
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def get_intervals_activity_data(
@@ -219,6 +241,14 @@ def get_intervals_activity_data(
     ctl = data.get("icu_ctl")
     atl = data.get("icu_atl")
     training_load = data.get("icu_training_load")
+    ramp_rate = _first_numeric(
+        data.get("ramp_rate"),
+        data.get("icu_ramp_rate"),
+        data.get("rampRate"),
+        data.get("ctl_ramp_rate"),
+        data.get("ctlRampRate"),
+        data.get("ramp"),
+    )
     strain_score = data.get("strain_score")
     pace_load = data.get("pace_load")
     hr_load = data.get("hr_load")
@@ -242,6 +272,24 @@ def get_intervals_activity_data(
     pace_zone_summary = _format_zone_summary(data.get("pace_zone_times"))
     gap_zone_summary = _format_zone_summary(data.get("gap_zone_times"))
 
+    fitness = int(round(float(ctl))) if isinstance(ctl, (int, float)) else "N/A"
+    fatigue = int(round(float(atl))) if isinstance(atl, (int, float)) else "N/A"
+    load = (
+        int(round(float(training_load)))
+        if isinstance(training_load, (int, float))
+        else "N/A"
+    )
+    ramp = round(ramp_rate, 1) if ramp_rate is not None else "N/A"
+
+    form_percent_raw = _calc_form_percent(ctl, atl)
+    form_percent = int(round(form_percent_raw)) if form_percent_raw is not None else "N/A"
+    form_class, form_class_emoji = _classify_form(form_percent_raw)
+    form_percent_display = (
+        f"{form_percent}%"
+        if isinstance(form_percent, int)
+        else "N/A"
+    )
+
     return {
         "norm_power": f"{int(norm_power)}W" if isinstance(norm_power, (int, float)) else "N/A",
         "work": f"{round(float(work) / 1000)} kJ" if isinstance(work, (int, float)) else "N/A",
@@ -250,9 +298,18 @@ def get_intervals_activity_data(
         "icu_ctl": ctl,
         "icu_atl": atl,
         "icu_summary": _format_icu_summary(ctl, atl),
-        "ctl": int(round(float(ctl))) if isinstance(ctl, (int, float)) else "N/A",
-        "atl": int(round(float(atl))) if isinstance(atl, (int, float)) else "N/A",
-        "training_load": int(round(float(training_load))) if isinstance(training_load, (int, float)) else "N/A",
+        "ctl": fitness,
+        "atl": fatigue,
+        "fitness": fitness,
+        "fatigue": fatigue,
+        "training_load": load,
+        "load": load,
+        "ramp": ramp,
+        "ramp_display": f"{ramp:+.1f}" if isinstance(ramp, (int, float)) else "N/A",
+        "form_percent": form_percent,
+        "form_percent_display": form_percent_display,
+        "form_class": form_class,
+        "form_class_emoji": form_class_emoji,
         "strain_score": int(round(float(strain_score))) if isinstance(strain_score, (int, float)) else "N/A",
         "pace_load": int(round(float(pace_load))) if isinstance(pace_load, (int, float)) else "N/A",
         "hr_load": int(round(float(hr_load))) if isinstance(hr_load, (int, float)) else "N/A",

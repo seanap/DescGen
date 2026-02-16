@@ -74,6 +74,7 @@ class TestIntervalsData(unittest.TestCase):
                     "icu_ctl": 71.6,
                     "icu_atl": 78.2,
                     "icu_training_load": 129.4,
+                    "ramp_rate": -3.64,
                     "strain_score": 143.3,
                     "pace_load": 55.9,
                     "hr_load": 60.1,
@@ -106,6 +107,15 @@ class TestIntervalsData(unittest.TestCase):
         self.assertEqual(result["ctl"], 72)
         self.assertEqual(result["atl"], 78)
         self.assertEqual(result["training_load"], 129)
+        self.assertEqual(result["fitness"], 72)
+        self.assertEqual(result["fatigue"], 78)
+        self.assertEqual(result["load"], 129)
+        self.assertEqual(result["ramp"], -3.6)
+        self.assertEqual(result["ramp_display"], "-3.6")
+        self.assertEqual(result["form_percent"], -9)
+        self.assertEqual(result["form_percent_display"], "-9%")
+        self.assertEqual(result["form_class"], "Grey Zone")
+        self.assertEqual(result["form_class_emoji"], "⛔")
         self.assertEqual(result["avg_pace"], "7:40/mi")
         self.assertEqual(result["distance_miles"], "6.21 mi")
         self.assertEqual(result["moving_time"], "41:28")
