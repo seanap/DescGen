@@ -151,8 +151,8 @@ h3 {
 .actions {
   margin-top: 10px;
   padding: 12px;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -165,6 +165,7 @@ h3 {
   align-items: center;
   gap: 8px;
   background: #fff;
+  flex: 1 1 460px;
 }
 
 .action-group-right {
@@ -257,6 +258,15 @@ h3 {
 
 .preview-tools {
   margin-top: 8px;
+}
+
+.preview-publish-actions {
+  margin-top: 8px;
+  align-items: center;
+}
+
+.preview-publish-actions .group-label {
+  margin-right: 0;
 }
 
 .char-meter-wrap {
@@ -430,6 +440,28 @@ label[for="templateEditor"] {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   font-weight: 700;
+}
+
+.template-current-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.template-current-line .stack-label {
+  margin-bottom: 0;
+}
+
+.template-current-line strong {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--secondary);
 }
 
 .search {
@@ -980,6 +1012,10 @@ label[for="templateEditor"] {
 .settings-lines {
   display: grid;
   gap: 6px;
+}
+
+.settings-toggle {
+  justify-self: start;
 }
 
 .settings-line {

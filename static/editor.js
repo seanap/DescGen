@@ -162,79 +162,6 @@ const TOUR_STEPS = [
   },
 ];
 
-const CATALOG_PRESETS = {
-  beginner: {
-    label: "Beginner",
-    curatedOnly: true,
-    stableOnly: true,
-    favoritesOnly: false,
-    inTemplateOnly: false,
-    source: "all",
-    group: "all",
-    type: "all",
-    tag: "all",
-    stability: "all",
-    costTier: "all",
-    freshness: "all",
-  },
-  power_user: {
-    label: "Power User",
-    curatedOnly: false,
-    stableOnly: false,
-    favoritesOnly: false,
-    inTemplateOnly: false,
-    source: "all",
-    group: "all",
-    type: "all",
-    tag: "all",
-    stability: "all",
-    costTier: "all",
-    freshness: "all",
-  },
-  weather_nerd: {
-    label: "Weather Nerd",
-    curatedOnly: false,
-    stableOnly: false,
-    favoritesOnly: false,
-    inTemplateOnly: false,
-    source: "Weather.com",
-    group: "weather",
-    type: "all",
-    tag: "weather",
-    stability: "all",
-    costTier: "all",
-    freshness: "all",
-  },
-  nutrition: {
-    label: "Nutrition",
-    curatedOnly: true,
-    stableOnly: true,
-    favoritesOnly: false,
-    inTemplateOnly: false,
-    source: "crono-api",
-    group: "all",
-    type: "all",
-    tag: "nutrition",
-    stability: "all",
-    costTier: "all",
-    freshness: "daily",
-  },
-  performance: {
-    label: "Performance",
-    curatedOnly: false,
-    stableOnly: true,
-    favoritesOnly: false,
-    inTemplateOnly: false,
-    source: "all",
-    group: "all",
-    type: "all",
-    tag: "training",
-    stability: "all",
-    costTier: "all",
-    freshness: "all",
-  },
-};
-
 const state = {
   templateActive: "",
   templateDefault: "",
@@ -329,6 +256,7 @@ const elements = {
   importTemplateFile: document.getElementById("importTemplateFile"),
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
+  currentTemplateDisplay: document.getElementById("currentTemplateDisplay"),
   templateMeta: document.getElementById("templateMeta"),
   versionList: document.getElementById("versionList"),
   autoPreviewToggle: document.getElementById("autoPreviewToggle"),
@@ -395,6 +323,21 @@ function updateContextChips() {
     if (state.lastValidationOk === false) publish = "Blocked";
     elements.contextPublishValue.textContent = publish;
   }
+}
+
+function updateCurrentTemplateDisplay(name = "") {
+  if (!elements.currentTemplateDisplay) return;
+  const explicit = String(name || "").trim();
+  if (explicit) {
+    elements.currentTemplateDisplay.textContent = explicit;
+    return;
+  }
+  const fromInput = String(elements.repoTemplateNameInput?.value || "").trim();
+  if (fromInput) {
+    elements.currentTemplateDisplay.textContent = fromInput;
+    return;
+  }
+  elements.currentTemplateDisplay.textContent = String(state.templateName || "Auto Stat Template");
 }
 
 function setButtonTone(button, tone) {
@@ -941,32 +884,6 @@ function setSelectValueIfPresent(select, value, fallback = "all") {
   const target = String(value || fallback);
   const exists = Array.from(select.options || []).some((option) => option.value === target);
   select.value = exists ? target : fallback;
-}
-
-function applyCatalogPreset(presetId, options = {}) {
-  const { announce = true } = options;
-  const key = String(presetId || "").trim();
-  const preset = CATALOG_PRESETS[key];
-  if (!preset) return;
-
-  setSelectValueIfPresent(elements.schemaSourceFilter, preset.source);
-  setSelectValueIfPresent(elements.schemaGroupFilter, preset.group);
-  setSelectValueIfPresent(elements.schemaTypeFilter, preset.type);
-  setSelectValueIfPresent(elements.schemaTagFilter, preset.tag);
-  setSelectValueIfPresent(elements.schemaStabilityFilter, preset.stability);
-  setSelectValueIfPresent(elements.schemaCostTierFilter, preset.costTier);
-  setSelectValueIfPresent(elements.schemaFreshnessFilter, preset.freshness);
-  if (preset.curatedOnly) state.catalogScope = "curated";
-  else if (preset.stableOnly) state.catalogScope = "stable";
-  else if (preset.favoritesOnly) state.catalogScope = "favorites";
-  else if (preset.inTemplateOnly) state.catalogScope = "in_template";
-  else state.catalogScope = "all";
-  updateScopePills();
-
-  renderSchemaCatalog(elements.schemaSearch.value || "");
-  if (announce) {
-    setStatus(`Catalog preset applied: ${preset.label}`, "ok");
-  }
 }
 
 function resetCatalogFilters(options = {}) {
@@ -1884,6 +1801,7 @@ function selectedFixtureName() {
 function renderTemplateMeta(meta) {
   if (!meta) {
     elements.templateMeta.textContent = "No template metadata.";
+    updateCurrentTemplateDisplay(state.templateName);
     return;
   }
   const lines = [];
@@ -1892,6 +1810,7 @@ function renderTemplateMeta(meta) {
   lines.push(`Updated: ${meta.updated_at_utc || "unknown"}`);
   lines.push(`By: ${meta.updated_by || "unknown"} | Source: ${meta.source || "unknown"}`);
   elements.templateMeta.textContent = lines.join("\n");
+  updateCurrentTemplateDisplay(String(meta.name || state.templateName || "").trim());
 }
 
 function repositorySelectedId() {
@@ -1911,6 +1830,7 @@ function setRepositoryFormValues(options = {}) {
   if (elements.repoTemplateAuthorInput) {
     elements.repoTemplateAuthorInput.value = String(author || "").trim();
   }
+  updateCurrentTemplateDisplay(String(name || "").trim());
 }
 
 function renderRepositoryMeta(record = null) {
@@ -2147,6 +2067,7 @@ async function loadTemplateVersion(versionId) {
   const record = res.payload.version || {};
   setEditorText(record.template || "");
   setEditorDirty(false);
+  updateCurrentTemplateDisplay(record.name || `Version ${versionId}`);
   switchTab("advanced");
   setStatus(`Loaded version ${versionId}`, "ok");
   queueAutoPreview();
@@ -2961,6 +2882,7 @@ async function saveTemplate(options = {}) {
   updateValidationPane(res.payload, true);
   state.templateActive = template;
   state.templateMeta = res.payload.active || state.templateMeta;
+  state.templateName = String(name || state.templateName || "Auto Stat Template");
   state.lastValidationOk = true;
   clearActivePreviewCache();
   setEditorDirty(false);
@@ -3114,6 +3036,11 @@ function bindUI() {
       if (summary) {
         setRepositoryFormValues({ name: summary.name, author: summary.author });
       }
+    });
+  }
+  if (elements.repoTemplateNameInput) {
+    elements.repoTemplateNameInput.addEventListener("input", () => {
+      updateCurrentTemplateDisplay(elements.repoTemplateNameInput.value || "");
     });
   }
 

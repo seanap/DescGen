@@ -17,6 +17,17 @@
     </div>
 
     <section class="drawer-section">
+      <h3>Template Controls</h3>
+      <p class="subtext">Load and manage local working drafts.</p>
+      <div class="inline-actions">
+        <button id="btnLoadActive" class="btn" type="button">Load Active</button>
+        <button id="btnLoadDefault" class="btn btn-ghost" type="button">Load Default</button>
+        <button id="btnLoadDraft" class="btn btn-ghost" type="button" title="Load your locally saved browser draft">Load Draft</button>
+        <button id="btnSaveDraft" class="btn btn-ghost" type="button" title="Save current editor content locally in your browser">Save Draft</button>
+      </div>
+    </section>
+
+    <section class="drawer-section">
       <h3>Template Repository</h3>
       <p class="subtext">Load, save, duplicate, import, and export templates.</p>
       <div class="advanced-toolbar repository-select-row">
@@ -87,6 +98,11 @@
           <span class="theme-switch-thumb"></span>
         </span>
       </label>
+      <label class="toggle-inline settings-toggle" for="autoPreviewToggle">
+        <input id="autoPreviewToggle" type="checkbox" checked>
+        Auto-preview
+      </label>
+      <button id="btnTour" class="btn btn-ghost" type="button" title="Open quick onboarding tour">Tour</button>
       <div class="settings-lines">
         <div class="settings-line"><span>Preview</span><span id="contextModeValue">sample</span></div>
         <div class="settings-line"><span>Fixture</span><span id="contextFixtureValue">default</span></div>
@@ -111,33 +127,20 @@
 
     <section class="actions card">
       <div class="action-group">
-        <span class="group-label">Template</span>
-        <button id="btnLoadActive" class="btn">Load Active</button>
-        <button id="btnLoadDefault" class="btn btn-ghost">Load Default</button>
-        <button id="btnLoadDraft" class="btn btn-ghost" title="Load your locally saved browser draft">Load Draft</button>
-        <button id="btnSaveDraft" class="btn btn-ghost" title="Save current editor content locally in your browser">Save Draft</button>
-      </div>
-      <div class="action-group">
         <span class="group-label">Run</span>
-        <label class="toggle-inline" for="autoPreviewToggle">
-          <input id="autoPreviewToggle" type="checkbox" checked>
-          Auto-preview
-        </label>
         <button id="btnFormatTemplate" class="btn btn-ghost" title="Normalize line endings, trim trailing spaces, and collapse large blank blocks">Format</button>
         <button id="btnValidate" class="btn btn-secondary">Validate</button>
         <button id="btnPreview" class="btn btn-secondary">Preview</button>
-      </div>
-      <div class="action-group action-group-right">
-        <span class="group-label">Publish</span>
-        <button id="btnSave" class="btn btn-primary">Save + Publish</button>
-        <button id="btnCopyPreview" class="btn btn-ghost">Copy Preview</button>
-        <button id="btnTour" class="btn btn-ghost" title="Open quick onboarding tour">Tour</button>
       </div>
     </section>
 
     <main class="main-layout">
       <section class="workspace-row">
         <section class="panel card editor-panel reveal" style="--delay:0.03s">
+          <div class="template-current-line">
+            <span class="stack-label">Current Template</span>
+            <strong id="currentTemplateDisplay">Auto Stat Template</strong>
+          </div>
           <div class="tabbar">
             <button class="tab active" data-tab="simple">Simple Builder</button>
             <button class="tab" data-tab="advanced">Advanced Template</button>
@@ -222,6 +225,11 @@
           <div class="meta" id="previewMeta">No preview yet.</div>
           <pre id="previewText" class="preview"></pre>
           <div id="previewDiffMeta" class="meta">Diff disabled.</div>
+          <div class="inline-actions preview-publish-actions">
+            <span class="group-label">Publish</span>
+            <button id="btnSave" class="btn btn-primary" type="button">Save + Publish</button>
+            <button id="btnCopyPreview" class="btn btn-ghost" type="button">Copy Preview</button>
+          </div>
           <pre id="previewDiffText" class="preview diff-view is-hidden"></pre>
         </section>
       </section>
