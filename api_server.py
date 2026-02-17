@@ -5,38 +5,37 @@ from pathlib import Path
 
 from flask import Flask, render_template, request
 
-from description_template import (
-    build_context_schema,
+from activity_pipeline import run_once
+from config import Settings
+from storage import get_runtime_value, get_worker_heartbeat, is_worker_healthy, read_json
+from template_profiles import (
+    get_template_profile,
+    get_working_template_profile,
+    list_template_profiles,
+    set_working_template_profile,
+    update_template_profile,
+)
+from template_repository import (
     create_template_repository_template,
     duplicate_template_repository_template,
     export_template_repository_bundle,
-    get_editor_snippets,
-    get_template_repository_template,
-    get_starter_templates,
-    get_default_template,
     get_active_template,
+    get_default_template,
+    get_editor_snippets,
     get_sample_template_context,
+    get_starter_templates,
+    get_template_repository_template,
     get_template_version,
     import_template_repository_bundle,
     list_sample_template_fixtures,
-    list_template_profiles,
     list_template_repository_templates,
     list_template_versions,
-    normalize_template_context,
-    get_template_profile,
-    get_working_template_profile,
     rollback_template_version,
-    render_template_text,
     save_active_template,
-    set_working_template_profile,
     update_template_repository_template,
-    update_template_profile,
-    validate_template_text,
 )
-from activity_pipeline import run_once
-
-from config import Settings
-from storage import get_runtime_value, get_worker_heartbeat, is_worker_healthy, read_json
+from template_rendering import normalize_template_context, render_template_text, validate_template_text
+from template_schema import build_context_schema
 
 
 app = Flask(__name__)
@@ -850,22 +849,25 @@ def editor_catalog() -> tuple[dict, int]:
     }, 200
 
 
-@app.post("/rerun/latest")
-def rerun_latest() -> tuple[dict, int]:
+def _run_rerun(force_update: bool, activity_id: int | None = None) -> tuple[dict, int]:
     try:
-        result = run_once(force_update=True)
+        if activity_id is None:
+            result = run_once(force_update=force_update)
+        else:
+            result = run_once(force_update=force_update, activity_id=activity_id)
         return {"status": "ok", "result": result}, 200
     except Exception as exc:
         return {"status": "error", "error": str(exc)}, 500
+
+
+@app.post("/rerun/latest")
+def rerun_latest() -> tuple[dict, int]:
+    return _run_rerun(force_update=True)
 
 
 @app.post("/rerun/activity/<int:activity_id>")
 def rerun_activity(activity_id: int) -> tuple[dict, int]:
-    try:
-        result = run_once(force_update=True, activity_id=activity_id)
-        return {"status": "ok", "result": result}, 200
-    except Exception as exc:
-        return {"status": "error", "error": str(exc)}, 500
+    return _run_rerun(force_update=True, activity_id=activity_id)
 
 
 @app.post("/rerun")
@@ -873,22 +875,14 @@ def rerun() -> tuple[dict, int]:
     body = request.get_json(silent=True) or {}
     activity_id = body.get("activity_id")
     if activity_id is None:
-        try:
-            result = run_once(force_update=True)
-            return {"status": "ok", "result": result}, 200
-        except Exception as exc:
-            return {"status": "error", "error": str(exc)}, 500
+        return _run_rerun(force_update=True)
 
     try:
         activity_id_int = int(activity_id)
     except (TypeError, ValueError):
         return {"status": "error", "error": "activity_id must be an integer."}, 400
 
-    try:
-        result = run_once(force_update=True, activity_id=activity_id_int)
-        return {"status": "ok", "result": result}, 200
-    except Exception as exc:
-        return {"status": "error", "error": str(exc)}, 500
+    return _run_rerun(force_update=True, activity_id=activity_id_int)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from typing import Any
 import requests
 
 from config import Settings
+from numeric_utils import mps_to_pace as _mps_to_pace
 from storage import read_json, write_json
 
 
@@ -151,15 +152,7 @@ class StravaClient:
 
 
 def mps_to_pace(speed_mps: float | int | None) -> str:
-    if not speed_mps or speed_mps <= 0:
-        return "N/A"
-    pace_min_per_mile = (1609.34 / float(speed_mps)) / 60.0
-    minutes = int(pace_min_per_mile)
-    seconds = int(round((pace_min_per_mile - minutes) * 60))
-    if seconds == 60:
-        minutes += 1
-        seconds = 0
-    return f"{minutes}:{seconds:02d}"
+    return _mps_to_pace(speed_mps, include_unit=False)
 
 
 def get_gap_speed_mps(activity: dict[str, Any]) -> float | None:

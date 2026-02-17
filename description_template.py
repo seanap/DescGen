@@ -12,6 +12,7 @@ from jinja2 import StrictUndefined, TemplateError, meta, pass_context
 from jinja2.sandbox import SandboxedEnvironment
 
 from config import Settings
+from numeric_utils import as_float as _shared_as_float
 
 
 DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
@@ -744,14 +745,7 @@ PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
 
 
 def _as_float(value: Any) -> float | None:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
+    return _shared_as_float(value)
 
 
 def _icu_calc_form_value(fitness: Any, fatigue: Any) -> int | None:

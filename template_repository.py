@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from description_template import (
+    create_template_repository_template,
+    duplicate_template_repository_template,
+    export_template_repository_bundle,
+    get_active_template,
+    get_default_template,
+    get_editor_snippets,
+    get_sample_template_context,
+    get_starter_templates,
+    get_template_repository_template,
+    get_template_version,
+    import_template_repository_bundle,
+    list_sample_template_fixtures,
+    list_template_repository_templates,
+    list_template_versions,
+    rollback_template_version,
+    save_active_template,
+    update_template_repository_template,
+)
+
+__all__ = [
+    "create_template_repository_template",
+    "duplicate_template_repository_template",
+    "export_template_repository_bundle",
+    "get_active_template",
+    "get_default_template",
+    "get_editor_snippets",
+    "get_sample_template_context",
+    "get_starter_templates",
+    "get_template_repository_template",
+    "get_template_version",
+    "import_template_repository_bundle",
+    "list_sample_template_fixtures",
+    "list_template_repository_templates",
+    "list_template_versions",
+    "rollback_template_version",
+    "save_active_template",
+    "update_template_repository_template",
+]

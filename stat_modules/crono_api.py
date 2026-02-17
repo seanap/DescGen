@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
+from numeric_utils import as_float
+
 
 logger = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 10
@@ -16,17 +18,6 @@ def _headers(api_key: str | None) -> dict[str, str]:
     if not api_key:
         return {}
     return {"x-api-key": api_key}
-
-
-def _as_float(value: Any) -> float | None:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
 
 
 def _activity_local_date(activity: dict[str, Any], timezone_name: str) -> str | None:
@@ -93,9 +84,9 @@ def get_crono_summary_for_activity(
 
     return {
         "date": macros_payload.get("date", date_str),
-        "protein_g": _as_float(macros_payload.get("protein")),
-        "carbs_g": _as_float(macros_payload.get("carbs")),
-        "average_net_kcal_per_day": _as_float(balance_payload.get("averageNetCaloriesPerDay")),
+        "protein_g": as_float(macros_payload.get("protein")),
+        "carbs_g": as_float(macros_payload.get("carbs")),
+        "average_net_kcal_per_day": as_float(balance_payload.get("averageNetCaloriesPerDay")),
         "average_status": balance_payload.get("averageStatus"),
     }
 
@@ -113,7 +104,7 @@ def format_crono_line(summary: dict[str, Any] | None) -> str | None:
     if not summary:
         return None
 
-    average_net = _as_float(summary.get("average_net_kcal_per_day"))
+    average_net = as_float(summary.get("average_net_kcal_per_day"))
     if average_net is None:
         return None
 
@@ -125,8 +116,8 @@ def format_crono_line(summary: dict[str, Any] | None) -> str | None:
 
     parts = [f"🔥 7d avg daily Energy Balance:{balance_text}"]
 
-    protein_text = _format_grams(_as_float(summary.get("protein_g")))
-    carbs_text = _format_grams(_as_float(summary.get("carbs_g")))
+    protein_text = _format_grams(as_float(summary.get("protein_g")))
+    carbs_text = _format_grams(as_float(summary.get("carbs_g")))
     if protein_text is not None:
         parts.append(f"🥩:{protein_text}g")
     if carbs_text is not None:
