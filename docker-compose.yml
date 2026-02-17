@@ -1,6 +1,6 @@
 services:
   auto-stat-worker:
-    image: ${DOCKER_IMAGE:-seanap/auto-stat-description:latest}
+    image: ${DOCKER_IMAGE:-seanap/descgen:latest}
     container_name: auto-stat-worker
     command: ["python", "worker.py"]
     network_mode: bridge
@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
 
   auto-stat-api:
-    image: ${DOCKER_IMAGE:-seanap/auto-stat-description:latest}
+    image: ${DOCKER_IMAGE:-seanap/descgen:latest}
     container_name: auto-stat-api
     command:
       [

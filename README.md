@@ -45,7 +45,7 @@ I created this because I found that I kept checking 5 different sites for unique
 ```yaml
 services:
   auto-stat-worker:
-    image: seanap/auto-stat-description:latest
+    image: seanap/descgen:latest
     container_name: auto-stat-worker
     command: ["python", "worker.py"]
     network_mode: bridge
@@ -62,7 +62,7 @@ services:
     restart: unless-stopped
 
   auto-stat-api:
-    image: seanap/auto-stat-description:latest
+    image: seanap/descgen:latest
     container_name: auto-stat-api
     command: ["/bin/sh", "-c", "gunicorn --bind 0.0.0.0:${API_PORT:-1609} --workers ${API_WORKERS:-2} --threads ${API_THREADS:-4} --timeout ${API_TIMEOUT_SECONDS:-120} api_server:app"]
     network_mode: bridge
@@ -145,7 +145,7 @@ TIMEZONE=America/New_York
 #API_THREADS=4
 #API_TIMEOUT_SECONDS=120
 #API_PORT=1609
-#DOCKER_IMAGE=seanap/auto-stat-description:latest
+#DOCKER_IMAGE=seanap/descgen:latest
 ```
 
 4. Confirm API is alive:
