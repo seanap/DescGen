@@ -21,6 +21,19 @@ def _bool_env(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _str_env(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None:
+            return value.strip()
+    return default
+
+
+def _optional_str_env(*names: str) -> str | None:
+    value = _str_env(*names, default="")
+    return value or None
+
+
 def _hour_env(name: str, default: int) -> int:
     value = os.getenv(name)
     if value is None:
@@ -162,21 +175,21 @@ class Settings:
         api_port = _int_env("API_PORT", 1609, minimum=1, maximum=65535)
 
         return cls(
-            strava_client_id=os.getenv("CLIENT_ID", "").strip(),
-            strava_client_secret=os.getenv("CLIENT_SECRET", "").strip(),
-            strava_refresh_token=os.getenv("REFRESH_TOKEN", "").strip(),
-            strava_access_token=os.getenv("ACCESS_TOKEN", "").strip() or None,
-            garmin_email=os.getenv("GARMIN_EMAIL", "").strip() or None,
-            garmin_password=os.getenv("GARMIN_PASSWORD", "").strip() or None,
-            intervals_api_key=os.getenv("INTERVALS_API_KEY", "").strip() or None,
-            intervals_user_id=os.getenv("USER_ID", "").strip() or None,
-            weather_api_key=os.getenv("WEATHER_API_KEY", "").strip() or None,
-            smashrun_access_token=os.getenv("SMASHRUN_ACCESS_TOKEN", "").strip() or None,
-            crono_api_base_url=os.getenv("CRONO_API_BASE_URL", "").strip() or None,
-            crono_api_key=os.getenv("CRONO_API_KEY", "").strip() or None,
+            strava_client_id=_str_env("STRAVA_CLIENT_ID", "CLIENT_ID"),
+            strava_client_secret=_str_env("STRAVA_CLIENT_SECRET", "CLIENT_SECRET"),
+            strava_refresh_token=_str_env("STRAVA_REFRESH_TOKEN", "REFRESH_TOKEN"),
+            strava_access_token=_optional_str_env("STRAVA_ACCESS_TOKEN", "ACCESS_TOKEN"),
+            garmin_email=_optional_str_env("GARMIN_EMAIL"),
+            garmin_password=_optional_str_env("GARMIN_PASSWORD"),
+            intervals_api_key=_optional_str_env("INTERVALS_API_KEY"),
+            intervals_user_id=_optional_str_env("INTERVALS_USER_ID", "USER_ID"),
+            weather_api_key=_optional_str_env("WEATHER_API_KEY"),
+            smashrun_access_token=_optional_str_env("SMASHRUN_ACCESS_TOKEN"),
+            crono_api_base_url=_optional_str_env("CRONO_API_BASE_URL"),
+            crono_api_key=_optional_str_env("CRONO_API_KEY"),
             poll_interval_seconds=poll_interval_seconds,
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
-            timezone=os.getenv("TZ", "UTC"),
+            timezone=_str_env("TIMEZONE", "TZ", default="UTC"),
             api_port=api_port,
             api_workers=_int_env("API_WORKERS", 2, minimum=1, maximum=8),
             api_threads=_int_env("API_THREADS", 4, minimum=1, maximum=32),
@@ -215,11 +228,11 @@ class Settings:
     def validate(self) -> None:
         missing = []
         if not self.strava_client_id:
-            missing.append("CLIENT_ID")
+            missing.append("STRAVA_CLIENT_ID (or CLIENT_ID)")
         if not self.strava_client_secret:
-            missing.append("CLIENT_SECRET")
+            missing.append("STRAVA_CLIENT_SECRET (or CLIENT_SECRET)")
         if not self.strava_refresh_token:
-            missing.append("REFRESH_TOKEN")
+            missing.append("STRAVA_REFRESH_TOKEN (or REFRESH_TOKEN)")
         if missing:
             missing_str = ", ".join(missing)
             raise ValueError(f"Missing required environment variables: {missing_str}")

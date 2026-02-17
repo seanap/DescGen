@@ -66,7 +66,7 @@ def _record_cycle_status(
     set_runtime_value(settings.processed_log_file, "cycle.last_status_at_utc", now_iso)
     if activity_id is not None:
         set_runtime_value(settings.processed_log_file, "cycle.last_activity_id", activity_id)
-    if status in {"updated", "updated_treadmill", "already_processed", "no_activities"}:
+    if status in {"updated", "already_processed", "no_activities"}:
         set_runtime_value(settings.processed_log_file, "cycle.last_success_at_utc", now_iso)
         if error:
             set_runtime_value(settings.processed_log_file, "cycle.last_error", error)
