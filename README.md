@@ -1,15 +1,16 @@
-# Auto-Stat-Description
+# DescGen
 
 Turn every Strava activity description into a rich, auto-generated training report.
 
-`auto-stat-description` checks for new activities, pulls stats from all of your connected services, writes a detailed Strava description, and exposes the latest payload as a local JSON API for dashboards and automations.
+`DescGen` is a dockerized application that checks for new activities, pulls stats from all of your connected services, writes a detailed Strava description, and exposes the latest payload as a local JSON API for other dashboards and automations.
 
 I created this because I found that I kept checking 5 different sites for unique stats that they provided. I decided to just pull all of the stats that I want into one place, now I only check my Strava description and I can see everything at a glance. I found over time this gives me a fantastic snapshot of exactly where I was at in my training, what the conditions were, and what kind of load I was under.
 
 ## Key Features
 - Auto-updates new Strava activities descriptions on a heartbeat (default every 5 minutes).
 - Local API endpoint to read latest output and force reruns.
-- Template Editor Web UI
+- Graphical Template Editor Web UI
+- Different Profiles for different descriptions based on Run type.
 - Export/import template bundles so you can move configs between instances and share amung the community.
 
 ## Sample Output 
@@ -88,7 +89,6 @@ STRAVA_CLIENT_ID=your_strava_client_id
 STRAVA_CLIENT_SECRET=your_strava_client_secret
 STRAVA_REFRESH_TOKEN=your_strava_refresh_token
 STRAVA_ACCESS_TOKEN=your_strava_access_token
-# Legacy aliases still supported: CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, ACCESS_TOKEN
 
 # Garmin
 ENABLE_GARMIN=true
@@ -111,7 +111,7 @@ SMASHRUN_ACCESS_TOKEN=your_smashrun_access_token
 
 # Crono API
 ENABLE_CRONO_API=false
-CRONO_API_BASE_URL=http://192.168.1.9:8777
+CRONO_API_BASE_URL=http://<local_ip>:8777
 CRONO_API_KEY=optional_if_using
 
 # Quiet Hour Config
@@ -119,7 +119,7 @@ ENABLE_QUIET_HOURS=true
 QUIET_HOURS_START=0
 QUIET_HOURS_END=4
 
-# Runtime
+# DescGen Runtime
 TIMEZONE=America/New_York
 # Legacy alias still supported: TZ
 #POLL_INTERVAL_SECONDS=300
