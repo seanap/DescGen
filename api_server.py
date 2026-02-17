@@ -131,7 +131,11 @@ def ready() -> tuple[dict, int]:
     )
     checks["worker_heartbeat_healthy"] = worker_healthy
 
-    ready_ok = checks["state_path_writable"] and checks["template_accessible"]
+    ready_ok = (
+        checks["state_path_writable"]
+        and checks["template_accessible"]
+        and checks["worker_heartbeat_healthy"]
+    )
     status_code = 200 if ready_ok else 503
     return (
         {

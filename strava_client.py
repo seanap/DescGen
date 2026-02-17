@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.strava.com"
 API_URL = f"{BASE_URL}/api/v3"
 TIMEOUT_SECONDS = 30
+MAX_ACTIVITY_PAGES = 60
 
 
 class StravaClient:
@@ -119,7 +120,7 @@ class StravaClient:
     def get_activities_after(self, after_dt: datetime, per_page: int = 200) -> list[dict[str, Any]]:
         activities: list[dict[str, Any]] = []
         page = 1
-        while True:
+        while page <= MAX_ACTIVITY_PAGES:
             response = self._request(
                 "GET",
                 "/athlete/activities",
@@ -136,8 +137,12 @@ class StravaClient:
             if len(page_items) < per_page:
                 break
             page += 1
-            if page > 20:
-                break
+        else:
+            logger.warning(
+                "Strava activities pagination hit cap (%s pages, per_page=%s). Results may be truncated.",
+                MAX_ACTIVITY_PAGES,
+                per_page,
+            )
         return activities
 
     def update_activity(self, activity_id: int, payload: dict[str, Any]) -> dict[str, Any]:

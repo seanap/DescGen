@@ -1,5 +1,7 @@
 import unittest
+from datetime import datetime
 
+import strava_client
 from strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
 
 
@@ -55,6 +57,30 @@ class TestStravaUtils(unittest.TestCase):
         self.assertEqual(client.calls[0]["method"], "GET")
         self.assertEqual(client.calls[0]["path"], "/activities/12345")
         self.assertEqual(client.calls[0]["params"], {"include_all_efforts": "true"})
+
+    def test_get_activities_after_honors_max_page_cap(self) -> None:
+        class _PagedClient:
+            def __init__(self):
+                self.calls = []
+
+            def _request(self, method, path, *, params=None, data=None):
+                self.calls.append({"method": method, "path": path, "params": params, "data": data})
+                per_page = int(params["per_page"])
+                return _DummyResponse([{"id": len(self.calls) * 1000 + idx} for idx in range(per_page)])
+
+        original_cap = strava_client.MAX_ACTIVITY_PAGES
+        strava_client.MAX_ACTIVITY_PAGES = 3
+        try:
+            client = _PagedClient()
+            activities = StravaClient.get_activities_after(
+                client,
+                datetime(2026, 1, 1),
+                per_page=2,
+            )
+            self.assertEqual(len(client.calls), 3)
+            self.assertEqual(len(activities), 6)
+        finally:
+            strava_client.MAX_ACTIVITY_PAGES = original_cap
 
 
 if __name__ == "__main__":

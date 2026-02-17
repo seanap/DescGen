@@ -78,12 +78,6 @@ def _load_processed_ids_from_file(path: Path) -> set[str]:
     return {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
 
 
-def _load_processed_ids_from_db(path: Path) -> set[str]:
-    with _connect_runtime_db(path) as conn:
-        rows = conn.execute("SELECT activity_id FROM processed_activities").fetchall()
-    return {str(row[0]).strip() for row in rows if row and str(row[0]).strip()}
-
-
 def is_activity_processed(path: Path, activity_id: int | str) -> bool:
     activity_id_str = str(activity_id).strip()
     if not activity_id_str:
@@ -250,8 +244,7 @@ def acquire_runtime_lock(
             )
         return True
     except sqlite3.Error:
-        # Fail-open to avoid deadlocking the app if SQLite is unavailable.
-        return True
+        return False
 
 
 def release_runtime_lock(path: Path, lock_name: str, owner: str) -> None:

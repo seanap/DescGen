@@ -11,9 +11,11 @@ class TestApiServer(unittest.TestCase):
     def setUp(self) -> None:
         self.client = api_server.app.test_client()
         self._original_run_once = api_server.run_once
+        self._original_is_worker_healthy = api_server.is_worker_healthy
 
     def tearDown(self) -> None:
         api_server.run_once = self._original_run_once
+        api_server.is_worker_healthy = self._original_is_worker_healthy
 
     def test_rerun_latest_endpoint(self) -> None:
         api_server.run_once = lambda **kwargs: {"status": "updated", "kwargs": kwargs}
@@ -61,6 +63,14 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertIn(payload["status"], {"ready", "not_ready"})
         self.assertIn("checks", payload)
+
+    def test_ready_endpoint_requires_worker_heartbeat(self) -> None:
+        api_server.is_worker_healthy = lambda *_args, **_kwargs: False
+        response = self.client.get("/ready")
+        self.assertEqual(response.status_code, 503)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "not_ready")
+        self.assertFalse(payload["checks"]["worker_heartbeat_healthy"])
 
     def test_service_metrics_endpoint(self) -> None:
         response = self.client.get("/service-metrics")

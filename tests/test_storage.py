@@ -1,7 +1,9 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
+import storage
 from storage import (
     acquire_runtime_lock,
     get_runtime_value,
@@ -54,6 +56,20 @@ class TestStorage(unittest.TestCase):
             self.assertFalse(is_worker_healthy(path, max_age_seconds=300))
             set_worker_heartbeat(path)
             self.assertTrue(is_worker_healthy(path, max_age_seconds=300))
+
+    def test_runtime_lock_fails_closed_when_db_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            original_connect = storage._connect_runtime_db
+
+            def _raise_sqlite_error(_path: Path):
+                raise sqlite3.Error("db unavailable")
+
+            storage._connect_runtime_db = _raise_sqlite_error
+            try:
+                self.assertFalse(acquire_runtime_lock(path, "run_once", "owner-a", ttl_seconds=60))
+            finally:
+                storage._connect_runtime_db = original_connect
 
 
 if __name__ == "__main__":
