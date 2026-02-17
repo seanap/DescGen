@@ -63,6 +63,10 @@ def _default_metrics() -> dict[str, Any]:
     }
 
 
+def default_metrics() -> dict[str, Any]:
+    return _default_metrics()
+
+
 def _as_float(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)

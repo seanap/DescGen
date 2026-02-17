@@ -29,6 +29,7 @@ from stat_modules.smashrun import (
     get_notables,
     get_stats as get_smashrun_stats,
 )
+from stat_modules.vo2max import default_metrics as default_garmin_metrics
 from stat_modules.vo2max import fetch_training_status_and_scores
 from storage import (
     acquire_runtime_lock,
@@ -474,46 +475,6 @@ def _run_required_call(
         cycle_bucket["last_status"] = "required_error"
         cycle_bucket["last_status_at_utc"] = datetime.now(timezone.utc).isoformat()
     raise RuntimeError(f"{service_name} failed after {attempts} attempts: {last_exc}") from last_exc
-
-
-def _default_garmin_metrics() -> dict[str, Any]:
-    return {
-        "vo2max": "N/A",
-        "training_status_key": "N/A",
-        "training_status_emoji": "⚪",
-        "acute_load": "N/A",
-        "chronic_load": "N/A",
-        "acwr_status": "N/A",
-        "acwr_status_emoji": "⚪",
-        "training_readiness_score": "N/A",
-        "training_readiness_emoji": "⚪",
-        "endurance_overall_score": "N/A",
-        "hill_overall_score": "N/A",
-        "average_hr": "N/A",
-        "running_cadence": "N/A",
-        "aerobic_training_effect": "N/A",
-        "anaerobic_training_effect": "N/A",
-        "training_effect_label": "N/A",
-        "resting_hr": "N/A",
-        "sleep_score": "N/A",
-        "fitness_age": "N/A",
-        "avg_grade_adjusted_speed": "N/A",
-        "readiness_level": "N/A",
-        "readiness_feedback": "N/A",
-        "recovery_time_hours": "N/A",
-        "readiness_factors": {},
-        "load_tunnel_min": "N/A",
-        "load_tunnel_max": "N/A",
-        "weekly_training_load": "N/A",
-        "fitness_trend": "N/A",
-        "load_level_trend": "N/A",
-        "daily_acwr_ratio": "N/A",
-        "acwr_percent": "N/A",
-        "garmin_last_activity": {},
-        "fitness_age_details": {},
-        "garmin_badges": [],
-        "garmin_segment_notables": [],
-    }
 
 
 def _format_activity_time(seconds: int) -> str:
@@ -1132,12 +1093,12 @@ def _get_garmin_client(settings: Settings) -> Any | None:
 
 def _get_garmin_metrics(client: Any | None) -> dict[str, Any]:
     if client is None:
-        return _default_garmin_metrics()
+        return default_garmin_metrics()
     try:
         return fetch_training_status_and_scores(client)
     except Exception as exc:
         logger.error("Garmin data fetch failed: %s", exc)
-        return _default_garmin_metrics()
+        return default_garmin_metrics()
 
 
 def _merge_hr_cadence_from_strava(training: dict[str, Any], detailed_activity: dict[str, Any]) -> tuple[Any, Any]:
