@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from main_strava_update import _new_cycle_service_state, _run_required_call, _run_service_call
+from activity_pipeline import _new_cycle_service_state, _run_required_call, _run_service_call
 from storage import get_runtime_value
 
 

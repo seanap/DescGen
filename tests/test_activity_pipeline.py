@@ -1,6 +1,6 @@
 import unittest
 
-from main_strava_update import _extract_strava_badges, _extract_strava_segment_notables
+from activity_pipeline import _extract_strava_badges, _extract_strava_segment_notables
 
 
 class TestStravaSegmentNotables(unittest.TestCase):

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config import Settings
-from main_strava_update import run_once
+from activity_pipeline import run_once
 from storage import set_runtime_value, set_worker_heartbeat
 
 

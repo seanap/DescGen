@@ -1,6 +1,6 @@
 import unittest
 
-from strava_utils import StravaClient, get_gap_speed_mps, mps_to_pace
+from strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
 
 
 class _DummyResponse:

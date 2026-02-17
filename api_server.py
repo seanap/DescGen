@@ -33,7 +33,7 @@ from description_template import (
     update_template_profile,
     validate_template_text,
 )
-from main_strava_update import run_once
+from activity_pipeline import run_once
 
 from config import Settings
 from storage import get_runtime_value, get_worker_heartbeat, is_worker_healthy, read_json

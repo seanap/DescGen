@@ -1,10 +1,10 @@
 import unittest
 from datetime import datetime, timezone
 
-from stat_modules.week_stats import get_garmin_period_fallback, get_period_stats, summarize_period
+from stat_modules.period_stats import get_garmin_period_fallback, get_period_stats, summarize_period
 
 
-class TestWeekStats(unittest.TestCase):
+class TestPeriodStats(unittest.TestCase):
     def test_summarize_period_uses_strava_gap_and_inputs(self) -> None:
         activities = [
             {
