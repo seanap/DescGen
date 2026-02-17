@@ -17,6 +17,8 @@ from config import Settings
 DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
 {% for notable in notables %}🏅 {{ notable }}
 {% endfor %}{% for achievement in achievements %}🏅 {{ achievement }}
+{% endfor %}{% for segment_notable in segment_notables | default([]) %}🥇 {{ segment_notable }}
+{% endfor %}{% for badge in badges | default([]) %}🎖️ {{ badge }}
 {% endfor %}🌤️🌡️ Misery Index: {{ weather.misery_index }} {{ weather.misery_description }} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
 {% if crono.average_net_kcal_per_day is defined and crono.average_net_kcal_per_day is not none %}🔥 7d avg daily Energy Balance:{{ "%+.0f"|format(crono.average_net_kcal_per_day) }} kcal{% if crono.average_status %} ({{ crono.average_status }}){% endif %}{% if crono.protein_g and crono.protein_g > 0 %} | 🥩:{{ crono.protein_g|round|int }}g{% endif %}{% if crono.carbs_g and crono.carbs_g > 0 %} | 🍞:{{ crono.carbs_g|round|int }}g{% endif %}
 {% elif crono.line %}{{ crono.line }}
@@ -132,6 +134,29 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "2nd best GAP pace this month",
     ],
     "achievements": [],
+    "badges": [
+        "Strava PR: River Path Sprint (1:18)",
+        "Garmin: Run Streak 400 (L1)",
+        "Smashrun: 1,000 Mile Month Club",
+    ],
+    "strava_badges": [
+        "Strava PR: River Path Sprint (1:18)",
+    ],
+    "garmin_badges": [
+        "Garmin: Run Streak 400 (L1)",
+    ],
+    "smashrun_badges": [
+        "Smashrun: 1,000 Mile Month Club",
+    ],
+    "segment_notables": [
+        "Strava PR: River Path Sprint (1:18)",
+        "Strava 2nd: Bridge Climb (2:42)",
+    ],
+    "strava_segment_notables": [
+        "Strava PR: River Path Sprint (1:18)",
+        "Strava 2nd: Bridge Climb (2:42)",
+    ],
+    "garmin_segment_notables": [],
     "crono": {
         "line": "🔥 7d avg daily Energy Balance:-1131 kcal (deficit) | 🥩:182g | 🍞:216g",
         "date": "2026-02-15",
@@ -283,6 +308,10 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
             "comments": 3,
             "achievements": 5,
         },
+        "segment_notables": [
+            "Strava PR: River Path Sprint (1:18)",
+            "Strava 2nd: Bridge Climb (2:42)",
+        ],
     },
     "intervals": {
         "summary": "CTL 72 | ATL 78 | Form -6",
@@ -350,6 +379,10 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         },
     },
     "garmin": {
+        "badges": [
+            "Garmin: Run Streak 400 (L1)",
+        ],
+        "segment_notables": [],
         "last_activity": {
             "activity_name": "Morning Run",
             "activity_type": "running",
@@ -423,6 +456,9 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         },
     },
     "smashrun": {
+        "badges": [
+            "Smashrun: 1,000 Mile Month Club",
+        ],
         "latest_activity": {
             "activity_id": 99887766,
             "activity_type": "Run",
@@ -2025,14 +2061,21 @@ def _type_name(value: Any) -> str:
 _GROUP_SOURCE_MAP: dict[str, tuple[str, str]] = {
     "achievements": ("Intervals.icu", "Achievement badges from Intervals activity payload."),
     "activity": ("Strava", "Latest activity metrics. Elevation can be overridden by Smashrun."),
+    "badges": ("Mixed", "Badge-style highlights from Strava, Garmin, and Smashrun."),
     "crono": ("crono-api", "Local nutrition/energy balance API values."),
     "garmin": ("Garmin", "Garmin-focused readiness, status, and run-dynamics metrics."),
+    "garmin_badges": ("Garmin", "Earned Garmin badges when available."),
+    "garmin_segment_notables": ("Garmin", "Garmin segment medal highlights (PR/2nd/3rd) when available."),
     "intervals": ("Intervals.icu", "Intervals.icu rollup metrics."),
     "notables": ("Smashrun", "Smashrun notable badges for latest run."),
     "periods": ("Strava+Smashrun+Garmin", "Aggregated rolling summaries by period."),
     "raw": ("Mixed", "Raw and derived payloads from all enabled services."),
+    "segment_notables": ("Strava+Garmin", "Segment medals and PR highlights for latest activity."),
     "smashrun": ("Smashrun", "Smashrun latest activity and historical stats."),
+    "smashrun_badges": ("Smashrun", "Earned Smashrun badges."),
     "streak_days": ("Smashrun", "Current run streak length from Smashrun."),
+    "strava_badges": ("Strava", "Strava achievement badges from latest activity detail."),
+    "strava_segment_notables": ("Strava", "Strava segment medals (PR/2nd/3rd) for latest activity."),
     "training": ("Garmin+Strava", "Garmin metrics with Strava fallback for missing HR/cadence."),
     "weather": ("Weather.com", "Weather + AQI conditions for activity time."),
 }
@@ -2049,6 +2092,7 @@ _SOURCE_COST_TIER_MAP: dict[str, str] = {
     "Weather.com": "low",
     "crono-api": "low",
     "Strava+Garmin": "medium",
+    "Strava+Garmin+Smashrun": "medium",
     "Garmin+Strava": "medium",
     "Strava+Smashrun+Garmin": "medium",
 }
@@ -2057,9 +2101,16 @@ _SOURCE_COST_TIER_MAP: dict[str, str] = {
 _GROUP_FRESHNESS_MAP: dict[str, str] = {
     "activity": "activity",
     "achievements": "activity",
+    "badges": "activity",
     "intervals": "activity",
     "weather": "activity",
     "notables": "activity",
+    "segment_notables": "activity",
+    "strava_segment_notables": "activity",
+    "garmin_segment_notables": "activity",
+    "strava_badges": "activity",
+    "garmin_badges": "daily",
+    "smashrun_badges": "rolling",
     "streak_days": "daily",
     "training": "daily",
     "garmin": "daily",
@@ -2071,6 +2122,62 @@ _GROUP_FRESHNESS_MAP: dict[str, str] = {
 
 
 _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
+    "badges": {
+        "source": "Strava+Garmin+Smashrun",
+        "source_note": "Combined badge highlights from all enabled providers.",
+        "label": "All Badges",
+        "description": "Merged badge list from Strava, Garmin, and Smashrun.",
+        "tags": ["badges", "highlights", "activity"],
+        "metric_key": "all_badges",
+    },
+    "segment_notables": {
+        "source": "Strava+Garmin",
+        "source_note": "Segment medal highlights (PR/2nd/3rd) from latest activity context.",
+        "label": "All Segment Notables",
+        "description": "Merged segment medals from Strava and Garmin.",
+        "tags": ["segments", "medals", "activity"],
+        "metric_key": "all_segment_notables",
+    },
+    "strava_badges": {
+        "source": "Strava",
+        "source_note": "Achievement badges extracted from Strava activity detail payload.",
+        "label": "Strava Badges",
+        "description": "Strava badge highlights from latest activity.",
+        "tags": ["strava", "badges", "activity"],
+        "metric_key": "strava_badges",
+    },
+    "garmin_badges": {
+        "source": "Garmin",
+        "source_note": "Earned badges from Garmin badge endpoints when available.",
+        "label": "Garmin Badges",
+        "description": "Garmin badge highlights.",
+        "tags": ["garmin", "badges", "activity"],
+        "metric_key": "garmin_badges",
+    },
+    "smashrun_badges": {
+        "source": "Smashrun",
+        "source_note": "Earned badges from Smashrun badge endpoints.",
+        "label": "Smashrun Badges",
+        "description": "Smashrun badge highlights.",
+        "tags": ["smashrun", "badges", "activity"],
+        "metric_key": "smashrun_badges",
+    },
+    "strava_segment_notables": {
+        "source": "Strava",
+        "source_note": "Segment medal finishes using Strava personal rank (pr_rank).",
+        "label": "Strava Segment Medals",
+        "description": "Strava segment PR/2nd/3rd highlights.",
+        "tags": ["strava", "segments", "medals"],
+        "metric_key": "strava_segment_notables",
+    },
+    "garmin_segment_notables": {
+        "source": "Garmin",
+        "source_note": "Segment medal finishes from Garmin segment payloads when present.",
+        "label": "Garmin Segment Medals",
+        "description": "Garmin segment PR/2nd/3rd highlights.",
+        "tags": ["garmin", "segments", "medals"],
+        "metric_key": "garmin_segment_notables",
+    },
     "activity.elevation_feet": {
         "source": "Smashrun",
         "source_note": "Per-activity elevation from Smashrun; Strava fallback.",
@@ -2228,6 +2335,14 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Number of segment achievements on this activity.",
         "tags": ["social", "activity", "metadata"],
         "metric_key": "activity_social_achievements",
+    },
+    "activity.segment_notables": {
+        "source": "Strava",
+        "source_note": "Segment medal finishes filtered to PR/2nd/3rd on latest activity.",
+        "label": "Activity Segment Medals",
+        "description": "Medal-worthy segment efforts for this activity.",
+        "tags": ["activity", "segments", "medals"],
+        "metric_key": "activity_segment_notables",
     },
     "weather.misery_index": {
         "label": "Misery Index",
@@ -2628,6 +2743,14 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "tags": ["smashrun", "stats", "streak"],
         "metric_key": "smashrun_longest_streak",
     },
+    "smashrun.badges": {
+        "source": "Smashrun",
+        "source_note": "Badge highlights from Smashrun badge endpoints.",
+        "label": "Smashrun Badge List",
+        "description": "Smashrun earned badge lines.",
+        "tags": ["smashrun", "badges", "activity"],
+        "metric_key": "smashrun_badges_list",
+    },
     "garmin.last_activity.gap_pace": {
         "source": "Garmin",
         "source_note": "Garmin last-activity grade-adjusted pace.",
@@ -2635,6 +2758,22 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Garmin-reported last activity GAP pace.",
         "tags": ["garmin", "activity", "pace"],
         "metric_key": "garmin_last_gap_pace",
+    },
+    "garmin.badges": {
+        "source": "Garmin",
+        "source_note": "Badge highlights from Garmin earned-badge endpoints.",
+        "label": "Garmin Badge List",
+        "description": "Garmin earned badge lines.",
+        "tags": ["garmin", "badges", "activity"],
+        "metric_key": "garmin_badges_list",
+    },
+    "garmin.segment_notables": {
+        "source": "Garmin",
+        "source_note": "Segment medal finishes from Garmin payloads when present.",
+        "label": "Garmin Segment Medals",
+        "description": "Garmin PR/2nd/3rd segment lines.",
+        "tags": ["garmin", "segments", "medals"],
+        "metric_key": "garmin_segment_notables_list",
     },
     "garmin.last_activity.hr_zone_summary": {
         "source": "Garmin",

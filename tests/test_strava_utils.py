@@ -1,6 +1,30 @@
 import unittest
 
-from strava_utils import get_gap_speed_mps, mps_to_pace
+from strava_utils import StravaClient, get_gap_speed_mps, mps_to_pace
+
+
+class _DummyResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _DummyClient:
+    def __init__(self):
+        self.calls = []
+
+    def _request(self, method, path, *, params=None, data=None):
+        self.calls.append(
+            {
+                "method": method,
+                "path": path,
+                "params": params,
+                "data": data,
+            }
+        )
+        return _DummyResponse({"ok": True})
 
 
 class TestStravaUtils(unittest.TestCase):
@@ -22,6 +46,15 @@ class TestStravaUtils(unittest.TestCase):
     def test_get_gap_speed_does_not_fallback_to_average_speed(self) -> None:
         activity = {"average_speed": 4.0}
         self.assertIsNone(get_gap_speed_mps(activity))
+
+    def test_get_activity_details_requests_all_segment_efforts(self) -> None:
+        client = _DummyClient()
+        payload = StravaClient.get_activity_details(client, 12345)
+        self.assertEqual(payload, {"ok": True})
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(client.calls[0]["method"], "GET")
+        self.assertEqual(client.calls[0]["path"], "/activities/12345")
+        self.assertEqual(client.calls[0]["params"], {"include_all_efforts": "true"})
 
 
 if __name__ == "__main__":

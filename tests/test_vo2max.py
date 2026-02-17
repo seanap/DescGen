@@ -43,6 +43,23 @@ class _DummyGarminClient:
             "activityName": "Morning Run",
             "activityType": {"typeKey": "running"},
             "startTimeLocal": "2026-02-15 06:42:00",
+            "segmentEfforts": [
+                {
+                    "segment": {"id": 1, "name": "Hill Sprint"},
+                    "pr_rank": 3,
+                    "elapsed_time": 107,
+                },
+                {
+                    "segment": {"id": 1, "name": "Hill Sprint"},
+                    "pr_rank": 2,
+                    "elapsed_time": 101,
+                },
+                {
+                    "segment": {"id": 2, "name": "River Path"},
+                    "pr_rank": 1,
+                    "elapsed_time": 88,
+                },
+            ],
         }
 
     def get_training_status(self, _end_date):
@@ -115,6 +132,12 @@ class _DummyGarminClient:
             },
         }
 
+    def get_earned_badges(self):
+        return [
+            {"badgeName": "Run Streak 400", "badgeLevel": 1},
+            {"badgeName": "Weekend Warrior", "badgeLevel": 2},
+        ]
+
 
 class TestVo2MaxExpandedMetrics(unittest.TestCase):
     def test_fetch_training_status_returns_expanded_fields(self) -> None:
@@ -127,6 +150,10 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         self.assertEqual(metrics["daily_acwr_ratio"], 1.12)
         self.assertEqual(metrics["acwr_percent"], 112)
         self.assertEqual(metrics["fitness_age"], "34 yr")
+        self.assertTrue(metrics["garmin_badges"])
+        self.assertIn("Garmin: Run Streak 400 (L1)", metrics["garmin_badges"])
+        self.assertIn("Garmin 2nd: Hill Sprint (1:41)", metrics["garmin_segment_notables"])
+        self.assertIn("Garmin PR: River Path (1:28)", metrics["garmin_segment_notables"])
 
         last_activity = metrics["garmin_last_activity"]
         self.assertIsInstance(last_activity, dict)

@@ -58,6 +58,8 @@ def _default_metrics() -> dict[str, Any]:
         "acwr_percent": "N/A",
         "garmin_last_activity": {},
         "fitness_age_details": {},
+        "garmin_badges": [],
+        "garmin_segment_notables": [],
     }
 
 
@@ -70,6 +72,13 @@ def _as_float(value: Any) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _as_int(value: Any) -> int | None:
+    parsed = _as_float(value)
+    if parsed is None:
+        return None
+    return int(round(parsed))
 
 
 def _seconds_to_hms(value: Any) -> str:
@@ -128,6 +137,111 @@ def _zone_summary(activity: dict[str, Any], prefix: str) -> str:
             continue
         parts.append(f"Z{zone_id} {_seconds_to_hms(seconds)}")
     return " | ".join(parts) if parts else "N/A"
+
+
+def _segment_rank_label(rank: int) -> str:
+    if rank == 1:
+        return "PR"
+    if rank == 2:
+        return "2nd"
+    return "3rd"
+
+
+def _segment_candidates(last_activity: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for key in ("segmentEfforts", "segment_efforts", "segments", "segmentResults", "segment_results"):
+        value = last_activity.get(key)
+        if isinstance(value, list):
+            candidates.extend(item for item in value if isinstance(item, dict))
+    return candidates
+
+
+def _normalize_garmin_segment_notables(last_activity: dict[str, Any]) -> list[str]:
+    selected: dict[str, tuple[int, int | None, str]] = {}
+    for effort in _segment_candidates(last_activity):
+        rank = _as_int(
+            effort.get("pr_rank")
+            or effort.get("prRank")
+            or effort.get("rank")
+            or effort.get("segmentRank")
+            or effort.get("leaderboardRank")
+            or effort.get("place")
+        )
+        if rank is None or rank not in (1, 2, 3):
+            continue
+
+        segment = effort.get("segment")
+        segment_name = ""
+        segment_id = ""
+        if isinstance(segment, dict):
+            segment_name = str(segment.get("name") or "").strip()
+            segment_id = str(segment.get("id") or "").strip()
+        if not segment_name:
+            segment_name = str(
+                effort.get("segmentName")
+                or effort.get("name")
+                or effort.get("segment_name")
+                or "Unknown Segment"
+            ).strip()
+        if not segment_id:
+            segment_id = segment_name.lower()
+
+        elapsed_seconds = _as_int(
+            effort.get("elapsed_time")
+            or effort.get("elapsedTime")
+            or effort.get("elapsedTimeInSeconds")
+            or effort.get("moving_time")
+            or effort.get("movingTime")
+        )
+        time_display = _seconds_to_hms(elapsed_seconds) if elapsed_seconds is not None else "N/A"
+        line = f"Garmin {_segment_rank_label(rank)}: {segment_name} ({time_display})"
+
+        existing = selected.get(segment_id)
+        if existing is None:
+            selected[segment_id] = (rank, elapsed_seconds, line)
+            continue
+        current_rank, current_seconds, _ = existing
+        better_rank = rank < current_rank
+        better_time = (
+            rank == current_rank
+            and elapsed_seconds is not None
+            and (current_seconds is None or elapsed_seconds < current_seconds)
+        )
+        if better_rank or better_time:
+            selected[segment_id] = (rank, elapsed_seconds, line)
+
+    ordered = sorted(selected.values(), key=lambda item: (item[0], item[1] if item[1] is not None else 10**9, item[2]))
+    return [item[2] for item in ordered]
+
+
+def _normalize_garmin_badges(payload: Any, max_items: int = 20) -> list[str]:
+    if isinstance(payload, dict):
+        for key in ("badges", "items", "results"):
+            nested = payload.get(key)
+            if isinstance(nested, list):
+                payload = nested
+                break
+    if not isinstance(payload, list):
+        return []
+
+    badges: list[str] = []
+    seen: set[str] = set()
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("badgeName") or item.get("badgeTypeName") or item.get("name") or "").strip()
+        if not title:
+            continue
+        level = _as_int(item.get("badgeLevel") or item.get("level") or item.get("currentLevel"))
+        suffix = f" (L{level})" if level is not None and level > 0 else ""
+        line = f"Garmin: {title}{suffix}"
+        if line in seen:
+            continue
+        seen.add(line)
+        badges.append(line)
+        if len(badges) >= max_items:
+            break
+    return badges
 
 
 def _build_garmin_last_activity_context(last_activity: dict[str, Any]) -> dict[str, Any]:
@@ -301,6 +415,7 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         else "N/A"
     )
     metrics["garmin_last_activity"] = _build_garmin_last_activity_context(last_activity)
+    metrics["garmin_segment_notables"] = _normalize_garmin_segment_notables(last_activity)
 
     try:
         resting_hr_data = client.get_rhr_day(start_date)
@@ -385,5 +500,12 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
             }
     except Exception as exc:
         logger.debug("Garmin fitness age unavailable: %s", exc)
+
+    try:
+        get_earned_badges = getattr(client, "get_earned_badges", None)
+        if callable(get_earned_badges):
+            metrics["garmin_badges"] = _normalize_garmin_badges(get_earned_badges())
+    except Exception as exc:
+        logger.debug("Garmin badges unavailable: %s", exc)
 
     return metrics

@@ -273,8 +273,18 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("training_load", context["intervals"])
         self.assertIn("garmin", context)
         self.assertIn("smashrun", context)
+        self.assertIn("badges", context)
+        self.assertIn("segment_notables", context)
+        self.assertIn("strava_badges", context)
+        self.assertIn("garmin_badges", context)
+        self.assertIn("smashrun_badges", context)
+        self.assertIn("strava_segment_notables", context)
+        self.assertIn("garmin_segment_notables", context)
         self.assertIn("latest_activity", context["smashrun"])
+        self.assertIn("badges", context["smashrun"])
         self.assertIn("last_activity", context["garmin"])
+        self.assertIn("badges", context["garmin"])
+        self.assertIn("segment_notables", context["activity"])
 
     def test_sample_fixture_context(self) -> None:
         winter = get_sample_template_context("winter_grind")

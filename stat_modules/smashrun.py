@@ -195,6 +195,31 @@ def get_stats(access_token: str | None) -> dict[str, Any] | None:
     return None
 
 
+def get_badges(access_token: str | None) -> list[dict[str, Any]]:
+    if not access_token:
+        return []
+    try:
+        response = requests.get(
+            f"{BASE_URL}/my/badges",
+            headers=_headers(access_token),
+            timeout=TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        logger.error("Smashrun badges fetch failed: %s", exc)
+        return []
+
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("badges", "items", "results"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
 def get_longest_streak(access_token: str | None) -> int | None:
     payload = get_stats(access_token)
     if not payload:

@@ -25,6 +25,7 @@ from stat_modules.smashrun import (
     get_activity_record,
     get_activity_elevation_feet,
     get_activities as get_smashrun_activities,
+    get_badges as get_smashrun_badges,
     get_notables,
     get_stats as get_smashrun_stats,
 )
@@ -510,6 +511,8 @@ def _default_garmin_metrics() -> dict[str, Any]:
         "acwr_percent": "N/A",
         "garmin_last_activity": {},
         "fitness_age_details": {},
+        "garmin_badges": [],
+        "garmin_segment_notables": [],
     }
 
 
@@ -750,6 +753,196 @@ def _normalize_smashrun_stats(stats: dict[str, Any] | None) -> dict[str, Any]:
         "most_often_run_day": str(stats.get("mostOftenRunOnDay") or "N/A"),
         "least_often_run_day": str(stats.get("leastOftenRunOnDay") or "N/A"),
     }
+
+
+def _segment_rank_label(rank: int) -> str:
+    if rank == 1:
+        return "PR"
+    if rank == 2:
+        return "2nd"
+    if rank == 3:
+        return "3rd"
+    return f"#{rank}"
+
+
+def _coerce_string_list(value: Any, *, max_items: int = 25) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+        if len(normalized) >= max_items:
+            break
+    return normalized
+
+
+def _extract_strava_segment_notables(activity: dict[str, Any], *, max_items: int = 20) -> list[str]:
+    efforts = activity.get("segment_efforts")
+    if not isinstance(efforts, list):
+        return []
+
+    selected: dict[str, tuple[int, int | None, str]] = {}
+    for effort in efforts:
+        if not isinstance(effort, dict):
+            continue
+        rank = _to_int(effort.get("pr_rank"))
+        if not isinstance(rank, int):
+            achievements = effort.get("achievements")
+            if isinstance(achievements, list):
+                for achievement in achievements:
+                    if not isinstance(achievement, dict):
+                        continue
+                    ach_rank = _to_int(achievement.get("rank"))
+                    if isinstance(ach_rank, int) and ach_rank in (1, 2, 3):
+                        rank = ach_rank
+                        break
+        if not isinstance(rank, int) or rank not in (1, 2, 3):
+            continue
+
+        segment = effort.get("segment")
+        segment_name = ""
+        segment_id = ""
+        if isinstance(segment, dict):
+            segment_name = str(segment.get("name") or "").strip()
+            segment_id = str(segment.get("id") or "").strip()
+        if not segment_name:
+            segment_name = str(effort.get("name") or "Unknown Segment").strip()
+        if not segment_id:
+            segment_id = segment_name.lower()
+
+        elapsed_seconds = _to_int(effort.get("elapsed_time"))
+        time_display = _format_activity_time(elapsed_seconds) if isinstance(elapsed_seconds, int) else "N/A"
+        line = f"Strava {_segment_rank_label(rank)}: {segment_name} ({time_display})"
+
+        existing = selected.get(segment_id)
+        if existing is None:
+            selected[segment_id] = (rank, elapsed_seconds if isinstance(elapsed_seconds, int) else None, line)
+            continue
+        current_rank, current_seconds, _ = existing
+        better_rank = rank < current_rank
+        better_time = (
+            rank == current_rank
+            and isinstance(elapsed_seconds, int)
+            and (current_seconds is None or elapsed_seconds < current_seconds)
+        )
+        if better_rank or better_time:
+            selected[segment_id] = (rank, elapsed_seconds if isinstance(elapsed_seconds, int) else None, line)
+
+    ordered = sorted(selected.values(), key=lambda item: (item[0], item[1] if item[1] is not None else 10**9, item[2]))
+    return [item[2] for item in ordered[:max_items]]
+
+
+def _extract_strava_badges(
+    activity: dict[str, Any],
+    *,
+    segment_notables: list[str],
+    max_items: int = 20,
+) -> list[str]:
+    badges: list[str] = []
+    seen: set[str] = set()
+
+    def _add_badge(line: str) -> None:
+        if not line or line in seen:
+            return
+        seen.add(line)
+        badges.append(line)
+
+    efforts = activity.get("segment_efforts")
+    if isinstance(efforts, list):
+        for effort in efforts:
+            if not isinstance(effort, dict):
+                continue
+            achievements = effort.get("achievements")
+            if not isinstance(achievements, list):
+                continue
+
+            segment_name = ""
+            segment = effort.get("segment")
+            if isinstance(segment, dict):
+                segment_name = str(segment.get("name") or "").strip()
+            if not segment_name:
+                segment_name = str(effort.get("name") or "Unknown Segment").strip()
+
+            for achievement in achievements:
+                if not isinstance(achievement, dict):
+                    continue
+                ach_type = str(achievement.get("type") or "achievement").strip().replace("_", " ").title()
+                rank = _to_int(achievement.get("rank"))
+                if isinstance(rank, int) and rank in (1, 2, 3):
+                    _add_badge(f"Strava: {ach_type} {_segment_rank_label(rank)} - {segment_name}")
+                elif isinstance(rank, int):
+                    _add_badge(f"Strava: {ach_type} #{rank} - {segment_name}")
+                else:
+                    _add_badge(f"Strava: {ach_type} - {segment_name}")
+                if len(badges) >= max_items:
+                    return badges[:max_items]
+
+    for notable in segment_notables:
+        _add_badge(notable)
+        if len(badges) >= max_items:
+            return badges[:max_items]
+
+    achievement_count = _to_int(activity.get("achievement_count"))
+    if isinstance(achievement_count, int) and achievement_count > 0 and not badges:
+        _add_badge(f"Strava: {achievement_count} achievement(s)")
+    return badges[:max_items]
+
+
+def _normalize_smashrun_badges(payload: Any, *, max_items: int = 20) -> list[str]:
+    if not isinstance(payload, list):
+        return []
+
+    badges: list[str] = []
+    seen: set[str] = set()
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+
+        earned_flags = [item.get("earned"), item.get("isEarned"), item.get("isAwarded")]
+        explicit_flags = [flag for flag in earned_flags if isinstance(flag, bool)]
+        if explicit_flags and not any(explicit_flags):
+            continue
+
+        title = str(
+            item.get("badgeName")
+            or item.get("badgeTypeName")
+            or item.get("name")
+            or item.get("title")
+            or ""
+        ).strip()
+        if not title:
+            continue
+
+        level = _to_int(item.get("badgeLevel") or item.get("level") or item.get("currentLevel"))
+        suffix = f" (L{level})" if isinstance(level, int) and level > 0 else ""
+        line = f"Smashrun: {title}{suffix}"
+        if line in seen:
+            continue
+        seen.add(line)
+        badges.append(line)
+        if len(badges) >= max_items:
+            break
+    return badges
+
+
+def _merge_badge_lists(*badge_lists: list[str], max_items: int = 30) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for items in badge_lists:
+        for item in items:
+            line = str(item or "").strip()
+            if not line or line in seen:
+                continue
+            seen.add(line)
+            merged.append(line)
+            if len(merged) >= max_items:
+                return merged
+    return merged
 
 
 def _is_treadmill(activity: dict[str, Any]) -> bool:
@@ -1119,6 +1312,7 @@ def _build_description_context(
     timezone_name: str = "UTC",
     smashrun_activity: dict[str, Any] | None = None,
     smashrun_stats: dict[str, Any] | None = None,
+    smashrun_badges: list[dict[str, Any]] | None = None,
     garmin_period_fallback: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     intervals_payload = intervals_payload or {}
@@ -1136,9 +1330,17 @@ def _build_description_context(
 
     smashrun_activity = smashrun_activity or {}
     smashrun_stats = smashrun_stats or {}
+    smashrun_badges = smashrun_badges or []
     garmin_period_fallback = garmin_period_fallback or {}
     smashrun_activity_context = _normalize_smashrun_activity(smashrun_activity, local_tz=local_tz)
     smashrun_stats_context = _normalize_smashrun_stats(smashrun_stats)
+    strava_segment_notables = _extract_strava_segment_notables(detailed_activity)
+    garmin_segment_notables = _coerce_string_list(training.get("garmin_segment_notables"), max_items=20)
+    segment_notables = _merge_badge_lists(strava_segment_notables, garmin_segment_notables, max_items=25)
+    strava_badges = _extract_strava_badges(detailed_activity, segment_notables=strava_segment_notables)
+    garmin_badges = _coerce_string_list(training.get("garmin_badges"), max_items=20)
+    smashrun_badges_lines = _normalize_smashrun_badges(smashrun_badges)
+    badges = _merge_badge_lists(strava_badges, garmin_badges, smashrun_badges_lines, max_items=30)
 
     distance_miles = round(float(detailed_activity.get("distance", 0) or 0) / 1609.34, 2)
     moving_seconds = int(detailed_activity.get("moving_time") or 0)
@@ -1248,6 +1450,13 @@ def _build_description_context(
         "streak_days": longest_streak if longest_streak is not None else "N/A",
         "notables": notables,
         "achievements": achievements,
+        "badges": badges,
+        "strava_badges": strava_badges,
+        "garmin_badges": garmin_badges,
+        "smashrun_badges": smashrun_badges_lines,
+        "segment_notables": segment_notables,
+        "strava_segment_notables": strava_segment_notables,
+        "garmin_segment_notables": garmin_segment_notables,
         "crono": {
             "line": crono_line,
             "date": crono_summary.get("date"),
@@ -1349,6 +1558,7 @@ def _build_description_context(
                 "comments": int(round(_as_float(detailed_activity.get("comment_count")) or 0)),
                 "achievements": int(round(_as_float(detailed_activity.get("achievement_count")) or 0)),
             },
+            "segment_notables": strava_segment_notables,
         },
         "intervals": {
             "summary": icu_summary,
@@ -1387,6 +1597,8 @@ def _build_description_context(
             "gap_zone_summary": intervals_payload.get("gap_zone_summary", "N/A"),
         },
         "garmin": {
+            "badges": garmin_badges,
+            "segment_notables": garmin_segment_notables,
             "last_activity": training.get("garmin_last_activity", {}),
             "readiness": {
                 "score": training.get("training_readiness_score", "N/A"),
@@ -1411,6 +1623,7 @@ def _build_description_context(
             "fitness_age": training.get("fitness_age_details", {}),
         },
         "smashrun": {
+            "badges": smashrun_badges_lines,
             "latest_activity": smashrun_activity_context,
             "stats": smashrun_stats_context,
         },
@@ -1454,6 +1667,7 @@ def _build_description_context(
             "smashrun": {
                 "activity": smashrun_activity,
                 "stats": smashrun_stats,
+                "badges": smashrun_badges,
             },
             "garmin_period_fallback": garmin_period_fallback,
         },
@@ -1579,6 +1793,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         smashrun_elevation_totals = {"week": 0.0, "month": 0.0, "year": 0.0}
         smashrun_activity_record: dict[str, Any] | None = None
         smashrun_stats: dict[str, Any] | None = None
+        smashrun_badges: list[dict[str, Any]] = []
 
         if settings.enable_smashrun and settings.smashrun_access_token:
             smashrun_activities = _run_service_call(
@@ -1631,6 +1846,17 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
                 streak_numeric = _as_float(streak_value)
                 if streak_numeric is not None:
                     longest_streak = int(round(streak_numeric))
+            smashrun_badges_payload = _run_service_call(
+                settings,
+                "smashrun.badges",
+                get_smashrun_badges,
+                settings.smashrun_access_token,
+                service_state=service_state,
+                cache_key="smashrun.badges:default",
+                cache_ttl_seconds=settings.service_cache_ttl_seconds,
+            )
+            if isinstance(smashrun_badges_payload, list):
+                smashrun_badges = [item for item in smashrun_badges_payload if isinstance(item, dict)]
 
         garmin_client = _get_garmin_client(settings)
         training = _get_garmin_metrics(garmin_client)
@@ -1737,6 +1963,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             timezone_name=settings.timezone,
             smashrun_activity=smashrun_activity_record,
             smashrun_stats=smashrun_stats,
+            smashrun_badges=smashrun_badges,
             garmin_period_fallback=garmin_period_fallback,
         )
 

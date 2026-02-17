@@ -1,9 +1,11 @@
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import Mock, patch
 
 from stat_modules.smashrun import (
     aggregate_elevation_totals,
     get_activity_elevation_feet,
+    get_badges,
     get_activity_record,
 )
 
@@ -113,6 +115,30 @@ class TestSmashrunAggregation(unittest.TestCase):
         self.assertIsNotNone(matched)
         assert matched is not None
         self.assertEqual(matched["activityId"], 32)
+
+
+class TestSmashrunBadges(unittest.TestCase):
+    @patch("stat_modules.smashrun.requests.get")
+    def test_get_badges_handles_list_payload(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.json.return_value = [{"badgeName": "Milestone"}, {"badgeName": "Elevation"}]
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+
+        badges = get_badges("token")
+        self.assertEqual(len(badges), 2)
+        self.assertEqual(badges[0]["badgeName"], "Milestone")
+
+    @patch("stat_modules.smashrun.requests.get")
+    def test_get_badges_handles_wrapped_payload(self, mock_get: Mock) -> None:
+        response = Mock()
+        response.json.return_value = {"badges": [{"badgeName": "Consistency"}]}
+        response.raise_for_status.return_value = None
+        mock_get.return_value = response
+
+        badges = get_badges("token")
+        self.assertEqual(len(badges), 1)
+        self.assertEqual(badges[0]["badgeName"], "Consistency")
 
 
 if __name__ == "__main__":

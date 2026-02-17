@@ -109,7 +109,11 @@ class StravaClient:
         return response.json()
 
     def get_activity_details(self, activity_id: int) -> dict[str, Any]:
-        response = self._request("GET", f"/activities/{activity_id}")
+        response = self._request(
+            "GET",
+            f"/activities/{activity_id}",
+            params={"include_all_efforts": "true"},
+        )
         return response.json()
 
     def get_activities_after(self, after_dt: datetime, per_page: int = 200) -> list[dict[str, Any]]:
