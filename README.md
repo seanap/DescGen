@@ -84,10 +84,11 @@ services:
 
 ```dotenv
 # Strava
-CLIENT_ID=your_strava_client_id
-CLIENT_SECRET=your_strava_client_secret
-REFRESH_TOKEN=your_strava_refresh_token
-ACCESS_TOKEN=your_strava_access_token
+STRAVA_CLIENT_ID=your_strava_client_id
+STRAVA_CLIENT_SECRET=your_strava_client_secret
+STRAVA_REFRESH_TOKEN=your_strava_refresh_token
+STRAVA_ACCESS_TOKEN=your_strava_access_token
+# Legacy aliases still supported: CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN, ACCESS_TOKEN
 
 # Garmin
 ENABLE_GARMIN=true
@@ -97,7 +98,8 @@ GARMIN_PASSWORD=your_garmin_password
 # Intervals.icu
 ENABLE_INTERVALS=true
 INTERVALS_API_KEY=your_intervals_api_key
-USER_ID=your_intervals_user_id
+INTERVALS_USER_ID=your_intervals_user_id
+# Legacy alias still supported: USER_ID
 
 # WeatherAPI
 ENABLE_WEATHER=true
@@ -108,7 +110,7 @@ ENABLE_SMASHRUN=true
 SMASHRUN_ACCESS_TOKEN=your_smashrun_access_token
 
 # Crono API
-ENABLE_CRONO_API=true
+ENABLE_CRONO_API=false
 CRONO_API_BASE_URL=http://192.168.1.9:8777
 CRONO_API_KEY=optional_if_using
 
@@ -118,7 +120,8 @@ QUIET_HOURS_START=0
 QUIET_HOURS_END=4
 
 # Runtime
-TZ=America/New_York
+TIMEZONE=America/New_York
+# Legacy alias still supported: TZ
 #POLL_INTERVAL_SECONDS=300
 #LOG_LEVEL=INFO
 #STATE_DIR=state
@@ -231,11 +234,11 @@ open http://localhost:1609/editor
 ## Strava
 1. Go to `https://www.strava.com/settings/api` and create/open your API app.
 2. Set **Authorization Callback Domain** to `localhost` during setup.
-3. Copy `CLIENT_ID` and `CLIENT_SECRET` into `.env`.
-4. Open this URL (replace `YOUR_CLIENT_ID`):
+3. Copy `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET` into `.env`.
+4. Open this URL (replace `YOUR_STRAVA_CLIENT_ID`):
 
 ```text
-https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost/exchange_token&approval_prompt=force&scope=read,activity:read_all,activity:write
+https://www.strava.com/oauth/authorize?client_id=YOUR_STRAVA_CLIENT_ID&response_type=code&redirect_uri=http://localhost/exchange_token&approval_prompt=force&scope=read,activity:read_all,activity:write
 ```
 
 5. Authorize the app.
@@ -245,15 +248,16 @@ https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=co
 
 ```bash
 curl -X POST https://www.strava.com/oauth/token \
-  -d client_id=YOUR_CLIENT_ID \
-  -d client_secret=YOUR_CLIENT_SECRET \
+  -d client_id=YOUR_STRAVA_CLIENT_ID \
+  -d client_secret=YOUR_STRAVA_CLIENT_SECRET \
   -d code=THE_CODE_FROM_URL \
   -d grant_type=authorization_code
 ```
 
 9. Put response values into `.env`:
-- `REFRESH_TOKEN` = `refresh_token`
-- `ACCESS_TOKEN` = `access_token` (optional; refresh token is what matters long-term)
+- `STRAVA_REFRESH_TOKEN` = `refresh_token`
+- `STRAVA_ACCESS_TOKEN` = `access_token` (optional; refresh token is what matters long-term)
+  (Legacy aliases `REFRESH_TOKEN` and `ACCESS_TOKEN` are still accepted.)
 
 Strava gotchas:
 - `invalid redirect_uri`: callback domain and URL do not match.
@@ -265,7 +269,8 @@ Strava gotchas:
 2. In Developer/API section, copy your API key and athlete ID.
 3. Set `.env` values:
 - `INTERVALS_API_KEY`
-- `USER_ID`
+- `INTERVALS_USER_ID`
+  (Legacy alias `USER_ID` is still accepted.)
 
 Quick test:
 ```bash

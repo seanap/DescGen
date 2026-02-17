@@ -84,15 +84,6 @@ def _load_processed_ids_from_db(path: Path) -> set[str]:
     return {str(row[0]).strip() for row in rows if row and str(row[0]).strip()}
 
 
-def load_processed_ids(path: Path) -> set[str]:
-    file_ids = _load_processed_ids_from_file(path)
-    try:
-        db_ids = _load_processed_ids_from_db(path)
-    except sqlite3.Error:
-        return file_ids
-    return file_ids | db_ids
-
-
 def is_activity_processed(path: Path, activity_id: int | str) -> bool:
     activity_id_str = str(activity_id).strip()
     if not activity_id_str:

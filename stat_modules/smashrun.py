@@ -220,16 +220,6 @@ def get_badges(access_token: str | None) -> list[dict[str, Any]]:
     return []
 
 
-def get_longest_streak(access_token: str | None) -> int | None:
-    payload = get_stats(access_token)
-    if not payload:
-        return None
-    value = payload.get("longestStreak")
-    if isinstance(value, int):
-        return value
-    return None
-
-
 def get_latest_elevation_feet(activities: list[dict[str, Any]]) -> float | None:
     if not activities:
         return None
