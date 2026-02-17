@@ -51,6 +51,36 @@ def _int_env(name: str, default: int, minimum: int | None = None, maximum: int |
     return parsed
 
 
+def _float_env(name: str, default: float, minimum: float | None = None, maximum: float | None = None) -> float:
+    value = os.getenv(name)
+    if value is None:
+        parsed = default
+    else:
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            parsed = default
+
+    if minimum is not None and parsed < minimum:
+        parsed = minimum
+    if maximum is not None and parsed > maximum:
+        parsed = maximum
+    return parsed
+
+
+def _optional_float_env(name: str) -> float | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 @dataclass(frozen=True)
 class Settings:
     strava_client_id: str
@@ -101,6 +131,11 @@ class Settings:
     enable_quiet_hours: bool
     quiet_hours_start_hour: int
     quiet_hours_end_hour: int
+    profile_long_run_miles: float
+    profile_trail_gain_per_mile_ft: float
+    home_latitude: float | None
+    home_longitude: float | None
+    home_radius_miles: float
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -170,6 +205,11 @@ class Settings:
             enable_quiet_hours=_bool_env("ENABLE_QUIET_HOURS", True),
             quiet_hours_start_hour=_hour_env("QUIET_HOURS_START", 0),
             quiet_hours_end_hour=_hour_env("QUIET_HOURS_END", 4),
+            profile_long_run_miles=_float_env("PROFILE_LONG_RUN_MILES", 10.0, minimum=1.0, maximum=100.0),
+            profile_trail_gain_per_mile_ft=_float_env("PROFILE_TRAIL_GAIN_PER_MILE_FT", 220.0, minimum=10.0, maximum=5000.0),
+            home_latitude=_optional_float_env("HOME_LAT"),
+            home_longitude=_optional_float_env("HOME_LON"),
+            home_radius_miles=_float_env("HOME_RADIUS_MILES", 8.0, minimum=0.1, maximum=250.0),
         )
 
     def validate(self) -> None:

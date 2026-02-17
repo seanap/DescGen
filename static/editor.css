@@ -275,6 +275,10 @@ h3 {
   box-shadow: var(--shadow);
 }
 
+.workspace-tab.workspace-tab-profile {
+  top: 250px;
+}
+
 .workspace-tab:hover {
   background: color-mix(in srgb, var(--panel-soft) 88%, white);
 }
@@ -479,13 +483,24 @@ label[for="templateEditor"] {
 .template-current-line {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   margin-bottom: 8px;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel-soft);
+}
+
+.template-current-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.template-current-divider {
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .template-current-line .stack-label {
@@ -1341,5 +1356,9 @@ body[data-theme="dark"] .tour-body {
     min-height: 146px;
     font-size: 0.66rem;
     top: 54px;
+  }
+
+  .workspace-tab.workspace-tab-profile {
+    top: 210px;
   }
 }

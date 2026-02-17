@@ -245,6 +245,15 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         },
     },
     "activity": {
+        "id": 1234567890,
+        "name": "Morning Run",
+        "type": "Run",
+        "sport_type": "Run",
+        "workout_type": 0,
+        "commute": False,
+        "trainer": False,
+        "has_gps": True,
+        "start_latlng": [40.7127, -74.0059],
         "gap_pace": "7:18/mi",
         "average_pace": "7:24/mi",
         "distance_miles": "8.02",
@@ -267,6 +276,8 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "average_hr": 149,
         "max_hr": 173,
         "efficiency": "1.03",
+        "treadmill_incline_percent": 15,
+        "treadmill_elevation_feet_15pct": 6353,
         "social": {
             "kudos": 12,
             "comments": 3,
@@ -460,6 +471,11 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
             "least_often_run_day": "Thursday",
         },
     },
+    "profile": {
+        "id": "default",
+        "label": "Default",
+        "reasons": ["fallback"],
+    },
     "raw": {
         "activity": {"id": 1234567890},
         "training": {},
@@ -582,6 +598,113 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
 
 
 SAMPLE_TEMPLATE_FIXTURES = _build_sample_fixtures()
+
+DEFAULT_PROFILE_ID = "default"
+PROFILE_CONFIG_VERSION = 1
+
+PROFILE_BUILTINS: list[dict[str, Any]] = [
+    {
+        "profile_id": "default",
+        "label": "Default",
+        "enabled": True,
+        "locked": True,
+        "priority": 0,
+        "criteria": {"kind": "fallback", "description": "Fallback profile when no enabled rule matches."},
+    },
+    {
+        "profile_id": "treadmill",
+        "label": "Treadmill",
+        "enabled": True,
+        "locked": False,
+        "priority": 100,
+        "criteria": {"kind": "activity", "description": "Trainer/VirtualRun conditions with missing GPS."},
+    },
+    {
+        "profile_id": "race",
+        "label": "Race",
+        "enabled": True,
+        "locked": False,
+        "priority": 90,
+        "criteria": {"kind": "activity", "description": "Strava race/workout tags or race keywords."},
+    },
+    {
+        "profile_id": "commute",
+        "label": "Commute",
+        "enabled": True,
+        "locked": False,
+        "priority": 80,
+        "criteria": {"kind": "activity", "description": "Strava commute flag."},
+    },
+    {
+        "profile_id": "trail",
+        "label": "Trail",
+        "enabled": True,
+        "locked": False,
+        "priority": 70,
+        "criteria": {"kind": "activity", "description": "Trail run tags or high elevation-density heuristics."},
+    },
+    {
+        "profile_id": "long_run",
+        "label": "Long Run",
+        "enabled": True,
+        "locked": False,
+        "priority": 60,
+        "criteria": {"kind": "activity", "description": "Long run workout tag or distance threshold."},
+    },
+    {
+        "profile_id": "pet",
+        "label": "Pet",
+        "enabled": False,
+        "locked": False,
+        "priority": 50,
+        "criteria": {"kind": "activity", "description": "Pet/dog keywords in activity title/notes."},
+    },
+    {
+        "profile_id": "away",
+        "label": "Away",
+        "enabled": False,
+        "locked": False,
+        "priority": 40,
+        "criteria": {"kind": "location", "description": "Outside home geofence when GPS is available."},
+    },
+    {
+        "profile_id": "home",
+        "label": "Home",
+        "enabled": False,
+        "locked": False,
+        "priority": 30,
+        "criteria": {"kind": "location", "description": "Inside home geofence when GPS is available."},
+    },
+]
+
+PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
+    "default": DEFAULT_DESCRIPTION_TEMPLATE,
+    "treadmill": """🏠 Treadmill Session
+∠ Incline {{ activity.treadmill_incline_percent | default(15) }}%
+⏲ {{ activity.time }} | 🚄 {{ activity.average_speed_mph }} | 🗺️ {{ activity.distance_miles }} mi
+🗻 {{ activity.treadmill_elevation_feet_15pct }}' (15% equivalent) | 🍺 {{ activity.beers }}""",
+    "race": """🏁 Race Day
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }} | 💓 {{ activity.average_hr }}
+🚄 {{ intervals.summary }}""",
+    "commute": """🚲 Commute Run
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }}
+🌤️ MI {{ weather.misery_index }} {{ weather.misery_description }}""",
+    "trail": """🌲 Trail Run
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
+🚄 {{ intervals.summary }}""",
+    "long_run": """🧱 Long Run
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }} | 🍺 {{ activity.beers }}
+7️⃣ {{ periods.week.gap }} | {{ periods.week.distance_miles }} mi | {{ periods.week.duration }}""",
+    "pet": """🐕 Pet Run
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }}
+❤️ Fun miles count too.""",
+    "away": """🧳 Away Run
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
+🌤️ {{ weather.condition }} | MI {{ weather.misery_index }}""",
+    "home": """🏡 Home Run
+🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
+7️⃣ {{ periods.week.gap }} | {{ periods.week.distance_miles }} mi | {{ periods.week.duration }}""",
+}
 
 
 def _as_float(value: Any) -> float | None:
@@ -825,6 +948,300 @@ def _template_repository_dir(settings: Settings) -> Path:
 def _normalize_template_id(raw_id: str | None) -> str:
     value = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(raw_id or "").strip().lower()).strip("-")
     return value
+
+
+def _normalize_profile_id(raw_id: str | None) -> str:
+    return _normalize_template_id(raw_id)
+
+
+def _template_profiles_path(settings: Settings) -> Path:
+    return _template_path(settings).parent / "template_profiles.json"
+
+
+def _template_profiles_templates_dir(settings: Settings) -> Path:
+    return _template_path(settings).parent / "template_profiles"
+
+
+def _template_profile_template_path(settings: Settings, profile_id: str) -> Path:
+    safe = _normalize_profile_id(profile_id)
+    if not safe:
+        raise ValueError("profile_id is required.")
+    return _template_profiles_templates_dir(settings) / f"{safe}.j2"
+
+
+def _template_profile_meta_path(settings: Settings, profile_id: str) -> Path:
+    safe = _normalize_profile_id(profile_id)
+    if not safe:
+        raise ValueError("profile_id is required.")
+    return _template_profiles_templates_dir(settings) / f"{safe}.meta.json"
+
+
+def _template_profile_versions_dir(settings: Settings, profile_id: str) -> Path:
+    safe = _normalize_profile_id(profile_id)
+    if not safe:
+        raise ValueError("profile_id is required.")
+    return _template_path(settings).parent / "template_profile_versions" / safe
+
+
+def _profile_template_metadata_defaults(label: str) -> dict[str, Any]:
+    return {
+        "name": f"{label} Template",
+        "current_version": None,
+        "updated_at_utc": None,
+        "updated_by": "system",
+        "source": "profile-default",
+    }
+
+
+def _profile_builtin_map() -> dict[str, dict[str, Any]]:
+    builtins: dict[str, dict[str, Any]] = {}
+    for profile in PROFILE_BUILTINS:
+        profile_id = _normalize_profile_id(profile.get("profile_id"))
+        if not profile_id:
+            continue
+        record = deepcopy(profile)
+        record["profile_id"] = profile_id
+        record["criteria"] = deepcopy(profile.get("criteria") if isinstance(profile.get("criteria"), dict) else {})
+        record["label"] = str(profile.get("label") or profile_id.title())
+        record["enabled"] = bool(profile.get("enabled"))
+        record["locked"] = bool(profile.get("locked"))
+        try:
+            record["priority"] = int(profile.get("priority", 0))
+        except (TypeError, ValueError):
+            record["priority"] = 0
+        builtins[profile_id] = record
+    if DEFAULT_PROFILE_ID not in builtins:
+        builtins[DEFAULT_PROFILE_ID] = {
+            "profile_id": DEFAULT_PROFILE_ID,
+            "label": "Default",
+            "enabled": True,
+            "locked": True,
+            "priority": 0,
+            "criteria": {"kind": "fallback", "description": "Fallback profile when no enabled rule matches."},
+        }
+    return builtins
+
+
+def _profile_record_shape(record: dict[str, Any], builtin: dict[str, Any]) -> dict[str, Any]:
+    shaped = deepcopy(builtin)
+    shaped["label"] = str(record.get("label") or builtin.get("label") or shaped["profile_id"])
+    shaped["enabled"] = bool(record.get("enabled", builtin.get("enabled", True)))
+    shaped["locked"] = bool(builtin.get("locked", False))
+    try:
+        shaped["priority"] = int(record.get("priority", builtin.get("priority", 0)))
+    except (TypeError, ValueError):
+        shaped["priority"] = int(builtin.get("priority", 0))
+    criteria_raw = record.get("criteria")
+    shaped["criteria"] = deepcopy(criteria_raw if isinstance(criteria_raw, dict) else builtin.get("criteria", {}))
+    if shaped["profile_id"] == DEFAULT_PROFILE_ID:
+        shaped["enabled"] = True
+        shaped["locked"] = True
+        shaped["priority"] = 0
+    return shaped
+
+
+def _load_template_profiles(settings: Settings) -> dict[str, Any] | None:
+    payload = _read_json_file(_template_profiles_path(settings))
+    if not isinstance(payload, dict):
+        return None
+    raw_profiles = payload.get("profiles")
+    if not isinstance(raw_profiles, list):
+        return None
+    builtins = _profile_builtin_map()
+    shaped_profiles: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw_profiles:
+        if not isinstance(item, dict):
+            continue
+        profile_id = _normalize_profile_id(item.get("profile_id"))
+        if not profile_id or profile_id not in builtins or profile_id in seen:
+            continue
+        seen.add(profile_id)
+        shaped_profiles.append(_profile_record_shape(item, builtins[profile_id]))
+
+    for profile_id, builtin in builtins.items():
+        if profile_id in seen:
+            continue
+        shaped_profiles.append(_profile_record_shape({}, builtin))
+
+    working = _normalize_profile_id(payload.get("working_profile_id"))
+    valid_ids = {profile["profile_id"] for profile in shaped_profiles if profile.get("enabled")}
+    if not working or working not in valid_ids:
+        working = DEFAULT_PROFILE_ID
+
+    return {
+        "version": PROFILE_CONFIG_VERSION,
+        "working_profile_id": working,
+        "profiles": shaped_profiles,
+    }
+
+
+def _save_template_profiles(settings: Settings, config: dict[str, Any]) -> None:
+    payload = {
+        "version": PROFILE_CONFIG_VERSION,
+        "working_profile_id": str(config.get("working_profile_id") or DEFAULT_PROFILE_ID),
+        "profiles": deepcopy(config.get("profiles") if isinstance(config.get("profiles"), list) else []),
+    }
+    _write_json_file(_template_profiles_path(settings), payload)
+
+
+def _profile_template_seed(profile_id: str) -> str:
+    template = PROFILE_TEMPLATE_DEFAULTS.get(profile_id, get_default_template())
+    return _normalize_template_text(template)
+
+
+def _ensure_template_profiles(settings: Settings) -> dict[str, Any]:
+    config = _load_template_profiles(settings)
+    if config is None:
+        builtins = _profile_builtin_map()
+        config = {
+            "version": PROFILE_CONFIG_VERSION,
+            "working_profile_id": DEFAULT_PROFILE_ID,
+            "profiles": [_profile_record_shape({}, builtins[profile_id]) for profile_id in builtins],
+        }
+        _save_template_profiles(settings, config)
+
+    for profile in config["profiles"]:
+        profile_id = str(profile["profile_id"])
+        if profile_id == DEFAULT_PROFILE_ID:
+            continue
+        template_path = _template_profile_template_path(settings, profile_id)
+        if not template_path.exists():
+            template_path.parent.mkdir(parents=True, exist_ok=True)
+            template_path.write_text(_profile_template_seed(profile_id) + "\n", encoding="utf-8")
+
+        meta_path = _template_profile_meta_path(settings, profile_id)
+        if not meta_path.exists():
+            defaults = _profile_template_metadata_defaults(str(profile.get("label") or profile_id.title()))
+            _write_json_file(meta_path, defaults)
+
+    return config
+
+
+def list_template_profiles(settings: Settings) -> list[dict[str, Any]]:
+    config = _ensure_template_profiles(settings)
+    rows: list[dict[str, Any]] = []
+    for profile in config["profiles"]:
+        profile_id = str(profile.get("profile_id") or DEFAULT_PROFILE_ID)
+        meta = _load_template_metadata(settings, profile_id=profile_id)
+        rows.append(
+            {
+                "profile_id": profile_id,
+                "label": str(profile.get("label") or profile_id.title()),
+                "enabled": bool(profile.get("enabled")),
+                "locked": bool(profile.get("locked")),
+                "priority": int(profile.get("priority", 0)),
+                "criteria": deepcopy(profile.get("criteria") if isinstance(profile.get("criteria"), dict) else {}),
+                "template_name": str(meta.get("name") or f"{profile_id.title()} Template"),
+                "current_version": meta.get("current_version"),
+                "updated_at_utc": meta.get("updated_at_utc"),
+                "updated_by": meta.get("updated_by"),
+                "source": meta.get("source"),
+            }
+        )
+    rows.sort(key=lambda item: (-int(item.get("priority", 0)), str(item.get("label") or "").lower()))
+    return rows
+
+
+def get_template_profile(settings: Settings, profile_id: str) -> dict[str, Any] | None:
+    target = _normalize_profile_id(profile_id)
+    if not target:
+        return None
+    for profile in list_template_profiles(settings):
+        if str(profile.get("profile_id")) == target:
+            return profile
+    return None
+
+
+def get_working_template_profile(settings: Settings) -> dict[str, Any]:
+    config = _ensure_template_profiles(settings)
+    working = str(config.get("working_profile_id") or DEFAULT_PROFILE_ID)
+    profile = get_template_profile(settings, working)
+    if profile is None:
+        profile = get_template_profile(settings, DEFAULT_PROFILE_ID)
+    if profile is None:
+        raise ValueError("Default profile is missing from template profile configuration.")
+    return profile
+
+
+def set_working_template_profile(settings: Settings, profile_id: str) -> dict[str, Any]:
+    target = _normalize_profile_id(profile_id)
+    if not target:
+        raise ValueError("profile_id is required.")
+    config = _ensure_template_profiles(settings)
+    indexed = {str(item.get("profile_id")): item for item in config["profiles"]}
+    profile = indexed.get(target)
+    if profile is None:
+        raise ValueError(f"Unknown profile_id: {profile_id}")
+    if not bool(profile.get("enabled")):
+        raise ValueError(f"Profile is disabled: {target}")
+    config["working_profile_id"] = target
+    _save_template_profiles(settings, config)
+    updated = get_template_profile(settings, target)
+    if updated is None:
+        raise ValueError(f"Unknown profile_id: {profile_id}")
+    return updated
+
+
+def update_template_profile(
+    settings: Settings,
+    profile_id: str,
+    *,
+    enabled: bool | None = None,
+    priority: int | None = None,
+) -> dict[str, Any]:
+    target = _normalize_profile_id(profile_id)
+    if not target:
+        raise ValueError("profile_id is required.")
+    config = _ensure_template_profiles(settings)
+    found = None
+    for item in config["profiles"]:
+        if str(item.get("profile_id")) == target:
+            found = item
+            break
+    if found is None:
+        raise ValueError(f"Unknown profile_id: {profile_id}")
+
+    locked = bool(found.get("locked"))
+    if enabled is not None:
+        if locked and not bool(enabled):
+            raise ValueError("Default profile cannot be disabled.")
+        found["enabled"] = bool(enabled)
+    if priority is not None:
+        if locked:
+            found["priority"] = 0
+        else:
+            found["priority"] = int(priority)
+
+    if not bool(found.get("enabled")) and str(config.get("working_profile_id")) == target:
+        config["working_profile_id"] = DEFAULT_PROFILE_ID
+
+    _save_template_profiles(settings, config)
+    updated = get_template_profile(settings, target)
+    if updated is None:
+        raise ValueError(f"Unknown profile_id: {profile_id}")
+    return updated
+
+
+def _template_path_for_profile(settings: Settings, profile_id: str) -> Path:
+    normalized = _normalize_profile_id(profile_id) or DEFAULT_PROFILE_ID
+    if normalized == DEFAULT_PROFILE_ID:
+        return _template_path(settings)
+    return _template_profile_template_path(settings, normalized)
+
+
+def _template_meta_path_for_profile(settings: Settings, profile_id: str) -> Path:
+    normalized = _normalize_profile_id(profile_id) or DEFAULT_PROFILE_ID
+    if normalized == DEFAULT_PROFILE_ID:
+        return _template_meta_path(settings)
+    return _template_profile_meta_path(settings, normalized)
+
+
+def _template_versions_dir_for_profile(settings: Settings, profile_id: str) -> Path:
+    normalized = _normalize_profile_id(profile_id) or DEFAULT_PROFILE_ID
+    if normalized == DEFAULT_PROFILE_ID:
+        return _template_versions_dir(settings)
+    return _template_profile_versions_dir(settings, normalized)
 
 
 def _template_repository_builtin_records() -> list[dict[str, Any]]:
@@ -1201,19 +1618,29 @@ def _template_metadata_defaults() -> dict[str, Any]:
     }
 
 
-def _load_template_metadata(settings: Settings) -> dict[str, Any]:
-    data = _read_json_file(_template_meta_path(settings))
+def _load_template_metadata(settings: Settings, *, profile_id: str = DEFAULT_PROFILE_ID) -> dict[str, Any]:
+    normalized_profile_id = _normalize_profile_id(profile_id) or DEFAULT_PROFILE_ID
+    data = _read_json_file(_template_meta_path_for_profile(settings, normalized_profile_id))
     if data is None:
-        return _template_metadata_defaults()
+        label = str(
+            _profile_builtin_map().get(normalized_profile_id, {}).get("label")
+            or normalized_profile_id.title()
+        )
+        return _profile_template_metadata_defaults(label)
     defaults = _template_metadata_defaults()
     defaults.update({k: v for k, v in data.items() if k in defaults})
     return defaults
 
 
-def _save_template_metadata(settings: Settings, metadata: dict[str, Any]) -> None:
+def _save_template_metadata(
+    settings: Settings,
+    metadata: dict[str, Any],
+    *,
+    profile_id: str = DEFAULT_PROFILE_ID,
+) -> None:
     merged = _template_metadata_defaults()
     merged.update({k: v for k, v in metadata.items() if k in merged})
-    _write_json_file(_template_meta_path(settings), merged)
+    _write_json_file(_template_meta_path_for_profile(settings, profile_id), merged)
 
 
 def _build_template_version_record(
@@ -1243,8 +1670,13 @@ def _build_template_version_record(
     }
 
 
-def _store_template_version(settings: Settings, record: dict[str, Any]) -> None:
-    versions_dir = _template_versions_dir(settings)
+def _store_template_version(
+    settings: Settings,
+    record: dict[str, Any],
+    *,
+    profile_id: str = DEFAULT_PROFILE_ID,
+) -> None:
+    versions_dir = _template_versions_dir_for_profile(settings, profile_id)
     version_id = str(record.get("version_id") or "").strip()
     if not version_id:
         raise ValueError("Template version record missing version_id.")
@@ -1252,16 +1684,26 @@ def _store_template_version(settings: Settings, record: dict[str, Any]) -> None:
     _write_json_file(version_path, record)
 
 
-def get_template_version(settings: Settings, version_id: str) -> dict[str, Any] | None:
+def get_template_version(
+    settings: Settings,
+    version_id: str,
+    profile_id: str = DEFAULT_PROFILE_ID,
+) -> dict[str, Any] | None:
+    _ensure_template_profiles(settings)
     version_key = version_id.strip()
     if not version_key:
         return None
-    version_path = _template_versions_dir(settings) / f"{version_key}.json"
+    version_path = _template_versions_dir_for_profile(settings, profile_id) / f"{version_key}.json"
     return _read_json_file(version_path)
 
 
-def list_template_versions(settings: Settings, limit: int = 50) -> list[dict[str, Any]]:
-    versions_dir = _template_versions_dir(settings)
+def list_template_versions(
+    settings: Settings,
+    limit: int = 50,
+    profile_id: str = DEFAULT_PROFILE_ID,
+) -> list[dict[str, Any]]:
+    _ensure_template_profiles(settings)
+    versions_dir = _template_versions_dir_for_profile(settings, profile_id)
     if not versions_dir.exists():
         return []
 
@@ -1295,8 +1737,9 @@ def rollback_template_version(
     author: str = "unknown",
     source: str = "rollback",
     notes: str | None = None,
+    profile_id: str = DEFAULT_PROFILE_ID,
 ) -> dict[str, Any]:
-    record = get_template_version(settings, version_id)
+    record = get_template_version(settings, version_id, profile_id=profile_id)
     if not record:
         raise ValueError(f"Unknown template version: {version_id}")
 
@@ -1304,7 +1747,7 @@ def rollback_template_version(
     if not isinstance(template_text, str) or not template_text.strip():
         raise ValueError("Selected template version has no template body.")
 
-    current = get_active_template(settings)
+    current = get_active_template(settings, profile_id=profile_id)
     rollback_name = str(record.get("name") or current.get("name") or "Auto Stat Template")
     saved = save_active_template(
         settings,
@@ -1315,13 +1758,20 @@ def rollback_template_version(
         notes=notes or f"Rollback to {version_id}",
         operation="rollback",
         rolled_back_from=version_id,
+        profile_id=profile_id,
     )
     return saved
 
 
-def get_active_template(settings: Settings) -> dict[str, Any]:
-    path = _template_path(settings)
-    metadata = _load_template_metadata(settings)
+def get_active_template(settings: Settings, profile_id: str = DEFAULT_PROFILE_ID) -> dict[str, Any]:
+    config = _ensure_template_profiles(settings)
+    normalized_profile_id = _normalize_profile_id(profile_id) or DEFAULT_PROFILE_ID
+    valid_ids = {str(item.get("profile_id")) for item in config.get("profiles", [])}
+    if normalized_profile_id not in valid_ids:
+        normalized_profile_id = DEFAULT_PROFILE_ID
+    profile = get_template_profile(settings, normalized_profile_id)
+    path = _template_path_for_profile(settings, normalized_profile_id)
+    metadata = _load_template_metadata(settings, profile_id=normalized_profile_id)
     if path.exists():
         text = path.read_text(encoding="utf-8").strip()
         if text:
@@ -1329,6 +1779,8 @@ def get_active_template(settings: Settings) -> dict[str, Any]:
                 "template": _normalize_template_text(text),
                 "is_custom": True,
                 "path": str(path),
+                "profile_id": normalized_profile_id,
+                "profile_label": str(profile.get("label") or normalized_profile_id.title()) if profile else normalized_profile_id.title(),
                 "name": metadata.get("name"),
                 "current_version": metadata.get("current_version"),
                 "updated_at_utc": metadata.get("updated_at_utc"),
@@ -1338,9 +1790,11 @@ def get_active_template(settings: Settings) -> dict[str, Any]:
             }
     default_meta = _template_metadata_defaults()
     return {
-        "template": get_default_template(),
+        "template": _profile_template_seed(normalized_profile_id),
         "is_custom": False,
         "path": str(path),
+        "profile_id": normalized_profile_id,
+        "profile_label": str(profile.get("label") or normalized_profile_id.title()) if profile else normalized_profile_id.title(),
         "name": default_meta["name"],
         "current_version": None,
         "updated_at_utc": None,
@@ -1360,15 +1814,21 @@ def save_active_template(
     notes: str | None = None,
     operation: str = "save",
     rolled_back_from: str | None = None,
+    profile_id: str = DEFAULT_PROFILE_ID,
 ) -> dict[str, Any]:
-    path = _template_path(settings)
+    config = _ensure_template_profiles(settings)
+    normalized_profile_id = _normalize_profile_id(profile_id) or DEFAULT_PROFILE_ID
+    valid_ids = {str(item.get("profile_id")) for item in config.get("profiles", [])}
+    if normalized_profile_id not in valid_ids:
+        raise ValueError(f"Unknown profile_id: {profile_id}")
+    path = _template_path_for_profile(settings, normalized_profile_id)
     normalized = _normalize_template_text(template_text)
     if not normalized:
         raise ValueError("template_text must not be empty.")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(normalized + "\n", encoding="utf-8")
 
-    current = get_active_template(settings)
+    current = get_active_template(settings, profile_id=normalized_profile_id)
     record = _build_template_version_record(
         template_text=normalized,
         name=name or str(current.get("name") or "Auto Stat Template"),
@@ -1378,7 +1838,7 @@ def save_active_template(
         operation=operation,
         rolled_back_from=rolled_back_from,
     )
-    _store_template_version(settings, record)
+    _store_template_version(settings, record, profile_id=normalized_profile_id)
 
     metadata = _template_metadata_defaults()
     metadata.update(
@@ -1390,9 +1850,9 @@ def save_active_template(
             "source": record["source"],
         }
     )
-    _save_template_metadata(settings, metadata)
+    _save_template_metadata(settings, metadata, profile_id=normalized_profile_id)
 
-    active = get_active_template(settings)
+    active = get_active_template(settings, profile_id=normalized_profile_id)
     active["saved_version"] = record["version_id"]
     return active
 
@@ -1502,20 +1962,30 @@ def render_template_text(template_text: str, context: dict[str, Any]) -> dict[st
     }
 
 
-def render_with_active_template(settings: Settings, context: dict[str, Any]) -> dict[str, Any]:
-    active = get_active_template(settings)
+def render_with_active_template(
+    settings: Settings,
+    context: dict[str, Any],
+    *,
+    profile_id: str = DEFAULT_PROFILE_ID,
+) -> dict[str, Any]:
+    active = get_active_template(settings, profile_id=profile_id)
+    active_profile_id = str(active.get("profile_id") or DEFAULT_PROFILE_ID)
     render_result = render_template_text(active["template"], context)
     render_result["is_custom_template"] = active["is_custom"]
     render_result["template_path"] = active["path"]
+    render_result["profile_id"] = active_profile_id
+    render_result["profile_label"] = active.get("profile_label")
 
     if render_result["ok"]:
         render_result["fallback_used"] = False
         return render_result
 
     if active["is_custom"]:
-        fallback_result = render_template_text(get_default_template(), context)
+        fallback_result = render_template_text(_profile_template_seed(active_profile_id), context)
         fallback_result["is_custom_template"] = active["is_custom"]
         fallback_result["template_path"] = active["path"]
+        fallback_result["profile_id"] = active_profile_id
+        fallback_result["profile_label"] = active.get("profile_label")
         fallback_result["fallback_used"] = fallback_result["ok"]
         fallback_result["fallback_reason"] = render_result["error"]
         return fallback_result

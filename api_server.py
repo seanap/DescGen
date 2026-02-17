@@ -19,13 +19,18 @@ from description_template import (
     get_template_version,
     import_template_repository_bundle,
     list_sample_template_fixtures,
+    list_template_profiles,
     list_template_repository_templates,
     list_template_versions,
     normalize_template_context,
+    get_template_profile,
+    get_working_template_profile,
     rollback_template_version,
     render_template_text,
     save_active_template,
+    set_working_template_profile,
     update_template_repository_template,
+    update_template_profile,
     validate_template_text,
 )
 from main_strava_update import run_once
@@ -87,6 +92,16 @@ def _context_for_mode(mode: str, fixture_name: str | None = None) -> tuple[dict 
     if latest is not None:
         return latest, "latest"
     return get_sample_template_context(fixture), f"sample:{fixture}"
+
+
+def _resolve_profile_id(raw_profile_id: str | None) -> str:
+    candidate = str(raw_profile_id or "").strip().lower()
+    if candidate:
+        profile = get_template_profile(settings, candidate)
+        if not profile:
+            raise ValueError(f"Unknown profile_id: {candidate}")
+        return candidate
+    return str(get_working_template_profile(settings).get("profile_id") or "default")
 
 
 @app.get("/health")
@@ -153,14 +168,70 @@ def editor_page() -> str:
     return render_template("editor.html")
 
 
+@app.get("/editor/profiles")
+def editor_profiles_get() -> tuple[dict, int]:
+    working = get_working_template_profile(settings)
+    return {
+        "status": "ok",
+        "working_profile_id": working.get("profile_id"),
+        "profiles": list_template_profiles(settings),
+    }, 200
+
+
+@app.put("/editor/profiles/<string:profile_id>")
+def editor_profile_put(profile_id: str) -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    enabled = body.get("enabled")
+    priority = body.get("priority")
+    if enabled is None and priority is None:
+        return {"status": "error", "error": "Provide enabled and/or priority."}, 400
+    try:
+        updated = update_template_profile(
+            settings,
+            profile_id,
+            enabled=bool(enabled) if enabled is not None else None,
+            priority=int(priority) if priority is not None else None,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {
+        "status": "ok",
+        "profile": updated,
+        "working_profile_id": get_working_template_profile(settings).get("profile_id"),
+    }, 200
+
+
+@app.post("/editor/profiles/working")
+def editor_working_profile_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    profile_id = body.get("profile_id")
+    if not isinstance(profile_id, str) or not profile_id.strip():
+        return {"status": "error", "error": "profile_id is required."}, 400
+    try:
+        profile = set_working_template_profile(settings, profile_id)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    return {
+        "status": "ok",
+        "working_profile_id": profile.get("profile_id"),
+        "profile": profile,
+    }, 200
+
+
 @app.get("/editor/template")
 def editor_template_get() -> tuple[dict, int]:
-    active = get_active_template(settings)
+    try:
+        profile_id = _resolve_profile_id(request.args.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    active = get_active_template(settings, profile_id=profile_id)
     return {
         "status": "ok",
         "template": active["template"],
         "is_custom": active["is_custom"],
         "template_path": active["path"],
+        "profile_id": active.get("profile_id"),
+        "profile_label": active.get("profile_label"),
         "name": active.get("name"),
         "current_version": active.get("current_version"),
         "updated_at_utc": active.get("updated_at_utc"),
@@ -193,9 +264,14 @@ def editor_template_versions_get() -> tuple[dict, int]:
         limit = max(1, min(200, int(limit_raw)))
     except ValueError:
         limit = 30
-    versions = list_template_versions(settings, limit=limit)
+    try:
+        profile_id = _resolve_profile_id(request.args.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    versions = list_template_versions(settings, limit=limit, profile_id=profile_id)
     return {
         "status": "ok",
+        "profile_id": profile_id,
         "versions": versions,
     }, 200
 
@@ -203,6 +279,10 @@ def editor_template_versions_get() -> tuple[dict, int]:
 @app.get("/editor/template/export")
 def editor_template_export_get() -> tuple[dict, int]:
     template_id = str(request.args.get("template_id") or "").strip()
+    try:
+        profile_id = _resolve_profile_id(request.args.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
     include_versions_raw = str(request.args.get("include_versions", "false")).strip().lower()
     include_versions = include_versions_raw in {"1", "true", "yes", "on"}
     limit_raw = request.args.get("limit", "30")
@@ -224,11 +304,12 @@ def editor_template_export_get() -> tuple[dict, int]:
         payload["status"] = "ok"
         return payload, 200
 
-    active = get_active_template(settings)
+    active = get_active_template(settings, profile_id=profile_id)
     payload = {
         "status": "ok",
         "bundle_version": 1,
         "exported_at_utc": datetime.now(timezone.utc).isoformat(),
+        "profile_id": profile_id,
         "template": active.get("template"),
         "name": active.get("name"),
         "is_custom": bool(active.get("is_custom")),
@@ -236,7 +317,7 @@ def editor_template_export_get() -> tuple[dict, int]:
         "current_version": active.get("current_version"),
     }
     if include_versions:
-        payload["versions"] = list_template_versions(settings, limit=limit)
+        payload["versions"] = list_template_versions(settings, limit=limit, profile_id=profile_id)
     return payload, 200
 
 
@@ -446,10 +527,14 @@ def editor_repository_import_post() -> tuple[dict, int]:
 
 @app.get("/editor/template/version/<string:version_id>")
 def editor_template_version_get(version_id: str) -> tuple[dict, int]:
-    record = get_template_version(settings, version_id)
+    try:
+        profile_id = _resolve_profile_id(request.args.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    record = get_template_version(settings, version_id, profile_id=profile_id)
     if not record:
         return {"status": "error", "error": "Unknown template version."}, 404
-    return {"status": "ok", "version": record}, 200
+    return {"status": "ok", "profile_id": profile_id, "version": record}, 200
 
 
 @app.post("/editor/template/import")
@@ -481,6 +566,10 @@ def editor_template_import_post() -> tuple[dict, int]:
 
     author = str(body.get("author") or "editor-user")
     source = str(body.get("source") or "editor-import")
+    try:
+        profile_id = _resolve_profile_id(body.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
     name = body.get("name")
     if name is None:
         name = source_payload.get("name")
@@ -496,9 +585,11 @@ def editor_template_import_post() -> tuple[dict, int]:
         author=author,
         source=source,
         notes=str(notes) if notes is not None else None,
+        profile_id=profile_id,
     )
     return {
         "status": "ok",
+        "profile_id": profile_id,
         "context_source": context_source if context is not None else None,
         "template_path": str(saved.get("path")),
         "saved_version": saved.get("saved_version"),
@@ -517,17 +608,23 @@ def editor_template_rollback_post() -> tuple[dict, int]:
     source = str(body.get("source") or "editor-rollback")
     notes = body.get("notes")
     try:
+        profile_id = _resolve_profile_id(body.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    try:
         saved = rollback_template_version(
             settings,
             version_id=version_id.strip(),
             author=author,
             source=source,
             notes=str(notes) if notes is not None else None,
+            profile_id=profile_id,
         )
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400
     return {
         "status": "ok",
+        "profile_id": profile_id,
         "template_path": saved.get("path"),
         "saved_version": saved.get("saved_version"),
         "active": saved,
@@ -589,6 +686,10 @@ def editor_template_put() -> tuple[dict, int]:
 
     author = str(body.get("author") or "editor-user")
     source = str(body.get("source") or "editor-ui")
+    try:
+        profile_id = _resolve_profile_id(body.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
     name = body.get("name")
     notes = body.get("notes")
     saved = save_active_template(
@@ -598,9 +699,11 @@ def editor_template_put() -> tuple[dict, int]:
         author=author,
         source=source,
         notes=str(notes) if notes is not None else None,
+        profile_id=profile_id,
     )
     return {
         "status": "ok",
+        "profile_id": profile_id,
         "context_source": context_source if context is not None else None,
         "template_path": str(saved.get("path")),
         "saved_version": saved.get("saved_version"),
@@ -613,8 +716,12 @@ def editor_template_put() -> tuple[dict, int]:
 def editor_validate() -> tuple[dict, int]:
     body = request.get_json(silent=True) or {}
     template_text = body.get("template")
+    try:
+        profile_id = _resolve_profile_id(body.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
     if template_text is None:
-        template_text = get_active_template(settings)["template"]
+        template_text = get_active_template(settings, profile_id=profile_id)["template"]
     if not isinstance(template_text, str):
         return {"status": "error", "error": "template must be a string."}, 400
 
@@ -630,6 +737,7 @@ def editor_validate() -> tuple[dict, int]:
     validation = validate_template_text(template_text, context)
     return {
         "status": "ok" if validation["valid"] else "error",
+        "profile_id": profile_id,
         "has_context": context is not None,
         "context_source": context_source if context is not None else None,
         "validation": validation,
@@ -640,8 +748,12 @@ def editor_validate() -> tuple[dict, int]:
 def editor_preview() -> tuple[dict, int]:
     body = request.get_json(silent=True) or {}
     template_text = body.get("template")
+    try:
+        profile_id = _resolve_profile_id(body.get("profile_id"))
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
     if template_text is None:
-        template_text = get_active_template(settings)["template"]
+        template_text = get_active_template(settings, profile_id=profile_id)["template"]
     if not isinstance(template_text, str):
         return {"status": "error", "error": "template must be a string."}, 400
 
@@ -665,6 +777,7 @@ def editor_preview() -> tuple[dict, int]:
         return {"status": "error", "error": result["error"]}, 400
     return {
         "status": "ok",
+        "profile_id": profile_id,
         "context_source": context_source,
         "preview": result["description"],
         "length": len(result["description"]),

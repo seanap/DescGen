@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import logging
+import math
 import time
 import uuid
 from datetime import datetime, timezone
@@ -11,7 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config import Settings
-from description_template import render_with_active_template
+from description_template import list_template_profiles, render_with_active_template
 from stat_modules import beers_earned, week_stats
 from stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
 from stat_modules.intervals_data import get_intervals_activity_data
@@ -752,29 +753,170 @@ def _normalize_smashrun_stats(stats: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _is_treadmill(activity: dict[str, Any]) -> bool:
+    sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip().lower()
+    if sport_type == "virtualrun":
+        return True
     return bool(activity.get("trainer")) and not activity.get("start_latlng")
 
 
-def _build_treadmill_payload(activity: dict[str, Any]) -> dict[str, Any]:
-    speed_mps = float(activity.get("average_speed", 0) or 0)
-    speed_mph = speed_mps * 2.23694
-    distance_meters = float(activity.get("distance", 0) or 0)
-    distance_miles = distance_meters / 1609.34
-    vertical_gain_ft = round(distance_miles * 5280 * 0.15)
-    beers_treadmill = round(float(activity.get("calories", 0) or 0) / 150.0, 1)
+def _distance_miles(activity: dict[str, Any]) -> float:
+    return float(activity.get("distance", 0.0) or 0.0) / 1609.34
 
-    description = (
-        "∠ Incline: 15%\n"
-        f"⏲ Avg Speed: {speed_mph:.1f}mph\n"
-        f"🗻 {vertical_gain_ft}' Treadmill Elevation\n"
-        f"🍺 {beers_treadmill}"
+
+def _elevation_gain_feet(activity: dict[str, Any]) -> float:
+    meters = _as_float(activity.get("total_elevation_gain")) or 0.0
+    return meters * 3.28084
+
+
+def _start_latlng(activity: dict[str, Any]) -> tuple[float, float] | None:
+    start = activity.get("start_latlng")
+    if not isinstance(start, (list, tuple)) or len(start) < 2:
+        return None
+    lat = _as_float(start[0])
+    lon = _as_float(start[1])
+    if lat is None or lon is None:
+        return None
+    return lat, lon
+
+
+def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_miles = 3958.7613
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
     )
-    is_walk = speed_mph < 4.0
-    return {
-        "type": "Walk" if is_walk else "Run",
-        "name": "Max Incline Treadmill Walk" if is_walk else "Max Incline Treadmill Run",
-        "description": description,
-    }
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return radius_miles * c
+
+
+def _text_blob(activity: dict[str, Any]) -> str:
+    parts = [
+        str(activity.get("name") or ""),
+        str(activity.get("description") or ""),
+        str(activity.get("private_note") or ""),
+    ]
+    return " ".join(parts).strip().lower()
+
+
+def _profile_match_reasons(
+    profile_id: str,
+    activity: dict[str, Any],
+    settings: Settings,
+) -> list[str]:
+    workout_type = _to_int(activity.get("workout_type"))
+    sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip().lower()
+    treadmill = _is_treadmill(activity)
+    distance = _distance_miles(activity)
+    gain_ft = _elevation_gain_feet(activity)
+    gain_per_mile = gain_ft / distance if distance > 0 else 0.0
+    text = _text_blob(activity)
+    start = _start_latlng(activity)
+
+    reasons: list[str] = []
+    if profile_id == "treadmill":
+        if treadmill:
+            reasons.append("trainer/no-gps or VirtualRun")
+        return reasons
+
+    if profile_id == "race":
+        if workout_type == 1:
+            reasons.append("workout_type=1")
+        if any(keyword in text for keyword in (" race", "5k", "10k", "half", "marathon", "ultra")):
+            reasons.append("race keyword")
+        return reasons
+
+    if profile_id == "commute":
+        if bool(activity.get("commute")):
+            reasons.append("commute=true")
+        return reasons
+
+    if profile_id == "trail":
+        if sport_type == "trailrun":
+            reasons.append("sport_type=TrailRun")
+        if distance >= 3.0 and gain_per_mile >= settings.profile_trail_gain_per_mile_ft:
+            reasons.append(
+                f"gain_per_mile={gain_per_mile:.0f}ft >= {settings.profile_trail_gain_per_mile_ft:.0f}ft"
+            )
+        return reasons
+
+    if profile_id == "long_run":
+        if workout_type == 2:
+            reasons.append("workout_type=2")
+        if distance >= settings.profile_long_run_miles:
+            reasons.append(f"distance={distance:.2f}mi >= {settings.profile_long_run_miles:.2f}mi")
+        return reasons
+
+    if profile_id == "pet":
+        if any(keyword in text for keyword in ("dog", "with dog", "canicross", "🐕")):
+            reasons.append("pet keyword")
+        return reasons
+
+    if profile_id in {"home", "away"}:
+        if start is None:
+            return reasons
+        if settings.home_latitude is None or settings.home_longitude is None:
+            return reasons
+        radius = settings.home_radius_miles
+        dist = _haversine_miles(start[0], start[1], settings.home_latitude, settings.home_longitude)
+        if profile_id == "home" and dist <= radius:
+            reasons.append(f"{dist:.2f}mi <= home_radius {radius:.2f}mi")
+        if profile_id == "away" and dist > radius:
+            reasons.append(f"{dist:.2f}mi > home_radius {radius:.2f}mi")
+        return reasons
+
+    return reasons
+
+
+def _select_activity_profile(settings: Settings, detailed_activity: dict[str, Any]) -> dict[str, Any]:
+    profiles = [
+        profile
+        for profile in list_template_profiles(settings)
+        if bool(profile.get("enabled"))
+    ]
+    profiles.sort(key=lambda item: int(item.get("priority", 0)), reverse=True)
+    default_profile = next(
+        (
+            profile for profile in profiles
+            if str(profile.get("profile_id") or "").strip().lower() == "default"
+        ),
+        None,
+    )
+
+    for profile in profiles:
+        profile_id = str(profile.get("profile_id") or "").strip().lower()
+        if profile_id == "default":
+            continue
+        reasons = _profile_match_reasons(profile_id, detailed_activity, settings)
+        if reasons:
+            return {
+                "profile_id": profile_id,
+                "profile_label": str(profile.get("label") or profile_id.title()),
+                "reasons": reasons,
+            }
+
+    if default_profile is not None:
+        return {
+            "profile_id": "default",
+            "profile_label": str(default_profile.get("label") or "Default"),
+            "reasons": ["fallback"],
+        }
+
+    return {"profile_id": "default", "profile_label": "Default", "reasons": ["fallback"]}
+
+
+def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[str, Any], description: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {"description": description}
+    if profile_id == "treadmill":
+        speed_mps = _as_float(detailed_activity.get("average_speed")) or 0.0
+        speed_mph = speed_mps * 2.23694
+        is_walk = speed_mph < 4.0
+        payload["type"] = "Walk" if is_walk else "Run"
+        payload["name"] = "Max Incline Treadmill Walk" if is_walk else "Max Incline Treadmill Run"
+    return payload
 
 
 def _get_garmin_client(settings: Settings) -> Any | None:
@@ -1003,6 +1145,13 @@ def _build_description_context(
     elapsed_seconds = int(detailed_activity.get("elapsed_time") or moving_seconds or 0)
     activity_time = _format_activity_time(moving_seconds or elapsed_seconds)
     beers = beers_earned.calculate_beers(detailed_activity)
+    treadmill_incline_percent = 15
+    treadmill_elevation_feet_15pct = int(round(distance_miles * 5280 * (treadmill_incline_percent / 100.0)))
+    activity_type = str(detailed_activity.get("type") or "N/A")
+    sport_type = str(detailed_activity.get("sport_type") or activity_type)
+    workout_type = _to_int(detailed_activity.get("workout_type"))
+    start_latlng = detailed_activity.get("start_latlng")
+    has_gps = bool(_start_latlng(detailed_activity))
 
     calories = detailed_activity.get("calories")
     calories_display = (
@@ -1162,6 +1311,15 @@ def _build_description_context(
             "fitness_age_details": training.get("fitness_age_details", {}),
         },
         "activity": {
+            "id": int(round(float(detailed_activity.get("id")))) if isinstance(detailed_activity.get("id"), (int, float)) else "N/A",
+            "name": str(detailed_activity.get("name") or "N/A"),
+            "type": activity_type,
+            "sport_type": sport_type,
+            "workout_type": workout_type if workout_type is not None else "N/A",
+            "commute": bool(detailed_activity.get("commute")),
+            "trainer": bool(detailed_activity.get("trainer")),
+            "has_gps": has_gps,
+            "start_latlng": start_latlng if isinstance(start_latlng, (list, tuple)) else [],
             "gap_pace": gap_pace,
             "average_pace": average_pace,
             "distance_miles": f"{distance_miles:.2f}",
@@ -1184,6 +1342,8 @@ def _build_description_context(
             "average_hr": average_hr if average_hr != "N/A" else "N/A",
             "max_hr": max_hr,
             "efficiency": efficiency,
+            "treadmill_incline_percent": treadmill_incline_percent,
+            "treadmill_elevation_feet_15pct": treadmill_elevation_feet_15pct,
             "social": {
                 "kudos": int(round(_as_float(detailed_activity.get("kudos_count")) or 0)),
                 "comments": int(round(_as_float(detailed_activity.get("comment_count")) or 0)),
@@ -1395,37 +1555,6 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
                 int(latest["id"]),
             )
 
-        if _is_treadmill(detailed_activity):
-            treadmill_payload = _build_treadmill_payload(detailed_activity)
-            _run_required_call(
-                settings,
-                "strava.update_activity",
-                strava_client.update_activity,
-                selected_activity_id,
-                treadmill_payload,
-                service_state=service_state,
-            )
-
-            now = datetime.now(timezone.utc)
-            payload = {
-                "updated_at_utc": now.isoformat(),
-                "activity_id": selected_activity_id,
-                "activity_start_date": selected.get("start_date"),
-                "description": treadmill_payload["description"],
-                "source": "treadmill",
-                "service_calls": service_state,
-            }
-            mark_activity_processed(settings.processed_log_file, selected_activity_id)
-            write_json(settings.latest_json_file, payload)
-            logger.info("Treadmill activity %s updated.", selected_activity_id)
-            result = {"status": "updated_treadmill", "activity_id": selected_activity_id}
-            _record_cycle_status(
-                settings,
-                status=result["status"],
-                activity_id=selected_activity_id,
-            )
-            return result
-
         try:
             local_tz = ZoneInfo(settings.timezone)
         except ZoneInfoNotFoundError:
@@ -1611,7 +1740,19 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             garmin_period_fallback=garmin_period_fallback,
         )
 
-        render_result = render_with_active_template(settings, description_context)
+        selected_profile = _select_activity_profile(settings, detailed_activity)
+        profile_id = str(selected_profile.get("profile_id") or "default")
+        description_context["profile"] = {
+            "id": profile_id,
+            "label": str(selected_profile.get("profile_label") or profile_id.title()),
+            "reasons": selected_profile.get("reasons") or [],
+        }
+
+        render_result = render_with_active_template(
+            settings,
+            description_context,
+            profile_id=profile_id,
+        )
         if render_result["ok"]:
             description = str(render_result["description"])
         else:
@@ -1638,7 +1779,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             "strava.update_activity",
             strava_client.update_activity,
             selected_activity_id,
-            {"description": description},
+            _profile_activity_update_payload(profile_id, detailed_activity, description),
             service_state=service_state,
         )
 
@@ -1652,11 +1793,19 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             "weather": weather_details,
             "template_context": description_context,
             "service_calls": service_state,
+            "profile_match": {
+                "profile_id": profile_id,
+                "profile_label": str(selected_profile.get("profile_label") or profile_id.title()),
+                "reasons": selected_profile.get("reasons") or [],
+                "evaluated_at_utc": now_utc.isoformat(),
+            },
             "template_render": {
                 "ok": render_result.get("ok"),
                 "is_custom_template": render_result.get("is_custom_template"),
                 "fallback_used": render_result.get("fallback_used"),
                 "template_path": render_result.get("template_path"),
+                "profile_id": render_result.get("profile_id", profile_id),
+                "profile_label": render_result.get("profile_label"),
                 "error": render_result.get("error"),
                 "fallback_reason": render_result.get("fallback_reason"),
             },

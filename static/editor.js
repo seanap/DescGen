@@ -167,6 +167,8 @@ const state = {
   templateDefault: "",
   templateName: "Auto Stat Template",
   templateMeta: null,
+  profiles: [],
+  workingProfileId: "default",
   repositoryTemplates: [],
   repositorySelectedId: "",
   repositoryLoadedTemplateId: "",
@@ -203,8 +205,12 @@ const state = {
 
 const elements = {
   leftDrawer: document.getElementById("leftDrawer"),
+  profileWorkspaceSection: document.getElementById("profileWorkspaceSection"),
+  profileWorkspaceMeta: document.getElementById("profileWorkspaceMeta"),
+  profileList: document.getElementById("profileList"),
   drawerBackdrop: document.getElementById("drawerBackdrop"),
   btnDrawerToggle: document.getElementById("btnDrawerToggle"),
+  btnProfileDrawerToggle: document.getElementById("btnProfileDrawerToggle"),
   btnDrawerClose: document.getElementById("btnDrawerClose"),
   btnSettingsToggle: document.getElementById("btnSettingsToggle"),
   btnSettingsClose: document.getElementById("btnSettingsClose"),
@@ -254,6 +260,7 @@ const elements = {
   simpleSections: document.getElementById("simpleSections"),
   snippetList: document.getElementById("snippetList"),
   currentTemplateDisplay: document.getElementById("currentTemplateDisplay"),
+  currentProfileDisplay: document.getElementById("currentProfileDisplay"),
   templateMeta: document.getElementById("templateMeta"),
   versionList: document.getElementById("versionList"),
   autoPreviewToggle: document.getElementById("autoPreviewToggle"),
@@ -337,6 +344,137 @@ function updateCurrentTemplateDisplay(name = "") {
   elements.currentTemplateDisplay.textContent = String(state.templateName || "Auto Stat Template");
 }
 
+function currentProfileId() {
+  return String(state.workingProfileId || "default").trim() || "default";
+}
+
+function currentProfileLabel() {
+  const profileId = currentProfileId();
+  const found = Array.isArray(state.profiles)
+    ? state.profiles.find((item) => String(item.profile_id || "") === profileId)
+    : null;
+  if (found && String(found.label || "").trim()) return String(found.label);
+  return profileId.charAt(0).toUpperCase() + profileId.slice(1);
+}
+
+function updateCurrentProfileDisplay() {
+  if (!elements.currentProfileDisplay) return;
+  elements.currentProfileDisplay.textContent = currentProfileLabel();
+}
+
+async function loadProfiles() {
+  const res = await requestJSON("/editor/profiles");
+  if (!res.ok) {
+    setStatus("Failed to load profile workspace", "error");
+    return false;
+  }
+  state.profiles = Array.isArray(res.payload.profiles) ? res.payload.profiles : [];
+  state.workingProfileId = String(res.payload.working_profile_id || "default");
+  renderProfileWorkspace();
+  updateCurrentProfileDisplay();
+  return true;
+}
+
+function renderProfileWorkspace() {
+  if (!elements.profileList) return;
+  elements.profileList.innerHTML = "";
+  const profiles = Array.isArray(state.profiles) ? [...state.profiles] : [];
+  profiles.sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+  if (elements.profileWorkspaceMeta) {
+    elements.profileWorkspaceMeta.textContent = `Working profile: ${currentProfileLabel()} (${currentProfileId()})`;
+  }
+  if (profiles.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "meta";
+    empty.textContent = "No profiles available.";
+    elements.profileList.appendChild(empty);
+    return;
+  }
+
+  for (const profile of profiles) {
+    const profileId = String(profile.profile_id || "");
+    const row = document.createElement("div");
+    row.className = "field";
+
+    const body = document.createElement("div");
+    const key = document.createElement("div");
+    key.className = "field-key";
+    key.textContent = `${profile.label || profileId} (${profileId})`;
+
+    const type = document.createElement("div");
+    type.className = "field-type";
+    type.textContent = `Priority ${profile.priority ?? 0} | ${profile.enabled ? "Enabled" : "Disabled"}${profile.locked ? " | Locked" : ""}`;
+
+    const source = document.createElement("div");
+    source.className = "field-source";
+    source.textContent = String(profile.criteria?.description || "");
+
+    body.appendChild(key);
+    body.appendChild(type);
+    body.appendChild(source);
+
+    const controls = document.createElement("div");
+    controls.className = "row-controls";
+
+    const enabledLabel = document.createElement("label");
+    enabledLabel.className = "toggle-inline";
+    const enabledInput = document.createElement("input");
+    enabledInput.type = "checkbox";
+    enabledInput.checked = Boolean(profile.enabled);
+    enabledInput.disabled = Boolean(profile.locked);
+    enabledInput.addEventListener("change", async () => {
+      const previousWorking = currentProfileId();
+      const res = await requestJSON(`/editor/profiles/${encodeURIComponent(profileId)}`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: Boolean(enabledInput.checked) }),
+      });
+      if (!res.ok) {
+        setStatus(res.payload?.error || "Profile update failed", "error");
+        await loadProfiles();
+        return;
+      }
+      setStatus(`Profile ${profile.label || profileId} updated`, "ok");
+      await loadProfiles();
+      if (currentProfileId() !== previousWorking) {
+        await loadEditorBootstrap();
+      }
+    });
+    enabledLabel.appendChild(enabledInput);
+    enabledLabel.append(" Enabled");
+
+    const workingBtn = document.createElement("button");
+    workingBtn.className = "field-insert";
+    workingBtn.textContent = profileId === currentProfileId() ? "Working" : "Set Working";
+    workingBtn.disabled = profileId === currentProfileId() || !Boolean(profile.enabled);
+    workingBtn.addEventListener("click", async () => {
+      if (state.editorTouched) {
+        const ok = window.confirm(
+          "Switch working profile and replace editor content with that profile template?"
+        );
+        if (!ok) return;
+      }
+      const setRes = await requestJSON("/editor/profiles/working", {
+        method: "POST",
+        body: JSON.stringify({ profile_id: profileId }),
+      });
+      if (!setRes.ok) {
+        setStatus(setRes.payload?.error || "Failed to switch working profile", "error");
+        return;
+      }
+      await loadProfiles();
+      await loadEditorBootstrap();
+      setStatus(`Working profile set: ${profile.label || profileId}`, "ok");
+    });
+
+    controls.appendChild(enabledLabel);
+    controls.appendChild(workingBtn);
+
+    row.appendChild(body);
+    row.appendChild(controls);
+    elements.profileList.appendChild(row);
+  }
+}
+
 function setButtonTone(button, tone) {
   if (!button) return;
   button.classList.remove("btn-primary", "btn-secondary", "btn-ghost");
@@ -384,6 +522,14 @@ function openDrawer() {
   elements.leftDrawer.setAttribute("aria-hidden", "false");
   elements.drawerBackdrop.classList.add("open");
   elements.drawerBackdrop.setAttribute("aria-hidden", "false");
+}
+
+function openProfileWorkspace() {
+  openDrawer();
+  loadProfiles();
+  if (elements.profileWorkspaceSection) {
+    elements.profileWorkspaceSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function toggleDrawer() {
@@ -453,7 +599,7 @@ function updatePreviewCharMeter() {
 function currentPreviewContextKey() {
   const mode = String(elements.previewContextMode?.value || "sample");
   const fixture = selectedFixtureName();
-  return `${mode}|${fixture}`;
+  return `${currentProfileId()}|${mode}|${fixture}`;
 }
 
 function clearActivePreviewCache() {
@@ -479,6 +625,7 @@ async function ensureActivePreviewBaseline() {
       template: state.templateActive || "",
       context_mode: contextMode,
       fixture_name: fixtureName,
+      profile_id: currentProfileId(),
     }),
   });
   if (!res.ok) {
@@ -1688,7 +1835,9 @@ async function openVersionDiffModal(versionId) {
   if (elements.versionDiffMeta) elements.versionDiffMeta.textContent = "Loading diff...";
   if (elements.versionDiffView) elements.versionDiffView.textContent = "";
 
-  const res = await requestJSON(`/editor/template/version/${encodeURIComponent(versionId)}`);
+  const res = await requestJSON(
+    `/editor/template/version/${encodeURIComponent(versionId)}?profile_id=${encodeURIComponent(currentProfileId())}`
+  );
   if (!res.ok) {
     if (elements.versionDiffMeta) elements.versionDiffMeta.textContent = `Failed to load version ${versionId}`;
     return;
@@ -1744,6 +1893,7 @@ async function openPublishModal() {
       template: candidate,
       context_mode: contextMode,
       fixture_name: fixtureName,
+      profile_id: currentProfileId(),
     }),
   });
 
@@ -1799,6 +1949,7 @@ function renderTemplateMeta(meta) {
   if (!meta) {
     elements.templateMeta.textContent = "No template metadata.";
     updateCurrentTemplateDisplay(state.templateName);
+    updateCurrentProfileDisplay();
     return;
   }
   const lines = [];
@@ -1808,6 +1959,7 @@ function renderTemplateMeta(meta) {
   lines.push(`By: ${meta.updated_by || "unknown"} | Source: ${meta.source || "unknown"}`);
   elements.templateMeta.textContent = lines.join("\n");
   updateCurrentTemplateDisplay(String(meta.name || state.templateName || "").trim());
+  updateCurrentProfileDisplay();
 }
 
 function repositorySelectedId() {
@@ -2045,7 +2197,9 @@ async function loadFixtures(fixturesPayload = null) {
 }
 
 async function loadVersionHistory() {
-  const res = await requestJSON("/editor/template/versions?limit=40");
+  const res = await requestJSON(
+    `/editor/template/versions?limit=40&profile_id=${encodeURIComponent(currentProfileId())}`
+  );
   if (!res.ok) {
     setStatus("Failed to load template history", "error");
     return;
@@ -2056,7 +2210,9 @@ async function loadVersionHistory() {
 
 async function loadTemplateVersion(versionId) {
   if (!versionId) return;
-  const res = await requestJSON(`/editor/template/version/${encodeURIComponent(versionId)}`);
+  const res = await requestJSON(
+    `/editor/template/version/${encodeURIComponent(versionId)}?profile_id=${encodeURIComponent(currentProfileId())}`
+  );
   if (!res.ok) {
     setStatus("Failed to load version", "error");
     return;
@@ -2081,6 +2237,7 @@ async function rollbackTemplateVersion(versionId) {
       version_id: versionId,
       author: elements.repoTemplateAuthorInput?.value || "editor-user",
       source: "editor-rollback",
+      profile_id: currentProfileId(),
     }),
   });
   if (!res.ok) {
@@ -2568,7 +2725,8 @@ async function loadEditorBootstrap() {
 
   const schemaMode = elements.schemaContextMode.value || "sample";
   const fixtureName = selectedFixtureName();
-  const [activeRes, defaultRes, schemaRes, snippetRes, fixtureRes, versionsRes, repositoryRes] = await Promise.all([
+  const [profilesRes, activeRes, defaultRes, schemaRes, snippetRes, fixtureRes, versionsRes, repositoryRes] = await Promise.all([
+    requestJSON("/editor/profiles"),
     requestJSON("/editor/template"),
     requestJSON("/editor/template/default"),
     requestJSON(`/editor/catalog?context_mode=${encodeURIComponent(schemaMode)}&fixture_name=${encodeURIComponent(fixtureName)}`),
@@ -2583,9 +2741,17 @@ async function loadEditorBootstrap() {
     return;
   }
 
+  if (profilesRes.ok) {
+    state.profiles = Array.isArray(profilesRes.payload.profiles) ? profilesRes.payload.profiles : [];
+    state.workingProfileId = String(profilesRes.payload.working_profile_id || "default");
+    renderProfileWorkspace();
+  }
+
   state.templateActive = decodeEscapedNewlines(activeRes.payload.template || "");
   state.templateDefault = decodeEscapedNewlines(defaultRes.payload.template || "");
   state.templateMeta = activeRes.payload || null;
+  state.workingProfileId = String(activeRes.payload.profile_id || state.workingProfileId || "default");
+  renderProfileWorkspace();
   state.templateName = String(activeRes.payload.name || "Auto Stat Template");
   state.lastValidationOk = null;
   clearActivePreviewCache();
@@ -2643,6 +2809,7 @@ async function loadEditorBootstrap() {
   renderSnippets();
   renderTemplateMeta(state.templateMeta);
   renderVersionHistory();
+  updateCurrentProfileDisplay();
 
   state.autoPreview = true;
   elements.autoPreviewToggle.checked = true;
@@ -2663,7 +2830,12 @@ async function validateTemplate() {
   const fixtureName = selectedFixtureName();
   const res = await requestJSON("/editor/validate", {
     method: "POST",
-    body: JSON.stringify({ template, context_mode: contextMode, fixture_name: fixtureName }),
+    body: JSON.stringify({
+      template,
+      context_mode: contextMode,
+      fixture_name: fixtureName,
+      profile_id: currentProfileId(),
+    }),
   });
 
   updateValidationPane(res.payload, res.ok);
@@ -2681,7 +2853,12 @@ async function previewTemplate(options = {}) {
   const requestId = ++state.previewRequestId;
   const res = await requestJSON("/editor/preview", {
     method: "POST",
-    body: JSON.stringify({ template, context_mode: contextMode, fixture_name: fixtureName }),
+    body: JSON.stringify({
+      template,
+      context_mode: contextMode,
+      fixture_name: fixtureName,
+      profile_id: currentProfileId(),
+    }),
   });
 
   if (requestId !== state.previewRequestId) {
@@ -2751,6 +2928,7 @@ async function saveTemplate(options = {}) {
       name: name || "Auto Stat Template",
       context_mode: contextMode,
       fixture_name: fixtureName,
+      profile_id: currentProfileId(),
     }),
   });
 
@@ -2761,6 +2939,7 @@ async function saveTemplate(options = {}) {
   }
 
   updateValidationPane(res.payload, true);
+  state.workingProfileId = String(res.payload.profile_id || state.workingProfileId || "default");
   state.templateActive = template;
   state.templateMeta = res.payload.active || state.templateMeta;
   state.templateName = String(name || state.templateName || "Auto Stat Template");
@@ -2768,6 +2947,7 @@ async function saveTemplate(options = {}) {
   clearActivePreviewCache();
   setEditorDirty(false);
   renderTemplateMeta(state.templateMeta);
+  updateCurrentProfileDisplay();
   await loadVersionHistory();
   await updatePreviewDiff(elements.previewText.textContent || "");
   setStatus("Template saved + published", "ok");
@@ -2794,7 +2974,10 @@ function bindUI() {
     elements.schemaInspector.tabIndex = -1;
   }
   if (elements.btnDrawerToggle) {
-    elements.btnDrawerToggle.addEventListener("click", toggleDrawer);
+    elements.btnDrawerToggle.addEventListener("click", openDrawer);
+  }
+  if (elements.btnProfileDrawerToggle) {
+    elements.btnProfileDrawerToggle.addEventListener("click", openProfileWorkspace);
   }
   if (elements.btnDrawerClose) {
     elements.btnDrawerClose.addEventListener("click", closeDrawer);

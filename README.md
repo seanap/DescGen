@@ -176,19 +176,22 @@ http://localhost:1609/editor
 - `POST /rerun` with optional JSON body: `{ "activity_id": 1234567890 }`
 - `GET /editor/schema?context_mode=latest_or_sample` (available template data keys)
 - `GET /editor/fixtures` (pinned sample fixtures for preview/testing)
-- `GET /editor/template` (active template, default or custom)
+- `GET /editor/profiles` (list profile workspace configuration + active working profile)
+- `PUT /editor/profiles/<profile_id>` (enable/disable profile, update priority)
+- `POST /editor/profiles/working` (set current editor working profile)
+- `GET /editor/template` (active template for profile; optional `profile_id`)
 - `GET /editor/template/default` (factory template)
-- `GET /editor/template/export` (downloadable JSON bundle of active template)
-- `GET /editor/template/versions` (saved template version history)
-- `GET /editor/template/version/<version_id>` (specific saved template)
+- `GET /editor/template/export` (downloadable JSON bundle of active template; optional `profile_id`)
+- `GET /editor/template/versions` (saved template version history; optional `profile_id`)
+- `GET /editor/template/version/<version_id>` (specific saved template; optional `profile_id`)
 - `GET /editor/snippets` (quick insert snippets for the web editor)
 - `GET /editor/starter-templates` (curated starter layouts for quick setup)
 - `GET /editor/context/sample` (sample context payload for testing)
-- `PUT /editor/template` (save custom template)
-- `POST /editor/template/import` (import and publish template from bundle JSON)
-- `POST /editor/template/rollback` (rollback active template to a prior version)
-- `POST /editor/validate` (validate a template string; optional `context_mode`)
-- `POST /editor/preview` (render preview; optional `context_mode`)
+- `PUT /editor/template` (save custom template; optional `profile_id`)
+- `POST /editor/template/import` (import and publish template from bundle JSON; optional `profile_id`)
+- `POST /editor/template/rollback` (rollback active template to a prior version; optional `profile_id`)
+- `POST /editor/validate` (validate a template string; optional `context_mode`, `profile_id`)
+- `POST /editor/preview` (render preview; optional `context_mode`, `profile_id`)
 
 Editor UI:
 - `GET /editor` (web UI with builder, snippet palette, click-to-insert fields, and preview context switcher)
@@ -205,17 +208,20 @@ curl -X POST http://localhost:1609/rerun/activity/1234567890
 curl -X POST http://localhost:1609/rerun -H "Content-Type: application/json" -d '{"activity_id":1234567890}'
 curl "http://localhost:1609/editor/schema?context_mode=latest_or_sample"
 curl http://localhost:1609/editor/fixtures
+curl http://localhost:1609/editor/profiles
+curl -X POST http://localhost:1609/editor/profiles/working -H "Content-Type: application/json" -d '{"profile_id":"trail"}'
 curl http://localhost:1609/editor/template
+curl "http://localhost:1609/editor/template?profile_id=trail"
 curl http://localhost:1609/editor/template/export
-curl http://localhost:1609/editor/template/versions
+curl "http://localhost:1609/editor/template/versions?profile_id=trail"
 curl http://localhost:1609/editor/snippets
 curl http://localhost:1609/editor/starter-templates
 curl http://localhost:1609/editor/context/sample
 curl http://localhost:1609/editor/context/sample?fixture=winter_grind
-curl -X POST http://localhost:1609/editor/template/import -H "Content-Type: application/json" -d '{"bundle":{"template":"{{ activity.gap_pace }}","name":"Imported Template"},"author":"cli-user","context_mode":"sample"}'
-curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"context_mode":"sample","template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
-curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"context_mode":"fixture","fixture_name":"humid_hammer","template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
-curl -X POST http://localhost:1609/editor/template/rollback -H "Content-Type: application/json" -d '{"version_id":"vYYYYMMDDTHHMMSSffffffZ-abcdef1234"}'
+curl -X POST http://localhost:1609/editor/template/import -H "Content-Type: application/json" -d '{"bundle":{"template":"{{ activity.gap_pace }}","name":"Imported Template"},"author":"cli-user","context_mode":"sample","profile_id":"trail"}'
+curl -X POST http://localhost:1609/editor/validate -H "Content-Type: application/json" -d '{"context_mode":"sample","profile_id":"trail","template":"{{ activity.gap_pace }} | {{ activity.distance_miles }}"}'
+curl -X POST http://localhost:1609/editor/preview -H "Content-Type: application/json" -d '{"context_mode":"fixture","fixture_name":"humid_hammer","profile_id":"trail","template":"{{ training.vo2 }} | {{ periods.week.distance_miles }}mi"}'
+curl -X POST http://localhost:1609/editor/template/rollback -H "Content-Type: application/json" -d '{"version_id":"vYYYYMMDDTHHMMSSffffffZ-abcdef1234","profile_id":"trail"}'
 open http://localhost:1609/editor
 ```
 </details>

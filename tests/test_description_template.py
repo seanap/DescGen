@@ -19,13 +19,17 @@ from description_template import (
     icu_form_class,
     icu_form_emoji,
     import_template_repository_bundle,
+    get_working_template_profile,
     list_sample_template_fixtures,
+    list_template_profiles,
     list_template_repository_templates,
     list_template_versions,
     render_template_text,
     render_with_active_template,
     rollback_template_version,
     save_active_template,
+    set_working_template_profile,
+    update_template_profile,
     update_template_repository_template,
     validate_template_text,
 )
@@ -298,6 +302,58 @@ class TestDescriptionTemplate(unittest.TestCase):
             rolled = rollback_template_version(settings, version_id=versions[-1]["version_id"], author="tester")
             self.assertTrue(rolled["is_custom"])
             self.assertIn("saved_version", rolled)
+
+    def test_profile_workspace_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+            profiles = list_template_profiles(settings)
+            self.assertTrue(any(str(item.get("profile_id")) == "default" for item in profiles))
+            default = next(item for item in profiles if str(item.get("profile_id")) == "default")
+            self.assertEqual(default["label"], "Default")
+            self.assertTrue(default["enabled"])
+            self.assertTrue(default["locked"])
+
+            working = get_working_template_profile(settings)
+            self.assertEqual(working["profile_id"], "default")
+
+    def test_profile_template_save_and_version_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            save_active_template(settings, "Default {{ value }}", profile_id="default", author="tester")
+            save_active_template(settings, "Trail {{ value }}", profile_id="trail", author="tester")
+            save_active_template(settings, "Trail v2 {{ value }}", profile_id="trail", author="tester")
+
+            default_active = get_active_template(settings, profile_id="default")
+            trail_active = get_active_template(settings, profile_id="trail")
+            self.assertIn("Default", default_active["template"])
+            self.assertIn("Trail v2", trail_active["template"])
+
+            default_versions = list_template_versions(settings, profile_id="default")
+            trail_versions = list_template_versions(settings, profile_id="trail")
+            self.assertGreaterEqual(len(default_versions), 1)
+            self.assertGreaterEqual(len(trail_versions), 2)
+
+    def test_profile_enable_disable_and_working_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            with self.assertRaises(ValueError):
+                update_template_profile(settings, "default", enabled=False)
+
+            updated_pet = update_template_profile(settings, "pet", enabled=True)
+            self.assertTrue(updated_pet["enabled"])
+
+            working_pet = set_working_template_profile(settings, "pet")
+            self.assertEqual(working_pet["profile_id"], "pet")
+
+            disabled_pet = update_template_profile(settings, "pet", enabled=False)
+            self.assertFalse(disabled_pet["enabled"])
+            working = get_working_template_profile(settings)
+            self.assertEqual(working["profile_id"], "default")
 
     def test_editor_snippets_shape(self) -> None:
         snippets = get_editor_snippets()

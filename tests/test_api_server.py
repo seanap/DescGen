@@ -93,6 +93,39 @@ class TestApiServer(unittest.TestCase):
         self.assertIn("count", payload)
         self.assertGreaterEqual(payload["count"], 1)
 
+    def test_editor_profiles_endpoints(self) -> None:
+        list_response = self.client.get("/editor/profiles")
+        self.assertEqual(list_response.status_code, 200)
+        list_payload = list_response.get_json()
+        self.assertEqual(list_payload["status"], "ok")
+        self.assertIn("profiles", list_payload)
+        self.assertTrue(any(str(item.get("profile_id")) == "default" for item in list_payload["profiles"]))
+
+        update_response = self.client.put(
+            "/editor/profiles/pet",
+            json={"enabled": True},
+        )
+        self.assertEqual(update_response.status_code, 200)
+        update_payload = update_response.get_json()
+        self.assertEqual(update_payload["status"], "ok")
+        self.assertTrue(update_payload["profile"]["enabled"])
+
+        working_response = self.client.post(
+            "/editor/profiles/working",
+            json={"profile_id": "pet"},
+        )
+        self.assertEqual(working_response.status_code, 200)
+        working_payload = working_response.get_json()
+        self.assertEqual(working_payload["status"], "ok")
+        self.assertEqual(working_payload["working_profile_id"], "pet")
+
+        reset_response = self.client.post(
+            "/editor/profiles/working",
+            json={"profile_id": "default"},
+        )
+        self.assertEqual(reset_response.status_code, 200)
+        self.client.put("/editor/profiles/pet", json={"enabled": False})
+
     def test_editor_repository_endpoints(self) -> None:
         list_response = self.client.get("/editor/repository/templates")
         self.assertEqual(list_response.status_code, 200)
@@ -284,6 +317,30 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
         self.assertTrue(str(payload.get("context_source")).startswith("sample"))
+
+    def test_editor_template_profile_scoping(self) -> None:
+        save_response = self.client.put(
+            "/editor/template",
+            json={
+                "template": "Trail {{ activity.distance_miles }}",
+                "author": "tester",
+                "name": "Trail Template",
+                "source": "test",
+                "context_mode": "sample",
+                "profile_id": "trail",
+            },
+        )
+        self.assertEqual(save_response.status_code, 200)
+        save_payload = save_response.get_json()
+        self.assertEqual(save_payload["status"], "ok")
+        self.assertEqual(save_payload["profile_id"], "trail")
+
+        load_response = self.client.get("/editor/template?profile_id=trail")
+        self.assertEqual(load_response.status_code, 200)
+        load_payload = load_response.get_json()
+        self.assertEqual(load_payload["status"], "ok")
+        self.assertEqual(load_payload["profile_id"], "trail")
+        self.assertIn("Trail", load_payload["template"])
 
     def test_editor_template_put_rejects_invalid_context_mode(self) -> None:
         response = self.client.put(

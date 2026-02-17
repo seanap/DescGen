@@ -16,6 +16,13 @@
       <button id="btnDrawerClose" class="btn btn-ghost" type="button">Close</button>
     </div>
 
+    <section id="profileWorkspaceSection" class="drawer-section">
+      <h3>Profile Workspace</h3>
+      <p class="subtext">Enable profiles and choose which profile template you are editing.</p>
+      <div id="profileWorkspaceMeta" class="meta">Loading profiles...</div>
+      <div id="profileList" class="catalog"></div>
+    </section>
+
     <section class="drawer-section">
       <h3>Template Controls</h3>
       <p class="subtext">Load and manage local working drafts.</p>
@@ -124,9 +131,17 @@
       <section class="workspace-row">
         <section class="panel card editor-panel reveal" style="--delay:0.03s">
           <button id="btnDrawerToggle" class="workspace-tab" type="button" aria-label="Open template workspace">Template Workspace</button>
+          <button id="btnProfileDrawerToggle" class="workspace-tab workspace-tab-profile" type="button" aria-label="Open profile workspace">Profile Workspace</button>
           <div class="template-current-line">
-            <span class="stack-label">Current Template</span>
-            <strong id="currentTemplateDisplay">Auto Stat Template</strong>
+            <div class="template-current-cell">
+              <span class="stack-label">Current Template</span>
+              <strong id="currentTemplateDisplay">Auto Stat Template</strong>
+            </div>
+            <span class="template-current-divider">|</span>
+            <div class="template-current-cell">
+              <span class="stack-label">Current Profile</span>
+              <strong id="currentProfileDisplay">Default</strong>
+            </div>
           </div>
           <div class="tabbar">
             <button class="tab active" data-tab="simple">Simple Builder</button>
