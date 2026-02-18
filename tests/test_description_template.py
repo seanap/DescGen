@@ -302,8 +302,8 @@ class TestDescriptionTemplate(unittest.TestCase):
         result = render_template_text("{{ misery.index }}|{{ misery.index.emoji }}|{{ misery.index.polarity }}", context)
         self.assertTrue(result["ok"])
         rendered = str(result["description"])
-        self.assertEqual(rendered.split("|")[0], "20.7")
-        self.assertEqual(rendered.split("|")[1], "😓")
+        self.assertEqual(rendered.split("|")[0], "14.9")
+        self.assertEqual(rendered.split("|")[1], "😒")
 
     def test_template_versions_and_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as td:

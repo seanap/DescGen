@@ -20,7 +20,7 @@ I created this because I found that I kept checking 5 different sites for unique
 🏆 412 days in a row
 🏅 Longest run in 90 days
 🏅 2nd best GAP pace this month
-🌤️🌡️ Misery Index: 20.7 😓 | 🏭 AQI: 22 Good
+🌤️🌡️ Misery Index: 14.9 😒 (hot) | 🏭 AQI: 22 Good
 🌤️🔥 7d avg Deficit:-753 cal | Pre-Run: [🥩:40g 🍞:60g]
 🌤️🚦 Training Readiness: 83 🟢 | 💗 47 | 💤 86
 👟🏃 7:18/mi | 🗺️ 8.02 | 🏔️ 612' | 🕓 58:39 | 🍺 5.1
@@ -302,24 +302,30 @@ curl -H "Authorization: Bearer YOUR_SMASHRUN_ACCESS_TOKEN" \
   "https://api.smashrun.com/v1/my/stats"
 ```
 
-## Misery Index v3 (Running-Normalized Additive)
-`MI_raw = sum(nonnegative weather penalties)` and `misery.index = clamp(MI_raw * scale, 0, 100)`
+## Misery Index v3 (Running-Normalized Dual-Head)
+`misery.index = D(weather discomfort) + tail(R(weather hazard risk))`
 
 <details>
 
 <summary> Detailed Algorithm Explanation </summary>
-This version is running-specific and has no hot/cold cancellation:
+This version is running-specific and uses two coupled heads:
 
 - `0` is ideal.
 - Higher is always more miserable.
-- Opposing stressors (ex: hot + high wind) stack instead of cancelling.
+- Discomfort (`D`) and danger risk (`R`) are modeled separately.
+- `Death` (`>100`) is intended to come from true hazard regimes, not casual stacking.
 
 Primary factors:
 - Apparent thermal load (temp + heat index + wind chill blending)
 - Dew point and humidity
-- Wind comfort + strong-wind effort burden (`>10 mph`)
+- Wind comfort + strong-wind effort burden (`>10 mph`) with context damping
 - Sun/cloud proxy
 - Precipitation and snow interaction penalties
+
+Model structure:
+- `D` (discomfort): smooth convex penalties around running comfort bands.
+- `R` (risk): regime-gated hazard modes (`heat`, `cold`, `cold-wet/storm`) combined with `logsumexp`.
+- Final score: `D + soft risk-tail`; mild wind in already-bad weather raises discomfort but does not automatically imply emergency risk.
 
 Severity buckets (`misery.index`):
 - `0-5`: ideal
@@ -327,7 +333,8 @@ Severity buckets (`misery.index`):
 - `>15-30`: moderate
 - `>30-50`: high
 - `>50-75`: very high
-- `>75`: extreme
+- `>75-100`: extreme
+- `>100`: death
 
 Polarity is separate from severity:
 - `misery.index.polarity`: `hot`, `cold`, or `neutral`
@@ -346,10 +353,10 @@ These are computed with the live algorithm in this repo.
 | Scenario | Temp (F) | Dew Point (F) | Humidity (%) | Wind (mph) | Conditions | MI | Bucket |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
 | Goldilocks target | 50.0 | 45.0 | 70 | 2.0 | Slightly cloudy, light breeze | 0.0 | 😀 Ideal |
-| Wind burden example | 63.0 | 49.6 | 61 | 11.9 | Clear, windy | 20.7 | 😓 Moderate |
-| Cold rain/snow | 34.0 | 30.0 | 90 | 8.0 | Moderate snow | 67.3 | 😡 Very High (cold) |
-| Winter grind | 24.1 | 5.0 | 43 | 16.5 | Windy, mixed precip chance | 100.0 | ☠️⚠️ Extreme (cold) |
-| Humid hammer | 89.8 | 80.2 | 78 | 2.7 | Humid, low breeze | 100.0 | ☠️⚠️ Extreme (hot) |
+| Wind burden example | 63.0 | 49.6 | 61 | 11.9 | Clear, windy | 14.9 | 😒 Mild (hot) |
+| Cold rain/snow | 34.0 | 30.0 | 90 | 8.0 | Moderate snow | 105.2 | ☠️ Death (cold) |
+| Winter grind | 24.1 | 5.0 | 43 | 16.5 | Windy, mixed precip chance | 196.4 | ☠️ Death (cold) |
+| Humid hammer | 89.8 | 80.2 | 78 | 2.7 | Humid, low breeze | 187.3 | ☠️ Death (hot) |
 </details>
 
 ----

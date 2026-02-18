@@ -11,11 +11,16 @@ from stat_modules.misery_index import (
 class TestMiseryIndex(unittest.TestCase):
     def test_misery_buckets(self) -> None:
         self.assertEqual(get_misery_index_description(0), "😀 Ideal")
-        self.assertEqual(get_misery_index_description(10), "😕 Mild")
+        self.assertEqual(get_misery_index_description(10), "😒 Mild")
         self.assertEqual(get_misery_index_description(25), "😓 Moderate")
-        self.assertEqual(get_misery_index_description(35), "😰 High")
-        self.assertEqual(get_misery_index_description(65), "😡 Very High")
-        self.assertEqual(get_misery_index_description(95), "☠️⚠️ Extreme")
+        self.assertEqual(get_misery_index_description(35), "😭 High")
+        self.assertEqual(get_misery_index_description(65), "😰 Very High")
+        self.assertEqual(get_misery_index_description(95), "😡 Extreme")
+        self.assertEqual(get_misery_index_description(120), "☠️ Death")
+        self.assertEqual(get_misery_index_description(95, polarity="hot"), "😡 Extreme (hot)")
+        self.assertEqual(get_misery_index_description(95, polarity="cold"), "🥶 Extreme (cold)")
+        self.assertEqual(get_misery_index_description(110, polarity="hot"), "☠️ Death (hot)")
+        self.assertEqual(get_misery_index_description(110, polarity="cold"), "☠️ Death (cold)")
 
     def test_cold_dry_windy_is_low_score(self) -> None:
         score = calculate_misery_index(
@@ -28,8 +33,7 @@ class TestMiseryIndex(unittest.TestCase):
             is_day=True,
             condition_text="Overcast",
         )
-        self.assertGreaterEqual(score, 80)
-        self.assertLessEqual(score, 100)
+        self.assertGreater(score, 100)
 
     def test_hot_humid_stagnant_is_high_score(self) -> None:
         score = calculate_misery_index(
@@ -42,8 +46,7 @@ class TestMiseryIndex(unittest.TestCase):
             is_day=True,
             condition_text="Sunny",
         )
-        self.assertGreaterEqual(score, 80)
-        self.assertLessEqual(score, 100)
+        self.assertGreater(score, 100)
 
     def test_rain_and_snow_push_colder_side(self) -> None:
         score = calculate_misery_index(
@@ -179,8 +182,56 @@ class TestMiseryIndex(unittest.TestCase):
             wind_chill_f=63.0,
         )
         self.assertGreater(windy, ideal)
-        self.assertGreater(windy, 15.0)
+        self.assertGreater(windy, 14.0)
         self.assertGreater(windy_components["component_wind_strong_effort"], 0.0)
+
+    def test_strong_wind_alone_stays_below_death_threshold(self) -> None:
+        components = calculate_misery_index_components(
+            temp_f=84.0,
+            dew_point_f=50.0,
+            humidity=60.0,
+            wind_speed_mph=20.0,
+            cloud_cover_pct=25.0,
+            precip_in=0.0,
+            is_day=True,
+            heat_index_f=85.0,
+            wind_chill_f=84.0,
+        )
+        self.assertLess(components["score"], 100.0)
+        self.assertEqual(components["severity"], "very_high")
+        self.assertEqual(components["component_risk_tail"], 0.0)
+
+    def test_true_heat_hazard_crosses_death_threshold(self) -> None:
+        components = calculate_misery_index_components(
+            temp_f=95.0,
+            dew_point_f=75.0,
+            humidity=55.0,
+            wind_speed_mph=2.0,
+            cloud_cover_pct=20.0,
+            precip_in=0.0,
+            is_day=True,
+            heat_index_f=107.0,
+        )
+        self.assertGreater(components["score"], 100.0)
+        self.assertEqual(components["severity"], "death")
+        self.assertGreater(components["component_risk_tail"], 0.0)
+
+    def test_true_cold_wet_hazard_crosses_death_threshold(self) -> None:
+        components = calculate_misery_index_components(
+            temp_f=31.0,
+            dew_point_f=30.0,
+            humidity=95.0,
+            wind_speed_mph=20.0,
+            cloud_cover_pct=100.0,
+            precip_in=0.18,
+            is_day=True,
+            chance_of_rain=95.0,
+            chance_of_snow=40.0,
+            condition_text="Freezing rain",
+        )
+        self.assertGreater(components["score"], 100.0)
+        self.assertEqual(components["severity"], "death")
+        self.assertGreater(components["component_risk_tail"], 0.0)
 
     def test_aqi_description(self) -> None:
         self.assertEqual(get_aqi_description(1), "😃")

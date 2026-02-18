@@ -180,23 +180,23 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
     },
     "misery": {
         "index": {
-            "value": 20.7,
-            "emoji": "😓",
-            "polarity": "neutral",
-            "severity": "moderate",
-            "description": "😓 Moderate",
-            "hot_load": 0.18,
+            "value": 14.9,
+            "emoji": "😒",
+            "polarity": "hot",
+            "severity": "mild",
+            "description": "😒 Mild (hot)",
+            "hot_load": 0.54,
             "cold_load": 0.0,
-            "delta": 0.21,
+            "delta": 0.54,
         },
-        "emoji": "😓",
-        "polarity": "neutral",
-        "severity": "moderate",
-        "description": "😓 Moderate",
+        "emoji": "😒",
+        "polarity": "hot",
+        "severity": "mild",
+        "description": "😒 Mild (hot)",
     },
     "weather": {
-        "misery_index": 20.7,
-        "misery_description": "😓 Moderate",
+        "misery_index": 14.9,
+        "misery_description": "😒 Mild (hot)",
         "aqi": 22,
         "aqi_description": " Good",
         "temp_f": "63.0F",
@@ -559,17 +559,17 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     default_ctx = deepcopy(SAMPLE_TEMPLATE_CONTEXT)
 
     winter_ctx = deepcopy(default_ctx)
-    winter_ctx["weather"]["misery_index"] = 100.0
-    winter_ctx["weather"]["misery_description"] = "☠️⚠️ Extreme (cold)"
-    winter_ctx["misery"]["index"]["value"] = 100.0
-    winter_ctx["misery"]["index"]["emoji"] = "☠️⚠️"
+    winter_ctx["weather"]["misery_index"] = 196.4
+    winter_ctx["weather"]["misery_description"] = "☠️ Death (cold)"
+    winter_ctx["misery"]["index"]["value"] = 196.4
+    winter_ctx["misery"]["index"]["emoji"] = "☠️"
     winter_ctx["misery"]["index"]["polarity"] = "cold"
-    winter_ctx["misery"]["index"]["severity"] = "extreme"
-    winter_ctx["misery"]["index"]["description"] = "☠️⚠️ Extreme (cold)"
-    winter_ctx["misery"]["emoji"] = "☠️⚠️"
+    winter_ctx["misery"]["index"]["severity"] = "death"
+    winter_ctx["misery"]["index"]["description"] = "☠️ Death (cold)"
+    winter_ctx["misery"]["emoji"] = "☠️"
     winter_ctx["misery"]["polarity"] = "cold"
-    winter_ctx["misery"]["severity"] = "extreme"
-    winter_ctx["misery"]["description"] = "☠️⚠️ Extreme (cold)"
+    winter_ctx["misery"]["severity"] = "death"
+    winter_ctx["misery"]["description"] = "☠️ Death (cold)"
     winter_ctx["weather"]["aqi"] = 11
     winter_ctx["weather"]["temp_f"] = "24.1F"
     winter_ctx["weather"]["dewpoint_f"] = "5.0F"
@@ -609,17 +609,17 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     winter_ctx["crono"]["carbs_g"] = 153.0
 
     humid_ctx = deepcopy(default_ctx)
-    humid_ctx["weather"]["misery_index"] = 100.0
-    humid_ctx["weather"]["misery_description"] = "☠️⚠️ Extreme (hot)"
-    humid_ctx["misery"]["index"]["value"] = 100.0
-    humid_ctx["misery"]["index"]["emoji"] = "☠️⚠️"
+    humid_ctx["weather"]["misery_index"] = 187.3
+    humid_ctx["weather"]["misery_description"] = "☠️ Death (hot)"
+    humid_ctx["misery"]["index"]["value"] = 187.3
+    humid_ctx["misery"]["index"]["emoji"] = "☠️"
     humid_ctx["misery"]["index"]["polarity"] = "hot"
-    humid_ctx["misery"]["index"]["severity"] = "extreme"
-    humid_ctx["misery"]["index"]["description"] = "☠️⚠️ Extreme (hot)"
-    humid_ctx["misery"]["emoji"] = "☠️⚠️"
+    humid_ctx["misery"]["index"]["severity"] = "death"
+    humid_ctx["misery"]["index"]["description"] = "☠️ Death (hot)"
+    humid_ctx["misery"]["emoji"] = "☠️"
     humid_ctx["misery"]["polarity"] = "hot"
-    humid_ctx["misery"]["severity"] = "extreme"
-    humid_ctx["misery"]["description"] = "☠️⚠️ Extreme (hot)"
+    humid_ctx["misery"]["severity"] = "death"
+    humid_ctx["misery"]["description"] = "☠️ Death (hot)"
     humid_ctx["weather"]["aqi"] = 67
     humid_ctx["weather"]["temp_f"] = "89.8F"
     humid_ctx["weather"]["dewpoint_f"] = "80.2F"
