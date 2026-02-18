@@ -19,6 +19,8 @@ from setup_config import (
     mask_setup_values,
     merge_setup_overrides,
     render_env_snippet,
+    setup_env_file_path,
+    update_setup_env_file,
 )
 from storage import (
     delete_runtime_value,
@@ -155,6 +157,8 @@ def _setup_payload() -> dict[str, object]:
         provider: fields
         for provider, fields in PROVIDER_FIELDS.items()
     }
+    env_path = setup_env_file_path()
+    env_writable = os.access(env_path, os.W_OK) if env_path.exists() else os.access(env_path.parent, os.W_OK)
     return {
         "status": "ok",
         "values": _public_setup_values(values),
@@ -165,6 +169,11 @@ def _setup_payload() -> dict[str, object]:
         "allowed_keys": sorted(SETUP_ALLOWED_KEYS),
         "secret_keys": sorted(SETUP_SECRET_KEYS),
         "strava": _setup_strava_status(values),
+        "env_file": {
+            "path": str(env_path),
+            "exists": env_path.exists(),
+            "writable": bool(env_writable),
+        },
     }
 
 
@@ -328,8 +337,18 @@ def setup_config_put() -> tuple[dict, int]:
             continue
         updates[key] = value
 
+    try:
+        env_path = update_setup_env_file(updates)
+    except OSError as exc:
+        return {
+            "status": "error",
+            "error": f"Failed to write env file at {setup_env_file_path()}: {exc}",
+        }, 500
+
     merge_setup_overrides(settings.state_dir, updates)
-    return _setup_payload(), 200
+    payload = _setup_payload()
+    payload["env_write_path"] = str(env_path)
+    return payload, 200
 
 
 @app.get("/setup/api/env")
@@ -451,6 +470,16 @@ def setup_strava_oauth_callback_get():
     if not isinstance(access_token, str) or not access_token.strip():
         return _redirect_setup_with_status("error", "missing_access_token")
 
+    try:
+        update_setup_env_file(
+            {
+                "STRAVA_REFRESH_TOKEN": refresh_token.strip(),
+                "STRAVA_ACCESS_TOKEN": access_token.strip(),
+            }
+        )
+    except OSError:
+        return _redirect_setup_with_status("error", "env_write_failed")
+
     merge_setup_overrides(
         settings.state_dir,
         {
@@ -473,6 +502,19 @@ def setup_strava_oauth_callback_get():
 
 @app.post("/setup/api/strava/disconnect")
 def setup_strava_disconnect_post() -> tuple[dict, int]:
+    try:
+        update_setup_env_file(
+            {
+                "STRAVA_REFRESH_TOKEN": None,
+                "STRAVA_ACCESS_TOKEN": None,
+            }
+        )
+    except OSError as exc:
+        return {
+            "status": "error",
+            "error": f"Failed to update env file at {setup_env_file_path()}: {exc}",
+        }, 500
+
     merge_setup_overrides(
         settings.state_dir,
         {
@@ -483,18 +525,10 @@ def setup_strava_disconnect_post() -> tuple[dict, int]:
     current = _effective_settings()
     current.strava_token_file.unlink(missing_ok=True)
 
-    env_refresh = (
-        str(os.getenv("STRAVA_REFRESH_TOKEN") or "").strip()
-        or str(os.getenv("REFRESH_TOKEN") or "").strip()
-    )
-    env_access = (
-        str(os.getenv("STRAVA_ACCESS_TOKEN") or "").strip()
-        or str(os.getenv("ACCESS_TOKEN") or "").strip()
-    )
     return {
         "status": "ok",
         "strava": _setup_strava_status(_setup_effective_values()),
-        "env_managed_tokens": bool(env_refresh or env_access),
+        "env_write_path": str(setup_env_file_path()),
     }, 200
 
 

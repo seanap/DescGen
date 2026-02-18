@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from storage import read_json, write_json
 
 SETUP_OVERRIDES_FILE_ENV = "SETUP_OVERRIDES_FILE"
 SETUP_OVERRIDES_FILE_DEFAULT = "setup_overrides.json"
+SETUP_ENV_FILE_ENV = "SETUP_ENV_FILE"
+SETUP_ENV_FILE_DEFAULT = ".env"
 
 SETUP_ALLOWED_KEYS: set[str] = {
     "STRAVA_CLIENT_ID",
@@ -96,6 +99,8 @@ PROVIDER_FIELDS: dict[str, list[str]] = {
     ],
 }
 
+ENV_LINE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$")
+
 
 def _to_bool(value: Any) -> bool | None:
     if isinstance(value, bool):
@@ -118,19 +123,59 @@ def setup_overrides_path(state_dir: Path) -> Path:
     return state_dir / configured
 
 
-def read_setup_overrides(state_dir: Path) -> dict[str, Any]:
+def setup_env_file_path() -> Path:
+    configured = os.getenv(SETUP_ENV_FILE_ENV, SETUP_ENV_FILE_DEFAULT).strip() or SETUP_ENV_FILE_DEFAULT
+    path = Path(configured)
+    if path.is_absolute():
+        return path
+    return (Path.cwd() / path).resolve()
+
+
+def read_setup_overrides_payload(state_dir: Path) -> dict[str, Any]:
     payload = read_json(setup_overrides_path(state_dir))
     if not isinstance(payload, dict):
-        return {}
+        return {"updated_at_utc": None, "values": {}}
     values = payload.get("values")
     if not isinstance(values, dict):
-        return {}
+        return {"updated_at_utc": None, "values": {}}
     out: dict[str, Any] = {}
     for key, value in values.items():
         if key not in SETUP_ALLOWED_KEYS:
             continue
         out[key] = value
+    updated_at = payload.get("updated_at_utc")
+    if not isinstance(updated_at, str):
+        updated_at = None
+    return {"updated_at_utc": updated_at, "values": out}
+
+
+def read_setup_overrides(state_dir: Path) -> dict[str, Any]:
+    payload = read_setup_overrides_payload(state_dir)
+    values = payload.get("values")
+    if not isinstance(values, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key, value in values.items():
+        if key in SETUP_ALLOWED_KEYS:
+            out[key] = value
     return out
+
+
+def _normalize_setup_updates(updates: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key, value in updates.items():
+        if key not in SETUP_ALLOWED_KEYS:
+            continue
+        if value is None:
+            normalized[key] = None
+            continue
+        if key in SETUP_BOOL_KEYS:
+            as_bool = _to_bool(value)
+            normalized[key] = as_bool
+            continue
+        text = str(value).strip()
+        normalized[key] = text if text else None
+    return normalized
 
 
 def write_setup_overrides(state_dir: Path, values: dict[str, Any]) -> dict[str, Any]:
@@ -162,25 +207,85 @@ def write_setup_overrides(state_dir: Path, values: dict[str, Any]) -> dict[str, 
 def merge_setup_overrides(state_dir: Path, updates: dict[str, Any]) -> dict[str, Any]:
     current = read_setup_overrides(state_dir)
     merged = dict(current)
-    for key, value in updates.items():
-        if key not in SETUP_ALLOWED_KEYS:
-            continue
+    normalized = _normalize_setup_updates(updates)
+    for key, value in normalized.items():
         if value is None:
             merged.pop(key, None)
             continue
         if key in SETUP_BOOL_KEYS:
-            as_bool = _to_bool(value)
-            if as_bool is None:
+            if not isinstance(value, bool):
                 merged.pop(key, None)
                 continue
-            merged[key] = as_bool
+            merged[key] = value
             continue
-        text = str(value).strip()
-        if not text:
-            merged.pop(key, None)
-            continue
-        merged[key] = text
+        merged[key] = value
     return write_setup_overrides(state_dir, merged)
+
+
+def _render_env_line(key: str, value: Any) -> str:
+    if key in SETUP_BOOL_KEYS and isinstance(value, bool):
+        return f"{key}={'true' if value else 'false'}"
+    text = str(value).replace("\n", " ").strip()
+    return f"{key}={text}"
+
+
+def update_setup_env_file(updates: dict[str, Any]) -> Path:
+    path = setup_env_file_path()
+    normalized = _normalize_setup_updates(updates)
+    if not normalized:
+        return path
+
+    existing_lines: list[str] = []
+    if path.exists():
+        existing_lines = path.read_text(encoding="utf-8").splitlines()
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    indexed: dict[str, list[int]] = {}
+    for idx, line in enumerate(existing_lines):
+        match = ENV_LINE_RE.match(line)
+        if not match:
+            continue
+        key = match.group(1)
+        if key not in SETUP_ALLOWED_KEYS:
+            continue
+        indexed.setdefault(key, []).append(idx)
+
+    delete_indexes: set[int] = set()
+    append_lines: list[str] = []
+    for key, value in normalized.items():
+        replacement = None if value is None else _render_env_line(key, value)
+        locations = indexed.get(key, [])
+
+        if locations:
+            first_idx = locations[0]
+            if replacement is None:
+                delete_indexes.update(locations)
+            else:
+                existing_lines[first_idx] = replacement
+                if len(locations) > 1:
+                    delete_indexes.update(locations[1:])
+            continue
+
+        if replacement is not None:
+            append_lines.append(replacement)
+
+    if delete_indexes:
+        existing_lines = [line for idx, line in enumerate(existing_lines) if idx not in delete_indexes]
+
+    final_lines = existing_lines[:]
+    if append_lines:
+        if final_lines and final_lines[-1].strip():
+            final_lines.append("")
+        final_lines.extend(append_lines)
+
+    text = "\n".join(final_lines)
+    if final_lines:
+        text += "\n"
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)
+    return path
 
 
 def mask_setup_values(values: dict[str, Any]) -> dict[str, Any]:

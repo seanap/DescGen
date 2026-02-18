@@ -17,6 +17,7 @@ class TestApiServer(unittest.TestCase):
         self._original_is_worker_healthy = api_server.is_worker_healthy
         self._original_settings = api_server.settings
         self._original_state_dir_env = os.environ.get("STATE_DIR")
+        self._original_setup_env_file = os.environ.get("SETUP_ENV_FILE")
 
     def tearDown(self) -> None:
         api_server.run_once = self._original_run_once
@@ -26,9 +27,14 @@ class TestApiServer(unittest.TestCase):
             os.environ.pop("STATE_DIR", None)
         else:
             os.environ["STATE_DIR"] = self._original_state_dir_env
+        if self._original_setup_env_file is None:
+            os.environ.pop("SETUP_ENV_FILE", None)
+        else:
+            os.environ["SETUP_ENV_FILE"] = self._original_setup_env_file
 
     def _set_temp_state_dir(self, temp_dir: str) -> None:
         os.environ["STATE_DIR"] = temp_dir
+        os.environ["SETUP_ENV_FILE"] = str(Path(temp_dir) / ".env")
         api_server.settings = api_server.Settings.from_env()
         api_server.settings.ensure_state_paths()
 
@@ -101,6 +107,11 @@ class TestApiServer(unittest.TestCase):
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "TIMEZONE=UTC\nENABLE_WEATHER=true\n",
+                encoding="utf-8",
+            )
 
             get_response = self.client.get("/setup/api/config")
             self.assertEqual(get_response.status_code, 200)
@@ -108,6 +119,7 @@ class TestApiServer(unittest.TestCase):
             self.assertEqual(get_payload["status"], "ok")
             self.assertIn("provider_fields", get_payload)
             self.assertIn("values", get_payload)
+            self.assertEqual(get_payload["env_file"]["path"], str(env_path))
 
             put_response = self.client.put(
                 "/setup/api/config",
@@ -137,6 +149,10 @@ class TestApiServer(unittest.TestCase):
 
             overrides_path = Path(temp_dir) / "setup_overrides.json"
             self.assertTrue(overrides_path.exists())
+            env_written = env_path.read_text(encoding="utf-8")
+            self.assertIn("TIMEZONE=America/Chicago", env_written)
+            self.assertIn("ENABLE_WEATHER=false", env_written)
+            self.assertIn("WEATHER_API_KEY=weather-secret", env_written)
 
     def test_setup_strava_oauth_start_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
