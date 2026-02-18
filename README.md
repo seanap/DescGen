@@ -20,7 +20,7 @@ I created this because I found that I kept checking 5 different sites for unique
 🏆 412 days in a row
 🏅 Longest run in 90 days
 🏅 2nd best GAP pace this month
-🌤️🌡️ Misery Index: 104.3 😀 Perfect | 🏭 AQI: 22 Good
+🌤️🌡️ Misery Index: 20.7 😓 | 🏭 AQI: 22 Good
 🌤️🔥 7d avg Deficit:-753 cal | Pre-Run: [🥩:40g 🍞:60g]
 🌤️🚦 Training Readiness: 83 🟢 | 💗 47 | 💤 86
 👟🏃 7:18/mi | 🗺️ 8.02 | 🏔️ 612' | 🕓 58:39 | 🍺 5.1
@@ -302,70 +302,54 @@ curl -H "Authorization: Bearer YOUR_SMASHRUN_ACCESS_TOKEN" \
   "https://api.smashrun.com/v1/my/stats"
 ```
 
-## Misery Index v2 (Mirrored Scale)
-`MI = 100 + hot_penalties - cold_penalties` (display-bounded to `[-40, 240]`)
+## Misery Index v3 (Running-Normalized Additive)
+`MI_raw = sum(nonnegative weather penalties)` and `misery.index = clamp(MI_raw * scale, 0, 100)`
 
 <details>
 
 <summary> Detailed Algorithm Explanation </summary>
-The model is intentionally smooth (no abrupt jumps at exact temp/wind/rain thresholds).
+This version is running-specific and has no hot/cold cancellation:
 
-- `<20`: `☠️⚠️ High risk (cold)`
-- `20-30`: `😡 Miserable (cold)`
-- `30-40`: `🥶 Oppressively cold`
-- `40-50`: `😰 Very uncomfortable (cold)`
-- `50-60`: `😓 Moderate uncomfortable (cold)`
-- `60-70`: `😕 Mild uncomfortable (cold)`
-- `70-130`: `😀 Perfect`
-- `130-140`: `😕 Mild uncomfortable`
-- `140-150`: `😓 Moderate uncomfortable`
-- `150-160`: `😰 Very uncomfortable`
-- `160-170`: `🥵 Oppressive`
-- `170-180`: `😡 Miserable`
-- `>=180`: `☠️⚠️ High risk`
+- `0` is ideal.
+- Higher is always more miserable.
+- Opposing stressors (ex: hot + high wind) stack instead of cancelling.
 
-### Contributing Factors
-- Apparent temperature core:
-  - Uses Heat Index when hot.
-  - Uses Wind Chill when cold.
-- Dew point stress:
-  - High dew point adds heat strain.
-  - Very low dew point adds cold/dry strain.
-- Humidity extremes:
-  - Very humid hot air increases stress.
-  - Very dry cold air increases irritation penalty.
-- Wind behavior:
-  - Stagnant air on hot/humid days increases MI.
-  - Cooling breeze can slightly reduce hot stress.
-  - Severe wind in cold adds extra exposure penalty.
-- Precipitation and snow:
-  - Light drizzle is minor.
-  - Heavy rain/downpour adds significant discomfort.
-  - Snow/sleet/freezing conditions add strong cold penalties.
-- Cloud and sun load:
-  - Full sun can raise heat burden.
-  - Heavy overcast can add slight cold penalty in cold weather.
-- Transparency:
-  - `/latest` includes `weather.misery_components` with per-factor contributions.
+Primary factors:
+- Apparent thermal load (temp + heat index + wind chill blending)
+- Dew point and humidity
+- Wind comfort + strong-wind effort burden (`>10 mph`)
+- Sun/cloud proxy
+- Precipitation and snow interaction penalties
+
+Severity buckets (`misery.index`):
+- `0-5`: ideal
+- `>5-15`: mild
+- `>15-30`: moderate
+- `>30-50`: high
+- `>50-75`: very high
+- `>75`: extreme
+
+Polarity is separate from severity:
+- `misery.index.polarity`: `hot`, `cold`, or `neutral`
+- `misery.index.emoji`: chosen from severity + polarity
+- `misery.index`: display scalar (numeric)
+
+Template usage:
+- `{{ misery.index }}`
+- `{{ misery.index.emoji }}`
+- `{{ misery.index.polarity }}`
+- `{{ misery.index.severity }}`
 
 ### Example Scenarios
 These are computed with the live algorithm in this repo.
 
 | Scenario | Temp (F) | Dew Point (F) | Humidity (%) | Wind (mph) | Conditions | MI | Bucket |
 | --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
-| High risk cold example | 23.0 | -6.6 | 27 | 14.5 | Clear, very dry, windy | 12.0 | ☠️⚠️ High risk (cold) |
-| Miserable cold example | 27.0 | 2.1 | 33 | 17.7 | Clear, dry, windy | 25.0 | 😡 Miserable (cold) |
-| Oppressively cold example | 28.3 | 25.7 | 94 | 17.1 | Partly cloudy, damp, windy | 35.0 | 🥶 Oppressively cold |
-| Very uncomfortable cold example | 32.4 | 6.0 | 31 | 16.8 | Clear, dry wind chill | 45.0 | 😰 Very uncomfortable (cold) |
-| Moderate uncomfortable cold example | 26.9 | 0.8 | 35 | 0.9 | Overcast, cold/dry air | 55.0 | 😓 Moderate uncomfortable (cold) |
-| Mild uncomfortable cold example | 37.1 | 25.9 | 65 | 13.5 | Partly cloudy, breezy | 65.0 | 😕 Mild uncomfortable (cold) |
-| Perfect example | 63.0 | 49.6 | 61 | 11.9 | Clear, comfortable | 100.0 | 😀 Perfect |
-| Mild uncomfortable heat example | 83.8 | 74.8 | 74 | 2.3 | Partly cloudy, muggy | 135.0 | 😕 Mild uncomfortable |
-| Moderate uncomfortable heat example | 83.6 | 80.7 | 87 | 2.3 | Overcast, very humid | 145.0 | 😓 Moderate uncomfortable |
-| Very uncomfortable heat example | 92.8 | 73.1 | 51 | 1.8 | Clear, hot, low breeze | 155.0 | 😰 Very uncomfortable |
-| Oppressive heat example | 93.2 | 76.9 | 58 | 16.9 | Partly cloudy, oppressive heat load | 165.0 | 🥵 Oppressive |
-| Miserable heat example | 89.7 | 81.9 | 76 | 6.5 | Partly cloudy, tropical humidity | 175.0 | 😡 Miserable |
-| High risk heat example | 89.5 | 82.5 | 83 | 2.1 | Partly cloudy, no cooling | 190.0 | ☠️⚠️ High risk |
+| Goldilocks target | 50.0 | 45.0 | 70 | 2.0 | Slightly cloudy, light breeze | 0.0 | 😀 Ideal |
+| Wind burden example | 63.0 | 49.6 | 61 | 11.9 | Clear, windy | 20.7 | 😓 Moderate |
+| Cold rain/snow | 34.0 | 30.0 | 90 | 8.0 | Moderate snow | 67.3 | 😡 Very High (cold) |
+| Winter grind | 24.1 | 5.0 | 43 | 16.5 | Windy, mixed precip chance | 100.0 | ☠️⚠️ Extreme (cold) |
+| Humid hammer | 89.8 | 80.2 | 78 | 2.7 | Humid, low breeze | 100.0 | ☠️⚠️ Extreme (hot) |
 </details>
 
 ----

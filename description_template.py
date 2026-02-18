@@ -15,12 +15,24 @@ from config import Settings
 from numeric_utils import as_float as _shared_as_float
 
 
+class _DisplayValueMapping(dict):
+    def __str__(self) -> str:
+        value = self.get("value")
+        if isinstance(value, (int, float)):
+            return f"{float(value):.1f}"
+        if value is None:
+            return "N/A"
+        return str(value)
+
+    __repr__ = __str__
+
+
 DEFAULT_DESCRIPTION_TEMPLATE = """🏆 {{ streak_days }} days in a row
 {% for notable in notables %}🏅 {{ notable }}
 {% endfor %}{% for achievement in achievements %}🏅 {{ achievement }}
 {% endfor %}{% for segment_notable in segment_notables | default([]) %}🥇 {{ segment_notable }}
 {% endfor %}{% for badge in badges | default([]) %}🎖️ {{ badge }}
-{% endfor %}🌤️🌡️ Misery Index: {{ weather.misery_index }} {{ weather.misery_description }} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
+{% endfor %}🌤️🌡️ Misery Index: {{ misery.index }} {{ misery.index.emoji }}{% if misery.index.polarity in ['hot', 'cold'] %} ({{ misery.index.polarity }}){% endif %} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
 {% if crono.average_net_kcal_per_day is defined and crono.average_net_kcal_per_day is not none %}🔥 7d avg daily Energy Balance:{{ "%+.0f"|format(crono.average_net_kcal_per_day) }} kcal{% if crono.average_status %} ({{ crono.average_status }}){% endif %}{% if crono.protein_g and crono.protein_g > 0 %} | 🥩:{{ crono.protein_g|round|int }}g{% endif %}{% if crono.carbs_g and crono.carbs_g > 0 %} | 🍞:{{ crono.carbs_g|round|int }}g{% endif %}
 {% elif crono.line %}{{ crono.line }}
 {% endif %}🌤️🚦 Training Readiness: {{ training.readiness_score }} {{ training.readiness_emoji }} | 💗 {{ training.resting_hr }} | 💤 {{ training.sleep_score }}
@@ -96,7 +108,7 @@ STARTER_TEMPLATES: list[dict[str, str]] = [
         "id": "minimal-core",
         "label": "Minimal Core",
         "description": "Short and clean: weather + latest activity + 7-day summary.",
-        "template": """🌤️ MI {{ weather.misery_index }} {{ weather.misery_description }} | AQI {{ weather.aqi }}
+        "template": """🌤️ MI {{ misery.index }} {{ misery.index.emoji }} | AQI {{ weather.aqi }}
 👟 {{ activity.gap_pace }} | {{ activity.distance_miles }}mi | {{ activity.time }} | {{ activity.elevation_feet }}'
 7️⃣ {{ periods.week.gap }} | {{ periods.week.distance_miles }}mi | {{ periods.week.duration }} | 🍺 {{ periods.week.beers }}""",
     },
@@ -114,7 +126,7 @@ STARTER_TEMPLATES: list[dict[str, str]] = [
         "id": "weather-watch",
         "label": "Weather Watch",
         "description": "Lead with conditions and keep training context concise.",
-        "template": """🌤️🌡️ Misery Index: {{ weather.misery_index }} {{ weather.misery_description }} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
+        "template": """🌤️🌡️ Misery Index: {{ misery.index }} {{ misery.index.emoji }}{% if misery.index.polarity in ['hot', 'cold'] %} ({{ misery.index.polarity }}){% endif %} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
 {% if weather.details is defined %}Temp {{ weather.details.temperature_f }}F | Dew {{ weather.details.dew_point_f }}F | Wind {{ weather.details.wind_mph }}mph | {{ weather.details.condition_text }}{% endif %}
 👟 {{ activity.gap_pace }} | {{ activity.distance_miles }}mi | {{ activity.time }} | 🏔️ {{ activity.elevation_feet }}'
 📅 30d {{ periods.month.gap }} | {{ periods.month.distance_miles }}mi | {{ periods.month.duration }}""",
@@ -166,9 +178,25 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "protein_g": 182.0,
         "carbs_g": 216.0,
     },
+    "misery": {
+        "index": {
+            "value": 20.7,
+            "emoji": "😓",
+            "polarity": "neutral",
+            "severity": "moderate",
+            "description": "😓 Moderate",
+            "hot_load": 0.18,
+            "cold_load": 0.0,
+            "delta": 0.21,
+        },
+        "emoji": "😓",
+        "polarity": "neutral",
+        "severity": "moderate",
+        "description": "😓 Moderate",
+    },
     "weather": {
-        "misery_index": 104.3,
-        "misery_description": "😀 Perfect",
+        "misery_index": 20.7,
+        "misery_description": "😓 Moderate",
         "aqi": 22,
         "aqi_description": " Good",
         "temp_f": "63.0F",
@@ -531,8 +559,17 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     default_ctx = deepcopy(SAMPLE_TEMPLATE_CONTEXT)
 
     winter_ctx = deepcopy(default_ctx)
-    winter_ctx["weather"]["misery_index"] = 34.7
-    winter_ctx["weather"]["misery_description"] = "🥶 Oppressively cold"
+    winter_ctx["weather"]["misery_index"] = 100.0
+    winter_ctx["weather"]["misery_description"] = "☠️⚠️ Extreme (cold)"
+    winter_ctx["misery"]["index"]["value"] = 100.0
+    winter_ctx["misery"]["index"]["emoji"] = "☠️⚠️"
+    winter_ctx["misery"]["index"]["polarity"] = "cold"
+    winter_ctx["misery"]["index"]["severity"] = "extreme"
+    winter_ctx["misery"]["index"]["description"] = "☠️⚠️ Extreme (cold)"
+    winter_ctx["misery"]["emoji"] = "☠️⚠️"
+    winter_ctx["misery"]["polarity"] = "cold"
+    winter_ctx["misery"]["severity"] = "extreme"
+    winter_ctx["misery"]["description"] = "☠️⚠️ Extreme (cold)"
     winter_ctx["weather"]["aqi"] = 11
     winter_ctx["weather"]["temp_f"] = "24.1F"
     winter_ctx["weather"]["dewpoint_f"] = "5.0F"
@@ -572,8 +609,17 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     winter_ctx["crono"]["carbs_g"] = 153.0
 
     humid_ctx = deepcopy(default_ctx)
-    humid_ctx["weather"]["misery_index"] = 172.2
-    humid_ctx["weather"]["misery_description"] = "😡 Miserable"
+    humid_ctx["weather"]["misery_index"] = 100.0
+    humid_ctx["weather"]["misery_description"] = "☠️⚠️ Extreme (hot)"
+    humid_ctx["misery"]["index"]["value"] = 100.0
+    humid_ctx["misery"]["index"]["emoji"] = "☠️⚠️"
+    humid_ctx["misery"]["index"]["polarity"] = "hot"
+    humid_ctx["misery"]["index"]["severity"] = "extreme"
+    humid_ctx["misery"]["index"]["description"] = "☠️⚠️ Extreme (hot)"
+    humid_ctx["misery"]["emoji"] = "☠️⚠️"
+    humid_ctx["misery"]["polarity"] = "hot"
+    humid_ctx["misery"]["severity"] = "extreme"
+    humid_ctx["misery"]["description"] = "☠️⚠️ Extreme (hot)"
     humid_ctx["weather"]["aqi"] = 67
     humid_ctx["weather"]["temp_f"] = "89.8F"
     humid_ctx["weather"]["dewpoint_f"] = "80.2F"
@@ -725,7 +771,7 @@ PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
 🚄 {{ intervals.summary }}""",
     "commute": """🚲 Commute Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }}
-🌤️ MI {{ weather.misery_index }} {{ weather.misery_description }}""",
+🌤️ MI {{ misery.index }} {{ misery.index.emoji }}""",
     "trail": """🌲 Trail Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
 🚄 {{ intervals.summary }}""",
@@ -737,7 +783,7 @@ PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
 ❤️ Fun miles count too.""",
     "away": """🧳 Away Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
-🌤️ {{ weather.condition }} | MI {{ weather.misery_index }}""",
+🌤️ {{ weather.condition }} | MI {{ misery.index }} {{ misery.index.emoji }}""",
     "home": """🏡 Home Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
 7️⃣ {{ periods.week.gap }} | {{ periods.week.distance_miles }} mi | {{ periods.week.duration }}""",
@@ -898,6 +944,37 @@ def normalize_template_context(context: dict[str, Any]) -> dict[str, Any]:
             ):
                 if key not in activity and key in intervals:
                     activity[key] = intervals[key]
+
+    misery = normalized.get("misery")
+    weather = normalized.get("weather")
+    if not isinstance(misery, dict):
+        misery = {}
+        normalized["misery"] = misery
+
+    if "index" not in misery and isinstance(weather, dict):
+        weather_misery = weather.get("misery_index")
+        weather_desc = weather.get("misery_description")
+        emoji = "N/A"
+        if isinstance(weather_desc, str) and weather_desc.strip():
+            emoji = weather_desc.strip().split(" ", 1)[0]
+        misery["index"] = {
+            "value": weather_misery if isinstance(weather_misery, (int, float)) else "N/A",
+            "emoji": emoji,
+            "polarity": "neutral",
+            "severity": "unknown",
+            "description": weather_desc if isinstance(weather_desc, str) else "",
+            "hot_load": "N/A",
+            "cold_load": "N/A",
+            "delta": "N/A",
+        }
+        misery["emoji"] = emoji
+        misery["polarity"] = "neutral"
+        misery["severity"] = "unknown"
+        misery["description"] = weather_desc if isinstance(weather_desc, str) else ""
+
+    index_payload = misery.get("index")
+    if isinstance(index_payload, dict) and not isinstance(index_payload, _DisplayValueMapping):
+        misery["index"] = _DisplayValueMapping(index_payload)
 
     return normalized
 
@@ -2340,9 +2417,45 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
     },
     "weather.misery_index": {
         "label": "Misery Index",
-        "description": "Mirrored running-condition index centered at 100.",
+        "description": "Running-normalized additive misery index (0 is ideal, higher is worse).",
         "tags": ["weather", "mi", "risk"],
         "metric_key": "weather_misery_index",
+    },
+    "misery.index": {
+        "label": "Misery Index Object",
+        "description": "Display-friendly misery index object. String form is numeric value.",
+        "tags": ["weather", "mi", "object"],
+        "metric_key": "misery_index_object",
+    },
+    "misery.index.value": {
+        "label": "Misery Index Value",
+        "description": "Running-normalized additive misery index where 0 is ideal.",
+        "tags": ["weather", "mi", "severity"],
+        "metric_key": "misery_index_value",
+    },
+    "misery.index.emoji": {
+        "label": "Misery Emoji",
+        "description": "Emoji selected from polarity and severity.",
+        "tags": ["weather", "mi", "emoji"],
+        "metric_key": "misery_index_emoji",
+    },
+    "misery.index.polarity": {
+        "label": "Misery Polarity",
+        "description": "Dominant thermal direction: hot, cold, or neutral.",
+        "tags": ["weather", "mi", "polarity"],
+        "metric_key": "misery_index_polarity",
+    },
+    "misery.index.severity": {
+        "label": "Misery Severity",
+        "description": "Severity bucket derived from misery index value.",
+        "tags": ["weather", "mi", "severity"],
+        "metric_key": "misery_index_severity",
+    },
+    "misery.index.description": {
+        "label": "Misery Description",
+        "description": "Human-readable misery summary.",
+        "tags": ["weather", "mi", "summary"],
+        "metric_key": "misery_index_description",
     },
     "weather.aqi": {
         "label": "AQI",
@@ -2870,6 +2983,7 @@ _FIELD_CATALOG_PREFIX_MAP: list[tuple[str, dict[str, Any]]] = [
     ("raw.week.", {"source": "Derived", "source_note": "Computed 7-day aggregate from source activities.", "tags": ["raw", "summary", "week"]}),
     ("raw.month.", {"source": "Derived", "source_note": "Computed 30-day aggregate from source activities.", "tags": ["raw", "summary", "month"]}),
     ("raw.year.", {"source": "Derived", "source_note": "Computed YTD aggregate from source activities.", "tags": ["raw", "summary", "year"]}),
+    ("misery.", {"source": "Derived", "source_note": "Running-normalized misery index object and polarity metadata.", "tags": ["weather", "mi"]}),
     ("weather.details.", {"source": "Weather.com", "source_note": "Detailed weather conditions for activity time.", "tags": ["weather", "details"]}),
     ("weather.components.", {"source": "Weather.com", "source_note": "Misery index component breakdown.", "tags": ["weather", "mi", "components"]}),
     ("intervals.", {"source": "Intervals.icu", "source_note": "Intervals.icu activity detail and rollup metrics.", "tags": ["intervals"]}),

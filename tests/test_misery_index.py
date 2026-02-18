@@ -10,16 +10,12 @@ from stat_modules.misery_index import (
 
 class TestMiseryIndex(unittest.TestCase):
     def test_misery_buckets(self) -> None:
-        self.assertEqual(get_misery_index_description(10), "☠️⚠️ High risk (cold)")
-        self.assertEqual(get_misery_index_description(35), "🥶 Oppressively cold")
-        self.assertEqual(get_misery_index_description(65), "😕 Mild uncomfortable (cold)")
-        self.assertEqual(get_misery_index_description(95), "😀 Perfect")
-        self.assertEqual(get_misery_index_description(135), "😕 Mild uncomfortable")
-        self.assertEqual(get_misery_index_description(145), "😓 Moderate uncomfortable")
-        self.assertEqual(get_misery_index_description(155), "😰 Very uncomfortable")
-        self.assertEqual(get_misery_index_description(165), "🥵 Oppressive")
-        self.assertEqual(get_misery_index_description(175), "😡 Miserable")
-        self.assertEqual(get_misery_index_description(185), "☠️⚠️ High risk")
+        self.assertEqual(get_misery_index_description(0), "😀 Ideal")
+        self.assertEqual(get_misery_index_description(10), "😕 Mild")
+        self.assertEqual(get_misery_index_description(25), "😓 Moderate")
+        self.assertEqual(get_misery_index_description(35), "😰 High")
+        self.assertEqual(get_misery_index_description(65), "😡 Very High")
+        self.assertEqual(get_misery_index_description(95), "☠️⚠️ Extreme")
 
     def test_cold_dry_windy_is_low_score(self) -> None:
         score = calculate_misery_index(
@@ -32,7 +28,8 @@ class TestMiseryIndex(unittest.TestCase):
             is_day=True,
             condition_text="Overcast",
         )
-        self.assertLess(score, 50)
+        self.assertGreaterEqual(score, 80)
+        self.assertLessEqual(score, 100)
 
     def test_hot_humid_stagnant_is_high_score(self) -> None:
         score = calculate_misery_index(
@@ -45,7 +42,8 @@ class TestMiseryIndex(unittest.TestCase):
             is_day=True,
             condition_text="Sunny",
         )
-        self.assertGreater(score, 180)
+        self.assertGreaterEqual(score, 80)
+        self.assertLessEqual(score, 100)
 
     def test_rain_and_snow_push_colder_side(self) -> None:
         score = calculate_misery_index(
@@ -59,7 +57,7 @@ class TestMiseryIndex(unittest.TestCase):
             chance_of_snow=80,
             condition_text="Moderate snow",
         )
-        self.assertLess(score, 40)
+        self.assertGreater(score, 40)
 
     def test_no_large_jump_at_thermal_transition_edges(self) -> None:
         around_50 = [
@@ -130,6 +128,59 @@ class TestMiseryIndex(unittest.TestCase):
         self.assertIn("score_raw", components)
         self.assertIn("hot_points", components)
         self.assertIn("cold_points", components)
+        self.assertIn("component_wind_penalty", components)
+        self.assertIn("component_wind_strong_effort", components)
+        self.assertIn("severity", components)
+        self.assertIn("polarity", components)
+        self.assertIn("emoji", components)
+
+    def test_goldilocks_profile_scores_neutral_center(self) -> None:
+        score = calculate_misery_index(
+            temp_f=50.0,
+            dew_point_f=45.0,
+            humidity=70.0,
+            wind_speed_mph=2.0,
+            cloud_cover_pct=35.0,
+            precip_in=0.0,
+            is_day=True,
+            heat_index_f=50.0,
+            wind_chill_f=50.0,
+        )
+        self.assertEqual(score, 0.0)
+
+    def test_wind_outside_ideal_band_reduces_score(self) -> None:
+        windy_components = calculate_misery_index_components(
+            temp_f=63.0,
+            dew_point_f=49.6,
+            humidity=61.0,
+            wind_speed_mph=11.9,
+            cloud_cover_pct=18.0,
+            precip_in=0.0,
+            is_day=True,
+            chance_of_rain=4.0,
+            chance_of_snow=0.0,
+            condition_text="Clear",
+            heat_index_f=63.0,
+            wind_chill_f=63.0,
+        )
+        windy = windy_components["score"]
+        ideal = calculate_misery_index(
+            temp_f=63.0,
+            dew_point_f=49.6,
+            humidity=61.0,
+            wind_speed_mph=2.0,
+            cloud_cover_pct=18.0,
+            precip_in=0.0,
+            is_day=True,
+            chance_of_rain=4.0,
+            chance_of_snow=0.0,
+            condition_text="Clear",
+            heat_index_f=63.0,
+            wind_chill_f=63.0,
+        )
+        self.assertGreater(windy, ideal)
+        self.assertGreater(windy, 15.0)
+        self.assertGreater(windy_components["component_wind_strong_effort"], 0.0)
 
     def test_aqi_description(self) -> None:
         self.assertEqual(get_aqi_description(1), "😃")

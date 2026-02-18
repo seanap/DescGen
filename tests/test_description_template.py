@@ -261,6 +261,7 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("activity", context)
         self.assertIn("training", context)
         self.assertIn("weather", context)
+        self.assertIn("misery", context)
         self.assertIn("periods", context)
         self.assertIn("crono", context)
         self.assertIn("average_net_kcal_per_day", context["crono"])
@@ -285,14 +286,24 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("last_activity", context["garmin"])
         self.assertIn("badges", context["garmin"])
         self.assertIn("segment_notables", context["activity"])
+        self.assertIn("index", context["misery"])
 
     def test_sample_fixture_context(self) -> None:
         winter = get_sample_template_context("winter_grind")
         self.assertIn("weather", winter)
+        self.assertIn("misery", winter)
         self.assertIn("misery_index", winter["weather"])
         fixtures = list_sample_template_fixtures()
         self.assertGreaterEqual(len(fixtures), 2)
         self.assertTrue(any(item["name"] == "winter_grind" for item in fixtures))
+
+    def test_misery_index_display_object_renders_value_and_emoji(self) -> None:
+        context = get_sample_template_context()
+        result = render_template_text("{{ misery.index }}|{{ misery.index.emoji }}|{{ misery.index.polarity }}", context)
+        self.assertTrue(result["ok"])
+        rendered = str(result["description"])
+        self.assertEqual(rendered.split("|")[0], "20.7")
+        self.assertEqual(rendered.split("|")[1], "😓")
 
     def test_template_versions_and_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as td:

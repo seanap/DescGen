@@ -12,6 +12,10 @@ import requests
 logger = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 30
 
+IDEAL_WIND_LOW_MPH = 1.5
+IDEAL_WIND_HIGH_MPH = 5.0
+MI_INDEX_SCALE = 4.0
+
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
@@ -56,6 +60,29 @@ def _saturating(value: float, scale: float) -> float:
     if value <= 0:
         return 0.0
     return value / (value + max(1e-6, scale))
+
+
+def _hinge_plus(value: float, edge: float, scale: float) -> float:
+    return max(0.0, (value - edge) / max(1e-6, scale))
+
+
+def _hinge_minus(value: float, edge: float, scale: float) -> float:
+    return max(0.0, (edge - value) / max(1e-6, scale))
+
+
+def _band_penalty(
+    value: float,
+    *,
+    lower: float,
+    upper: float,
+    lower_scale: float,
+    upper_scale: float,
+    lower_weight: float,
+    upper_weight: float,
+) -> tuple[float, float, float]:
+    low = lower_weight * (_hinge_minus(value, lower, lower_scale) ** 2)
+    high = upper_weight * (_hinge_plus(value, upper, upper_scale) ** 2)
+    return low + high, low, high
 
 
 def _parse_activity_time(activity: dict[str, Any]) -> datetime | None:
@@ -235,7 +262,7 @@ def calculate_misery_index_components(
     wind_chill_f: float | None = None,
     will_it_rain: bool | None = None,
     will_it_snow: bool | None = None,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     rh = _clamp(float(humidity), 0.0, 100.0)
     wind = max(0.0, float(wind_speed_mph))
     dew = float(dew_point_f)
@@ -248,62 +275,101 @@ def calculate_misery_index_components(
     hi = float(heat_index_f) if isinstance(heat_index_f, (int, float)) else _heat_index_f(temp, rh)
     wc = float(wind_chill_f) if isinstance(wind_chill_f, (int, float)) else _wind_chill_f(temp, wind)
 
-    # Smoothly blend apparent temperature sources so we avoid branch cliffs.
-    hot_weight = _smoothstep(temp, 75.0, 85.0)
-    cold_weight = 1.0 - _smoothstep(temp, 45.0, 55.0)
+    # Running-normalized apparent temperature blend.
+    hot_weight = _smoothstep(max(temp, hi), 78.0, 88.0)
+    cold_weight = _smoothstep(50.0 - temp, 0.0, 12.0) * _smoothstep(wind, 2.5, 6.0)
+    blend_total = hot_weight + cold_weight
+    if blend_total > 1.0:
+        hot_weight /= blend_total
+        cold_weight /= blend_total
     neutral_weight = max(0.0, 1.0 - hot_weight - cold_weight)
     apparent = (neutral_weight * temp) + (hot_weight * hi) + (cold_weight * wc)
 
-    thermal_hot = max(0.0, apparent - 70.0)
-    thermal_cold = max(0.0, 50.0 - apparent)
+    temp_points, thermal_cold_points, thermal_hot_points = _band_penalty(
+        apparent,
+        lower=50.0,
+        upper=58.0,
+        lower_scale=10.0,
+        upper_scale=12.0,
+        lower_weight=1.0,
+        upper_weight=1.2,
+    )
+    dew_points, dew_cold_points, dew_hot_points = _band_penalty(
+        dew,
+        lower=30.0,
+        upper=55.0,
+        lower_scale=20.0,
+        upper_scale=12.0,
+        lower_weight=0.3,
+        upper_weight=1.0,
+    )
+    rh_points, dryness_cold_points, humidity_hot_points = _band_penalty(
+        rh,
+        lower=30.0,
+        upper=70.0,
+        lower_scale=25.0,
+        upper_scale=20.0,
+        lower_weight=0.15,
+        upper_weight=0.25,
+    )
 
-    thermal_hot_points = (0.90 * thermal_hot) + (0.018 * thermal_hot * thermal_hot)
-    thermal_cold_points = (1.15 * thermal_cold) + (0.022 * thermal_cold * thermal_cold)
-
-    dew_hot = max(0.0, dew - 60.0)
-    dew_cold = max(0.0, 25.0 - dew)
-    dew_hot_points = (0.38 * dew_hot) + (0.008 * dew_hot * dew_hot)
-    dew_cold_points = 0.22 * dew_cold
-
-    humidity_hot_points = max(0.0, rh - 72.0) * _smoothstep(temp, 78.0, 95.0) * 0.08
-    dryness_cold_points = max(0.0, 32.0 - rh) * _smoothstep(50.0 - temp, 0.0, 20.0) * 0.10
-
+    heat_humidity_points = (
+        0.3
+        * (_hinge_plus(apparent, 68.0, 12.0) ** 2)
+        * (_hinge_plus(dew, 55.0, 12.0) ** 2)
+    )
     stagnant_hot_points = (
-        max(0.0, 2.5 - wind)
-        * _smoothstep(temp, 80.0, 95.0)
-        * _smoothstep(rh, 65.0, 85.0)
-        * 2.5
-    )
-    hot_breeze_relief = (
-        max(0.0, min(wind, 16.0) - 2.0)
-        * _smoothstep(temp, 82.0, 98.0)
-        * _smoothstep(rh, 60.0, 85.0)
-        * 0.35
+        1.6
+        * (_hinge_minus(wind, 2.5, 1.8) ** 2)
+        * (_hinge_plus(apparent, 78.0, 12.0) ** 2)
+        * (_hinge_plus(rh, 65.0, 20.0) ** 2)
     )
 
-    # Wind chill already handles most thermal wind effects; this captures severe non-thermal exposure.
-    gale_cold_points = max(0.0, wind - 22.0) * _smoothstep(45.0 - temp, 0.0, 20.0) * 0.22
+    wind_points, low_wind_points, high_wind_points = _band_penalty(
+        wind,
+        lower=IDEAL_WIND_LOW_MPH,
+        upper=IDEAL_WIND_HIGH_MPH,
+        lower_scale=2.0,
+        upper_scale=5.0,
+        lower_weight=0.2,
+        upper_weight=0.5,
+    )
+    strong_wind_effort_points = 10.0 * (_hinge_plus(wind, 10.0, 3.0) ** 2)
+    wind_cold_exposure_points = (
+        0.15
+        * (_hinge_plus(wind, 8.0, 5.0) ** 2)
+        * (_hinge_minus(apparent, 45.0, 15.0) ** 2)
+    )
+    wind_penalty_points = wind_points + strong_wind_effort_points + wind_cold_exposure_points
+
+    day_flag = _to_bool(is_day)
+    sun_hot_points = 0.0
+    cloud_cold_points = 0.0
+    if day_flag is True:
+        cloud_fraction = cloud / 100.0
+        sun_fraction = 1.0 - cloud_fraction
+        sun_hot_points = 1.2 * (_hinge_plus(apparent, 70.0, 15.0) ** 2) * (sun_fraction ** 2)
+        cloud_cold_points = 0.8 * (_hinge_minus(apparent, 40.0, 12.0) ** 2) * (cloud_fraction ** 2)
 
     rain_intensity = _saturating(precip, 0.08)
-    rain_points = 18.0 * rain_intensity
-    rain_hot_points = 0.0
-    rain_cold_points = 0.0
-    if temp <= 60.0:
-        rain_cold_points += rain_points
-    elif temp >= 78.0:
-        rain_hot_points += rain_points * 0.45
-    else:
-        rain_cold_points += rain_points * 0.35
-
-    cold_rain_extra = _smoothstep(45.0 - temp, 0.0, 20.0) * 5.0 * rain_intensity
-
+    rain_signal = max(
+        rain_intensity,
+        ((rain_chance / 100.0) * 0.5) if precip < 0.005 and rain_chance > 0 else 0.0,
+    )
     rain_hint_points = 0.0
     if precip < 0.005 and rain_chance > 0:
-        hint_load = (rain_chance / 100.0) ** 1.4
-        if temp <= 60.0:
-            rain_hint_points += 2.0 * hint_load
-        elif temp >= 80.0:
-            rain_hint_points += 1.6 * hint_load
+        rain_hint_points = (
+            0.8
+            * ((rain_chance / 100.0) ** 1.4)
+            * (
+                (_hinge_minus(apparent, 50.0, 12.0) ** 2)
+                + (_hinge_plus(apparent, 80.0, 10.0) ** 2)
+            )
+        )
+
+    rain_hot_points = 1.0 * (_hinge_plus(apparent, 80.0, 10.0) ** 2) * rain_signal
+    rain_cold_points = 2.4 * (_hinge_minus(apparent, 55.0, 12.0) ** 2) * (rain_signal ** 2)
+    cold_rain_extra = 0.9 * (_hinge_plus(wind, 6.0, 4.0) ** 2) * (rain_signal ** 2)
 
     snow_signal = max(snow_chance / 100.0, rain_intensity if _is_snow_condition(condition_text) else 0.0)
     snow_flag = _is_snow_condition(condition_text)
@@ -315,69 +381,103 @@ def calculate_misery_index_components(
 
     snow_points = 0.0
     if snow_flag:
-        snow_points = 8.0 + (10.0 * snow_signal)
-        if temp <= 32.0:
-            snow_points += 4.0
+        snow_points = 2.0 + (4.0 * snow_signal) + (1.5 * (_hinge_minus(apparent, 32.0, 8.0) ** 2))
 
-    sun_hot_points = 0.0
-    cloud_hot_relief = 0.0
-    cloud_cold_points = 0.0
-    day_flag = _to_bool(is_day)
-    if day_flag is True:
-        cloud_fraction = cloud / 100.0
-        sun_fraction = 1.0 - cloud_fraction
-        sun_hot_points = sun_fraction * _smoothstep(temp, 78.0, 98.0) * 6.0
-        cloud_hot_relief = cloud_fraction * _smoothstep(temp, 84.0, 100.0) * 2.5
-        cloud_cold_points = cloud_fraction * _smoothstep(40.0 - temp, 0.0, 20.0) * 2.0
+    # Hot/cold loads are for emoji polarity only; score remains additive.
+    wind_low_hot = low_wind_points * _smoothstep(apparent, 70.0, 88.0)
+    wind_high_cold = high_wind_points * _smoothstep(60.0 - apparent, 0.0, 25.0)
+    rain_hint_cold = rain_hint_points * _smoothstep(60.0 - apparent, 0.0, 18.0)
+    rain_hint_hot = rain_hint_points * _smoothstep(apparent, 78.0, 96.0)
+    rain_hint_neutral = max(0.0, rain_hint_points - rain_hint_cold - rain_hint_hot)
 
     hot_points = (
         thermal_hot_points
         + dew_hot_points
         + humidity_hot_points
+        + heat_humidity_points
         + stagnant_hot_points
-        + rain_hot_points
         + sun_hot_points
-    ) - (hot_breeze_relief + cloud_hot_relief)
-    hot_points = max(0.0, hot_points)
-
+        + rain_hot_points
+        + wind_low_hot
+        + rain_hint_hot
+        + (0.5 * rain_hint_neutral)
+    )
     cold_points = (
         thermal_cold_points
         + dew_cold_points
         + dryness_cold_points
-        + gale_cold_points
+        + cloud_cold_points
+        + rain_cold_points
+        + cold_rain_extra
+        + snow_points
+        + wind_high_cold
+        + wind_cold_exposure_points
+        + rain_hint_cold
+        + (0.5 * rain_hint_neutral)
+    )
+
+    # Additive misery model: no cancellation of opposing stressors.
+    misery_raw = (
+        temp_points
+        + dew_points
+        + rh_points
+        + heat_humidity_points
+        + stagnant_hot_points
+        + wind_penalty_points
+        + rain_hot_points
         + rain_cold_points
         + cold_rain_extra
         + rain_hint_points
         + snow_points
+        + sun_hot_points
         + cloud_cold_points
     )
+    raw_score = MI_INDEX_SCALE * misery_raw
+    bounded_score = _clamp(raw_score, 0.0, 100.0)
 
-    raw_score = 100.0 + hot_points - cold_points
-    bounded_score = _clamp(raw_score, -40.0, 240.0)
+    polarity = get_misery_index_polarity(hot_points, cold_points)
+    severity = get_misery_index_severity(bounded_score)
+    emoji = get_misery_index_emoji(bounded_score, polarity=polarity)
+    description = get_misery_index_description(bounded_score, polarity=polarity)
 
     return {
         "score": round(bounded_score, 1),
-        "score_raw": round(raw_score, 1),
+        "score_raw": round(raw_score, 2),
         "apparent_temp_f": round(apparent, 1),
+        "severity": severity,
+        "polarity": polarity,
+        "emoji": emoji,
+        "description": description,
         "hot_points": round(hot_points, 2),
         "cold_points": round(cold_points, 2),
-        "component_thermal_hot": round(thermal_hot_points, 2),
-        "component_thermal_cold": round(thermal_cold_points, 2),
-        "component_dew_hot": round(dew_hot_points, 2),
-        "component_dew_cold": round(dew_cold_points, 2),
-        "component_humidity_hot": round(humidity_hot_points, 2),
-        "component_dryness_cold": round(dryness_cold_points, 2),
-        "component_stagnant_hot": round(stagnant_hot_points, 2),
-        "component_hot_breeze_relief": round(hot_breeze_relief, 2),
-        "component_gale_cold": round(gale_cold_points, 2),
-        "component_rain_hot": round(rain_hot_points, 2),
-        "component_rain_cold": round(rain_cold_points, 2),
-        "component_cold_rain_extra": round(cold_rain_extra, 2),
-        "component_rain_hint": round(rain_hint_points, 2),
-        "component_snow": round(snow_points, 2),
-        "component_sun_hot": round(sun_hot_points, 2),
-        "component_cloud_hot_relief": round(cloud_hot_relief, 2),
-        "component_cloud_cold": round(cloud_cold_points, 2),
+        "delta_hot_cold": round(hot_points - cold_points, 2),
+        "component_temp_penalty": round(temp_points, 3),
+        "component_dew_penalty": round(dew_points, 3),
+        "component_humidity_penalty": round(rh_points, 3),
+        "component_heat_humidity": round(heat_humidity_points, 3),
+        "component_thermal_hot": round(thermal_hot_points, 3),
+        "component_thermal_cold": round(thermal_cold_points, 3),
+        "component_dew_hot": round(dew_hot_points, 3),
+        "component_dew_cold": round(dew_cold_points, 3),
+        "component_humidity_hot": round(humidity_hot_points, 3),
+        "component_dryness_cold": round(dryness_cold_points, 3),
+        "component_stagnant_hot": round(stagnant_hot_points, 3),
+        "component_hot_breeze_relief": 0.0,
+        "component_wind_low": round(low_wind_points, 3),
+        "component_wind_high": round(high_wind_points, 3),
+        "component_wind_hot_extra": round(wind_low_hot, 3),
+        "component_wind_cold_extra": round(wind_high_cold, 3),
+        "component_wind_strong_effort": round(strong_wind_effort_points, 3),
+        "component_wind_penalty": round(wind_penalty_points, 3),
+        "component_gale_cold": round(wind_cold_exposure_points, 3),
+        "component_rain_hot": round(rain_hot_points, 3),
+        "component_rain_cold": round(rain_cold_points, 3),
+        "component_cold_rain_extra": round(cold_rain_extra, 3),
+        "component_rain_hint": round(rain_hint_points, 3),
+        "component_snow": round(snow_points, 3),
+        "component_sun_hot": round(sun_hot_points, 3),
+        "component_cloud_hot_relief": 0.0,
+        "component_cloud_cold": round(cloud_cold_points, 3),
     }
 
 
@@ -417,34 +517,62 @@ def calculate_misery_index(
     return components["score"]
 
 
-def get_misery_index_description(misery_index: float) -> str:
-    if misery_index < 20:
-        return "☠️⚠️ High risk (cold)"
-    if 20 <= misery_index < 30:
-        return "😡 Miserable (cold)"
-    if 30 <= misery_index < 40:
-        return "🥶 Oppressively cold"
-    if 40 <= misery_index < 50:
-        return "😰 Very uncomfortable (cold)"
-    if 50 <= misery_index < 60:
-        return "😓 Moderate uncomfortable (cold)"
-    if 60 <= misery_index < 70:
-        return "😕 Mild uncomfortable (cold)"
-    if 70 <= misery_index < 130:
-        return "😀 Perfect"
-    if 130 <= misery_index < 140:
-        return "😕 Mild uncomfortable"
-    if 140 <= misery_index < 150:
-        return "😓 Moderate uncomfortable"
-    if 150 <= misery_index < 160:
-        return "😰 Very uncomfortable"
-    if 160 <= misery_index < 170:
-        return "🥵 Oppressive"
-    if 170 <= misery_index < 180:
-        return "😡 Miserable"
-    if misery_index >= 180:
-        return "☠️⚠️ High risk"
-    return "😀 Perfect"
+def get_misery_index_severity(misery_index: float) -> str:
+    if misery_index <= 5:
+        return "ideal"
+    if misery_index <= 15:
+        return "mild"
+    if misery_index <= 30:
+        return "moderate"
+    if misery_index <= 50:
+        return "high"
+    if misery_index <= 75:
+        return "very_high"
+    return "extreme"
+
+
+def get_misery_index_polarity(hot_load: float, cold_load: float, *, threshold: float = 0.35) -> str:
+    delta = float(hot_load) - float(cold_load)
+    if delta > threshold:
+        return "hot"
+    if delta < -threshold:
+        return "cold"
+    return "neutral"
+
+
+def get_misery_index_emoji(misery_index: float, *, polarity: str | None = None) -> str:
+    severity = get_misery_index_severity(misery_index)
+    if severity == "ideal":
+        return "😀"
+    if severity == "mild":
+        return "😕"
+    if severity == "moderate":
+        return "😓"
+    if severity == "high":
+        if polarity == "hot":
+            return "🥵"
+        if polarity == "cold":
+            return "🥶"
+        return "😰"
+    if severity == "very_high":
+        return "😡"
+    return "☠️⚠️"
+
+
+def get_misery_index_description(misery_index: float, *, polarity: str | None = None) -> str:
+    severity = get_misery_index_severity(misery_index)
+    emoji = get_misery_index_emoji(misery_index, polarity=polarity)
+    labels = {
+        "ideal": "Ideal",
+        "mild": "Mild",
+        "moderate": "Moderate",
+        "high": "High",
+        "very_high": "Very High",
+        "extreme": "Extreme",
+    }
+    label = labels.get(severity, "Ideal")
+    suffix = f" ({polarity})" if severity != "ideal" and polarity in {"hot", "cold"} else ""
+    return f"{emoji} {label}{suffix}"
 
 
 def get_aqi_description(us_epa_index: int | None) -> str:
@@ -479,6 +607,7 @@ def get_misery_index_details_for_activity(
         return {
             "misery_index": None,
             "misery_description": None,
+            "misery": None,
             "aqi": aqi,
             "aqi_description": get_aqi_description(aqi),
             "misery_components": None,
@@ -494,6 +623,7 @@ def get_misery_index_details_for_activity(
         return {
             "misery_index": None,
             "misery_description": None,
+            "misery": None,
             "aqi": aqi,
             "aqi_description": get_aqi_description(aqi),
             "misery_components": None,
@@ -530,9 +660,30 @@ def get_misery_index_details_for_activity(
     )
 
     misery = components["score"]
+    polarity = str(components.get("polarity") or "neutral")
+    severity = str(components.get("severity") or get_misery_index_severity(misery))
+    emoji = str(components.get("emoji") or get_misery_index_emoji(misery, polarity=polarity))
+    description = str(components.get("description") or get_misery_index_description(misery, polarity=polarity))
+    misery_payload = {
+        "index": {
+            "value": misery,
+            "emoji": emoji,
+            "polarity": polarity,
+            "severity": severity,
+            "description": description,
+            "hot_load": components.get("hot_points"),
+            "cold_load": components.get("cold_points"),
+            "delta": components.get("delta_hot_cold"),
+        },
+        "emoji": emoji,
+        "polarity": polarity,
+        "severity": severity,
+        "description": description,
+    }
     return {
         "misery_index": misery,
-        "misery_description": get_misery_index_description(misery),
+        "misery_description": description,
+        "misery": misery_payload,
         "aqi": aqi,
         "aqi_description": get_aqi_description(aqi),
         "misery_components": components,

@@ -558,16 +558,19 @@ def _local_datetime_display(
 
 def _normalize_weather_context(
     weather_payload: dict[str, Any] | None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     if not isinstance(weather_payload, dict):
-        return {}, {}
+        return {}, {}, {}
     weather_core = weather_payload.get("weather")
     if not isinstance(weather_core, dict):
         weather_core = {}
     misery_components = weather_payload.get("misery_components")
     if not isinstance(misery_components, dict):
         misery_components = {}
-    return weather_core, misery_components
+    misery_payload = weather_payload.get("misery")
+    if not isinstance(misery_payload, dict):
+        misery_payload = {}
+    return weather_core, misery_components, misery_payload
 
 
 def _to_int(value: Any) -> int | str:
@@ -1275,7 +1278,7 @@ def _build_description_context(
     work = intervals_payload.get("work", "N/A")
     efficiency = intervals_payload.get("efficiency", "N/A")
     icu_summary = intervals_payload.get("icu_summary", "N/A")
-    weather_core, weather_components = _normalize_weather_context(weather_payload)
+    weather_core, weather_components, misery_payload = _normalize_weather_context(weather_payload)
 
     try:
         local_tz = ZoneInfo(timezone_name)
@@ -1364,6 +1367,31 @@ def _build_description_context(
     misery_desc_display = misery_index_description or ""
     aqi_display = air_quality_index if air_quality_index is not None else "N/A"
     aqi_desc_display = aqi_description or ""
+    misery_index_payload = misery_payload.get("index")
+    if not isinstance(misery_index_payload, dict):
+        misery_index_payload = {}
+    misery_index_value = misery_index_payload.get("value")
+    if not isinstance(misery_index_value, (int, float)):
+        misery_index_value = misery_index if isinstance(misery_index, (int, float)) else None
+    misery_emoji = misery_index_payload.get("emoji")
+    if not isinstance(misery_emoji, str):
+        misery_emoji = (
+            misery_desc_display.split(" ", 1)[0]
+            if isinstance(misery_desc_display, str) and misery_desc_display.strip()
+            else "N/A"
+        )
+    misery_polarity = misery_index_payload.get("polarity")
+    if not isinstance(misery_polarity, str):
+        misery_polarity = "neutral"
+    misery_severity = misery_index_payload.get("severity")
+    if not isinstance(misery_severity, str):
+        misery_severity = "unknown"
+    misery_description = misery_index_payload.get("description")
+    if not isinstance(misery_description, str):
+        misery_description = misery_desc_display
+    hot_load = misery_index_payload.get("hot_load")
+    cold_load = misery_index_payload.get("cold_load")
+    delta_hot_cold = misery_index_payload.get("delta")
 
     vo2_value = training.get("vo2max")
     vo2_display = _display_number(vo2_value, decimals=1) if isinstance(vo2_value, (int, float)) else str(vo2_value)
@@ -1418,6 +1446,22 @@ def _build_description_context(
             "average_status": crono_summary.get("average_status"),
             "protein_g": crono_summary.get("protein_g"),
             "carbs_g": crono_summary.get("carbs_g"),
+        },
+        "misery": {
+            "index": {
+                "value": round(float(misery_index_value), 1) if isinstance(misery_index_value, (int, float)) else "N/A",
+                "emoji": misery_emoji,
+                "polarity": misery_polarity,
+                "severity": misery_severity,
+                "description": misery_description,
+                "hot_load": hot_load if isinstance(hot_load, (int, float)) else "N/A",
+                "cold_load": cold_load if isinstance(cold_load, (int, float)) else "N/A",
+                "delta": delta_hot_cold if isinstance(delta_hot_cold, (int, float)) else "N/A",
+            },
+            "emoji": misery_emoji,
+            "polarity": misery_polarity,
+            "severity": misery_severity,
+            "description": misery_description,
         },
         "weather": {
             "misery_index": misery_display,
