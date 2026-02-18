@@ -2077,27 +2077,14 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             settings,
             description_context,
             profile_id=profile_id,
+            allow_seed_fallback=False,
         )
         if render_result["ok"]:
             description = str(render_result["description"])
         else:
-            logger.error("Template render failed: %s", render_result.get("error"))
-            description = _build_description(
-                detailed_activity=detailed_activity,
-                training=training,
-                intervals_payload=intervals_payload,
-                week=period_summaries["week"],
-                month=period_summaries["month"],
-                year=period_summaries["year"],
-                longest_streak=longest_streak,
-                notables=notables,
-                latest_elevation_feet=latest_elevation_feet,
-                misery_index=misery_index,
-                misery_index_description=misery_desc,
-                air_quality_index=aqi,
-                aqi_description=aqi_desc,
-                crono_line=crono_line,
-            )
+            error_text = str(render_result.get("error") or "Unknown template render error")
+            logger.error("Template render failed for profile %s: %s", profile_id, error_text)
+            raise RuntimeError(f"Template render failed for profile '{profile_id}': {error_text}")
 
         _run_required_call(
             settings,

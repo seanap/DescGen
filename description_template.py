@@ -2074,6 +2074,7 @@ def render_with_active_template(
     context: dict[str, Any],
     *,
     profile_id: str = DEFAULT_PROFILE_ID,
+    allow_seed_fallback: bool = True,
 ) -> dict[str, Any]:
     active = get_active_template(settings, profile_id=profile_id)
     active_profile_id = str(active.get("profile_id") or DEFAULT_PROFILE_ID)
@@ -2087,7 +2088,7 @@ def render_with_active_template(
         render_result["fallback_used"] = False
         return render_result
 
-    if active["is_custom"]:
+    if active["is_custom"] and allow_seed_fallback:
         fallback_result = render_template_text(_profile_template_seed(active_profile_id), context)
         fallback_result["is_custom_template"] = active["is_custom"]
         fallback_result["template_path"] = active["path"]
