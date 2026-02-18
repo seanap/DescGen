@@ -32,8 +32,11 @@ services:
     network_mode: bridge
     env_file:
       - .env
+    environment:
+      - SETUP_ENV_FILE=/app/.env
     volumes:
       - ./data:/app/state
+      - ./.env:/app/.env
     ports:
       - "${API_PORT:-1609}:${API_PORT:-1609}"
     healthcheck:

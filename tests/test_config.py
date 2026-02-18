@@ -106,6 +106,7 @@ class TestConfigEnvAliases(unittest.TestCase):
                 state_dir / "setup_overrides.json",
                 {
                     "version": 1,
+                    "updated_at_utc": "2999-01-01T00:00:00+00:00",
                     "values": {
                         "STRAVA_CLIENT_ID": "override-client-id",
                         "STRAVA_CLIENT_SECRET": "override-client-secret",
@@ -136,6 +137,36 @@ class TestConfigEnvAliases(unittest.TestCase):
                 self.assertEqual(settings.timezone, "America/Phoenix")
                 self.assertFalse(settings.enable_weather)
                 self.assertTrue(settings.enable_crono_api)
+
+    def test_stale_setup_overrides_do_not_override_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state_dir = Path(tmp_dir)
+            write_json(
+                state_dir / "setup_overrides.json",
+                {
+                    "version": 1,
+                    "updated_at_utc": "2000-01-01T00:00:00+00:00",
+                    "values": {
+                        "TIMEZONE": "America/Phoenix",
+                        "ENABLE_WEATHER": False,
+                    },
+                },
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "STATE_DIR": str(state_dir),
+                    "STRAVA_CLIENT_ID": "env-client-id",
+                    "STRAVA_CLIENT_SECRET": "env-client-secret",
+                    "STRAVA_REFRESH_TOKEN": "env-refresh-token",
+                    "TIMEZONE": "UTC",
+                    "ENABLE_WEATHER": "true",
+                },
+                clear=True,
+            ):
+                settings = Settings.from_env()
+                self.assertEqual(settings.timezone, "UTC")
+                self.assertTrue(settings.enable_weather)
 
 
 if __name__ == "__main__":

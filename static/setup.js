@@ -314,15 +314,7 @@ async function disconnectStrava() {
   }
   await loadConfig();
   await refreshEnvSnippet();
-  const envManaged = Boolean(res.payload?.env_managed_tokens);
-  if (envManaged) {
-    setStatus(
-      "Strava token overrides cleared. Tokens still exist in environment variables.",
-      "ok",
-    );
-  } else {
-    setStatus("Strava tokens disconnected.", "ok");
-  }
+  setStatus("Strava tokens disconnected.", "ok");
 }
 
 async function copyEnvSnippet() {

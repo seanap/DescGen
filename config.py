@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from setup_config import read_setup_overrides
+from datetime import datetime, timezone
+
+from setup_config import read_setup_overrides_payload
 
 try:
     from dotenv import load_dotenv
@@ -15,6 +17,8 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
 
 
 load_dotenv()
+
+PROCESS_STARTED_UTC = datetime.now(timezone.utc)
 
 
 EnvGetter = Callable[[str], str | None]
@@ -114,6 +118,18 @@ def _optional_float_env(name: str, *, getenv: EnvGetter = os.getenv) -> float | 
         return None
 
 
+def _parse_utc(raw: object) -> datetime | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 @dataclass(frozen=True)
 class Settings:
     strava_client_id: str
@@ -173,10 +189,14 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         state_dir = Path(os.getenv("STATE_DIR", "state")).resolve()
-        setup_overrides = read_setup_overrides(state_dir)
+        setup_overrides_payload = read_setup_overrides_payload(state_dir)
+        setup_overrides_raw = setup_overrides_payload.get("values")
+        setup_overrides = setup_overrides_raw if isinstance(setup_overrides_raw, dict) else {}
+        overrides_updated_at = _parse_utc(setup_overrides_payload.get("updated_at_utc"))
+        overrides_live = bool(overrides_updated_at and overrides_updated_at > PROCESS_STARTED_UTC)
 
         def env_with_setup_overrides(name: str) -> str | None:
-            if name in setup_overrides:
+            if overrides_live and name in setup_overrides:
                 overridden = setup_overrides[name]
                 if isinstance(overridden, bool):
                     return "true" if overridden else "false"

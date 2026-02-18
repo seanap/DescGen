@@ -68,8 +68,11 @@ services:
     network_mode: bridge
     env_file:
       - .env
+    environment:
+      - SETUP_ENV_FILE=/app/.env
     volumes:
       - ./data:/app/state
+      - ./.env:/app/.env
     ports:
       - "1609:1609"
     healthcheck:
@@ -176,7 +179,7 @@ http://localhost:1609/editor
 - `GET /service-metrics`
 - `GET /setup` (web onboarding for provider config + OAuth)
 - `GET /setup/api/config` (current setup values with secret masking)
-- `PUT /setup/api/config` (save setup values into state overrides)
+- `PUT /setup/api/config` (save setup values to `.env` + state overrides for immediate effect)
 - `GET /setup/api/env` (render effective `.env` snippet)
 - `GET /setup/api/strava/status` (Strava OAuth/config status)
 - `POST /setup/api/strava/oauth/start` (start Strava OAuth authorization flow)
@@ -241,6 +244,11 @@ curl -X POST http://localhost:1609/editor/template/rollback -H "Content-Type: ap
 open http://localhost:1609/editor
 ```
 </details>
+
+Setup behavior:
+- `.env` is the canonical persisted config.
+- `/setup` writes `.env` and also mirrors values into `state/setup_overrides.json` so changes apply immediately without container restart.
+- Manual edits to `.env` are applied after container restart.
 
 # Step-by-Step API Setup
 
