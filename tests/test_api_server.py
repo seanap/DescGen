@@ -2,7 +2,6 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 try:
     import api_server
@@ -17,15 +16,20 @@ class TestApiServer(unittest.TestCase):
         self._original_run_once = api_server.run_once
         self._original_is_worker_healthy = api_server.is_worker_healthy
         self._original_settings = api_server.settings
+        self._original_state_dir_env = os.environ.get("STATE_DIR")
 
     def tearDown(self) -> None:
         api_server.run_once = self._original_run_once
         api_server.is_worker_healthy = self._original_is_worker_healthy
         api_server.settings = self._original_settings
+        if self._original_state_dir_env is None:
+            os.environ.pop("STATE_DIR", None)
+        else:
+            os.environ["STATE_DIR"] = self._original_state_dir_env
 
     def _set_temp_state_dir(self, temp_dir: str) -> None:
-        with patch.dict(os.environ, {"STATE_DIR": temp_dir}, clear=False):
-            api_server.settings = api_server.Settings.from_env()
+        os.environ["STATE_DIR"] = temp_dir
+        api_server.settings = api_server.Settings.from_env()
         api_server.settings.ensure_state_paths()
 
     def test_rerun_latest_endpoint(self) -> None:
