@@ -212,6 +212,16 @@ class TestDescriptionTemplate(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertTrue(result["fallback_used"])
 
+    def test_custom_template_render_can_disable_seed_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+            save_active_template(settings, "{{ missing_var.attribute }}")
+            result = render_with_active_template(settings, {"missing_var": {}}, allow_seed_fallback=False)
+            self.assertFalse(result["ok"])
+            self.assertFalse(result["fallback_used"])
+            self.assertTrue(isinstance(result.get("error"), str) and result["error"])
+
     def test_schema_builder(self) -> None:
         context = {
             "activity": {"distance_miles": "8.02", "beers": "5.1"},
