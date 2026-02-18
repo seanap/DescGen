@@ -1,4 +1,8 @@
+import os
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 try:
     import api_server
@@ -12,10 +16,17 @@ class TestApiServer(unittest.TestCase):
         self.client = api_server.app.test_client()
         self._original_run_once = api_server.run_once
         self._original_is_worker_healthy = api_server.is_worker_healthy
+        self._original_settings = api_server.settings
 
     def tearDown(self) -> None:
         api_server.run_once = self._original_run_once
         api_server.is_worker_healthy = self._original_is_worker_healthy
+        api_server.settings = self._original_settings
+
+    def _set_temp_state_dir(self, temp_dir: str) -> None:
+        with patch.dict(os.environ, {"STATE_DIR": temp_dir}, clear=False):
+            api_server.settings = api_server.Settings.from_env()
+        api_server.settings.ensure_state_paths()
 
     def test_rerun_latest_endpoint(self) -> None:
         api_server.run_once = lambda **kwargs: {"status": "updated", "kwargs": kwargs}
@@ -78,6 +89,78 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
         self.assertIn("cycle_service_calls", payload)
+
+    def test_setup_page_endpoint(self) -> None:
+        response = self.client.get("/setup")
+        self.assertEqual(response.status_code, 200)
+
+    def test_setup_config_and_env_endpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+
+            get_response = self.client.get("/setup/api/config")
+            self.assertEqual(get_response.status_code, 200)
+            get_payload = get_response.get_json()
+            self.assertEqual(get_payload["status"], "ok")
+            self.assertIn("provider_fields", get_payload)
+            self.assertIn("values", get_payload)
+
+            put_response = self.client.put(
+                "/setup/api/config",
+                json={
+                    "values": {
+                        "TIMEZONE": "America/Chicago",
+                        "ENABLE_WEATHER": False,
+                        "WEATHER_API_KEY": "weather-secret",
+                    }
+                },
+            )
+            self.assertEqual(put_response.status_code, 200)
+            put_payload = put_response.get_json()
+            self.assertEqual(put_payload["status"], "ok")
+            self.assertEqual(put_payload["values"]["TIMEZONE"], "America/Chicago")
+            self.assertFalse(put_payload["values"]["ENABLE_WEATHER"])
+            self.assertEqual(put_payload["values"]["WEATHER_API_KEY"], "")
+            self.assertTrue(put_payload["secret_presence"]["WEATHER_API_KEY"])
+
+            env_response = self.client.get("/setup/api/env")
+            self.assertEqual(env_response.status_code, 200)
+            env_payload = env_response.get_json()
+            self.assertEqual(env_payload["status"], "ok")
+            self.assertIn("TIMEZONE=America/Chicago", env_payload["env"])
+            self.assertIn("ENABLE_WEATHER=false", env_payload["env"])
+            self.assertIn("WEATHER_API_KEY=weather-secret", env_payload["env"])
+
+            overrides_path = Path(temp_dir) / "setup_overrides.json"
+            self.assertTrue(overrides_path.exists())
+
+    def test_setup_strava_oauth_start_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+
+            missing_response = self.client.post("/setup/api/strava/oauth/start", json={})
+            self.assertEqual(missing_response.status_code, 400)
+
+            self.client.put(
+                "/setup/api/config",
+                json={
+                    "values": {
+                        "STRAVA_CLIENT_ID": "12345",
+                        "STRAVA_CLIENT_SECRET": "secret-abc",
+                    }
+                },
+            )
+
+            start_response = self.client.post(
+                "/setup/api/strava/oauth/start",
+                json={"redirect_uri": "http://localhost:1609/setup/strava/callback"},
+            )
+            self.assertEqual(start_response.status_code, 200)
+            start_payload = start_response.get_json()
+            self.assertEqual(start_payload["status"], "ok")
+            self.assertIn("strava.com/oauth/authorize", start_payload["authorize_url"])
+            self.assertIn("client_id=12345", start_payload["authorize_url"])
+            self.assertIn("state", start_payload)
 
     def test_editor_schema_sample_context_endpoint(self) -> None:
         response = self.client.get("/editor/schema?context_mode=sample")

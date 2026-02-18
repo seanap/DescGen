@@ -1,8 +1,11 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from config import Settings
+from storage import write_json
 
 
 class TestConfigEnvAliases(unittest.TestCase):
@@ -95,6 +98,44 @@ class TestConfigEnvAliases(unittest.TestCase):
             settings = Settings.from_env()
             self.assertEqual(settings.intervals_user_id, "canonical-user")
             self.assertEqual(settings.timezone, "America/Denver")
+
+    def test_setup_overrides_are_applied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state_dir = Path(tmp_dir)
+            write_json(
+                state_dir / "setup_overrides.json",
+                {
+                    "version": 1,
+                    "values": {
+                        "STRAVA_CLIENT_ID": "override-client-id",
+                        "STRAVA_CLIENT_SECRET": "override-client-secret",
+                        "STRAVA_REFRESH_TOKEN": "override-refresh-token",
+                        "TIMEZONE": "America/Phoenix",
+                        "ENABLE_WEATHER": False,
+                        "ENABLE_CRONO_API": True,
+                    },
+                },
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "STATE_DIR": str(state_dir),
+                    "STRAVA_CLIENT_ID": "env-client-id",
+                    "STRAVA_CLIENT_SECRET": "env-client-secret",
+                    "STRAVA_REFRESH_TOKEN": "env-refresh-token",
+                    "TIMEZONE": "UTC",
+                    "ENABLE_WEATHER": "true",
+                    "ENABLE_CRONO_API": "false",
+                },
+                clear=True,
+            ):
+                settings = Settings.from_env()
+                self.assertEqual(settings.strava_client_id, "override-client-id")
+                self.assertEqual(settings.strava_client_secret, "override-client-secret")
+                self.assertEqual(settings.strava_refresh_token, "override-refresh-token")
+                self.assertEqual(settings.timezone, "America/Phoenix")
+                self.assertFalse(settings.enable_weather)
+                self.assertTrue(settings.enable_crono_api)
 
 
 if __name__ == "__main__":
