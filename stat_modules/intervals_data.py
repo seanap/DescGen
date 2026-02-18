@@ -266,7 +266,7 @@ def get_intervals_activity_data(
     )
 
     return {
-        "norm_power": f"{int(norm_power)}W" if isinstance(norm_power, (int, float)) else "N/A",
+        "norm_power": f"{int(round(float(norm_power)))}W" if isinstance(norm_power, (int, float)) else "N/A",
         "work": f"{round(float(work) / 1000)} kJ" if isinstance(work, (int, float)) else "N/A",
         "efficiency": f"{round(float(efficiency), 2)}" if isinstance(efficiency, (int, float)) else "N/A",
         "achievements": achievements,

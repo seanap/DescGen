@@ -327,6 +327,7 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "cadence_spm": 176,
         "work": "914 kJ",
         "norm_power": "271 W",
+        "norm_power_source": "intervals",
         "average_hr": 149,
         "max_hr": 173,
         "efficiency": "1.03",

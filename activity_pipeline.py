@@ -1275,6 +1275,25 @@ def _build_description_context(
     intervals_payload = intervals_payload or {}
     achievements = intervals_payload.get("achievements", [])
     norm_power = intervals_payload.get("norm_power", "N/A")
+    norm_power_source = "intervals"
+    if not isinstance(norm_power, str) or norm_power.strip().upper() == "N/A":
+        weighted_watts = _as_float(detailed_activity.get("weighted_average_watts"))
+        if weighted_watts is None:
+            weighted_watts = _as_float(detailed_activity.get("average_watts"))
+        if weighted_watts is not None and weighted_watts > 0:
+            norm_power = f"{int(round(weighted_watts))}W"
+            norm_power_source = "strava"
+        else:
+            garmin_last = training.get("garmin_last_activity")
+            garmin_watts = None
+            if isinstance(garmin_last, dict):
+                garmin_watts = _as_float(garmin_last.get("norm_power_w"))
+            if garmin_watts is not None and garmin_watts > 0:
+                norm_power = f"{int(round(garmin_watts))}W"
+                norm_power_source = "garmin"
+            else:
+                norm_power = "N/A"
+                norm_power_source = "none"
     work = intervals_payload.get("work", "N/A")
     efficiency = intervals_payload.get("efficiency", "N/A")
     icu_summary = intervals_payload.get("icu_summary", "N/A")
@@ -1546,6 +1565,7 @@ def _build_description_context(
             "cadence_spm": running_cadence if running_cadence != "N/A" else "N/A",
             "work": work,
             "norm_power": norm_power,
+            "norm_power_source": norm_power_source,
             "average_hr": average_hr if average_hr != "N/A" else "N/A",
             "max_hr": max_hr,
             "efficiency": efficiency,
