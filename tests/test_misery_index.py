@@ -22,7 +22,7 @@ class TestMiseryIndex(unittest.TestCase):
         self.assertEqual(get_misery_index_description(110, polarity="hot"), "☠️ Death (hot)")
         self.assertEqual(get_misery_index_description(110, polarity="cold"), "☠️ Death (cold)")
 
-    def test_cold_dry_windy_is_low_score(self) -> None:
+    def test_cold_dry_windy_stays_below_death_threshold(self) -> None:
         score = calculate_misery_index(
             temp_f=22,
             dew_point_f=8,
@@ -33,7 +33,8 @@ class TestMiseryIndex(unittest.TestCase):
             is_day=True,
             condition_text="Overcast",
         )
-        self.assertGreater(score, 100)
+        self.assertLess(score, 100)
+        self.assertGreater(score, 50)
 
     def test_hot_humid_stagnant_is_high_score(self) -> None:
         score = calculate_misery_index(
@@ -60,7 +61,8 @@ class TestMiseryIndex(unittest.TestCase):
             chance_of_snow=80,
             condition_text="Moderate snow",
         )
-        self.assertGreater(score, 40)
+        self.assertGreater(score, 20)
+        self.assertLess(score, 40)
 
     def test_no_large_jump_at_thermal_transition_edges(self) -> None:
         around_50 = [
@@ -216,7 +218,7 @@ class TestMiseryIndex(unittest.TestCase):
         self.assertEqual(components["severity"], "death")
         self.assertGreater(components["component_risk_tail"], 0.0)
 
-    def test_true_cold_wet_hazard_crosses_death_threshold(self) -> None:
+    def test_true_cold_wet_hazard_stays_extreme_below_death(self) -> None:
         components = calculate_misery_index_components(
             temp_f=31.0,
             dew_point_f=30.0,
@@ -229,8 +231,9 @@ class TestMiseryIndex(unittest.TestCase):
             chance_of_snow=40.0,
             condition_text="Freezing rain",
         )
-        self.assertGreater(components["score"], 100.0)
-        self.assertEqual(components["severity"], "death")
+        self.assertGreater(components["score"], 75.0)
+        self.assertLessEqual(components["score"], 100.0)
+        self.assertEqual(components["severity"], "extreme")
         self.assertGreater(components["component_risk_tail"], 0.0)
 
     def test_aqi_description(self) -> None:

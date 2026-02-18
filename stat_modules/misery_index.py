@@ -294,7 +294,7 @@ def calculate_misery_index_components(
 
     # Running-normalized apparent temperature blend.
     hot_weight = _smoothstep(max(temp, hi), 78.0, 90.0)
-    cold_weight = _smoothstep(52.0 - temp, 0.0, 14.0) * _smoothstep(wind, 2.5, 6.5)
+    cold_weight = 0.4 * _smoothstep(52.0 - temp, 0.0, 14.0) * _smoothstep(wind, 2.5, 6.5)
     blend_total = hot_weight + cold_weight
     if blend_total > 1.0:
         hot_weight /= blend_total
@@ -334,9 +334,13 @@ def calculate_misery_index_components(
     )
 
     heat_humidity_points = (
-        0.55
-        * (_hinge_plus(apparent, 70.0, 12.0) ** 2)
-        * (_hinge_plus(dew, 58.0, 10.0) ** 2)
+        14.0
+        * _saturating(_hinge_plus(apparent, 70.0, 10.0), 1.0)
+        * _saturating(_hinge_plus(dew, 58.0, 8.0), 1.0)
+    ) + (
+        1.8
+        * _saturating(_hinge_plus(apparent, 75.0, 8.0), 1.0)
+        * _saturating(_hinge_plus(rh, 65.0, 18.0), 1.2)
     )
     stagnant_hot_points = (
         1.25
@@ -360,12 +364,18 @@ def calculate_misery_index_components(
         * _saturating(_hinge_plus(wind, 8.0, 3.2), 1.0)
         * (0.5 + (0.5 * wind_context_damp))
     )
+    breeze_drag_points = 0.6 * _saturating(_hinge_plus(wind, 5.0, 1.5), 1.0)
     wind_cold_exposure_points = (
         0.12
         * (_hinge_plus(wind, 12.0, 4.0) ** 2)
         * (_hinge_minus(apparent, 45.0, 15.0) ** 2)
     )
-    wind_penalty_points = wind_points + strong_wind_effort_points + wind_cold_exposure_points
+    wind_penalty_points = (
+        wind_points
+        + strong_wind_effort_points
+        + wind_cold_exposure_points
+        + breeze_drag_points
+    )
 
     day_flag = _to_bool(is_day)
     sun_fraction = 0.0
@@ -393,15 +403,6 @@ def calculate_misery_index_components(
             )
         )
 
-    rain_hot_points = 0.8 * (_hinge_plus(apparent, 82.0, 10.0) ** 2) * rain_signal
-    rain_cold_points = 2.0 * (_hinge_minus(apparent, 55.0, 12.0) ** 2) * (rain_signal ** 2)
-    cold_rain_extra = (
-        1.4
-        * (_hinge_plus(wind, 8.0, 4.0) ** 2)
-        * (_hinge_minus(apparent, 50.0, 12.0) ** 2)
-        * (rain_signal ** 2)
-    )
-
     snow_signal = max(snow_chance / 100.0, rain_intensity if _is_snow_condition(condition_text) else 0.0)
     snow_flag = _is_snow_condition(condition_text)
     snow_bool = _to_bool(will_it_snow)
@@ -410,9 +411,30 @@ def calculate_misery_index_components(
     if snow_chance >= 35.0:
         snow_flag = True
 
+    rain_bool = _to_bool(will_it_rain)
+    rain_explicit = bool((rain_bool is True) or (rain_chance >= 40.0))
+    liquid_rain_signal = rain_signal
+    if snow_flag and not rain_explicit:
+        liquid_rain_signal *= 0.2
+
+    rain_hot_points = 0.8 * (_hinge_plus(apparent, 82.0, 10.0) ** 2) * liquid_rain_signal
+    rain_cold_points = 1.5 * (_hinge_minus(apparent, 55.0, 12.0) ** 2) * (liquid_rain_signal ** 2)
+    rain_temperate_points = (
+        3.8
+        * liquid_rain_signal
+        * _smoothstep(apparent, 42.0, 60.0)
+        * _smoothstep(72.0 - apparent, 0.0, 18.0)
+    )
+    cold_rain_extra = (
+        0.55
+        * (_hinge_plus(wind, 8.0, 4.0) ** 2)
+        * (_hinge_minus(apparent, 50.0, 12.0) ** 2)
+        * (liquid_rain_signal ** 2)
+    )
+
     snow_points = 0.0
     if snow_flag:
-        snow_points = 1.5 + (3.2 * snow_signal) + (1.2 * (_hinge_minus(apparent, 32.0, 8.0) ** 2))
+        snow_points = 0.8 + (1.8 * snow_signal) + (0.8 * (_hinge_minus(apparent, 30.0, 10.0) ** 2))
 
     discomfort_raw = (
         temp_points
@@ -423,13 +445,17 @@ def calculate_misery_index_components(
         + wind_penalty_points
         + rain_hot_points
         + rain_cold_points
+        + rain_temperate_points
         + cold_rain_extra
         + rain_hint_points
         + snow_points
         + sun_hot_points
         + cloud_cold_points
     )
-    discomfort_score = MI_INDEX_SCALE * discomfort_raw
+    if discomfort_raw <= 20.0:
+        discomfort_score = MI_INDEX_SCALE * discomfort_raw
+    else:
+        discomfort_score = MI_INDEX_SCALE * (20.0 + (0.45 * (discomfort_raw - 20.0)))
 
     # --------------------------
     # Risk head (R): physiologic hazard regime model.
@@ -448,31 +474,55 @@ def calculate_misery_index_components(
     ) * (0.2 + (0.8 * heat_gate))
 
     cold_mode = (
-        2.8 * _softplus((15.0 - wc) / 6.0)
-        + 1.4 * _softplus((32.0 - temp) / 8.0)
-        + 1.2 * _softplus((20.0 - dew) / 8.0)
-        + 0.9 * _softplus((wind - 18.0) / 5.0)
-    ) * (0.25 + (0.75 * cold_gate))
+        2.4 * _softplus((0.0 - wc) / 6.0)
+        + 1.3 * _softplus((18.0 - temp) / 7.0)
+        + 0.9 * _softplus((10.0 - dew) / 7.0)
+        + 0.6 * _softplus((wind - 24.0) / 5.0)
+    ) * (0.15 + (0.85 * cold_gate))
 
+    wet_cold_load = _clamp((0.85 * rain_signal) + (0.25 * snow_signal), 0.0, 1.2)
     cold_wet_mode = (
-        2.4
-        * wet_gate
-        * _softplus((45.0 - apparent) / 8.0)
-        * (1.0 + (0.9 * _softplus((wind - 14.0) / 4.0)))
-        + 1.1 * wet_gate * _softplus((32.0 - temp) / 6.0)
-    ) * (0.2 + (0.8 * cold_gate))
+        1.6
+        * wet_cold_load
+        * _softplus((38.0 - apparent) / 8.0)
+        * (1.0 + (0.6 * _softplus((wind - 18.0) / 5.0)))
+        + 0.8 * wet_cold_load * _softplus((30.0 - temp) / 6.0)
+    ) * (0.18 + (0.82 * cold_gate))
 
-    freezing_mix = bool(temp <= 34.0 and rain_signal >= 0.20 and (snow_flag or rain_chance >= 70.0))
-    blizzard_mix = bool(snow_flag and temp <= 20.0 and wind >= 20.0)
+    condition_lower = condition_text.lower() if isinstance(condition_text, str) else ""
+    freezing_precip_flag = any(token in condition_lower for token in ("freezing rain", "ice pellets", "sleet"))
+    rain_condition_flag = bool(
+        freezing_precip_flag
+        or rain_bool is True
+        or rain_chance >= 70.0
+        or ("rain" in condition_lower and "snow" not in condition_lower)
+    )
+    freezing_mix = bool(
+        temp <= 32.0
+        and rain_signal >= 0.30
+        and rain_condition_flag
+        and (freezing_precip_flag or wc <= 25.0)
+    )
+    blizzard_mix = bool(snow_flag and snow_signal >= 0.70 and temp <= 15.0 and wind >= 25.0)
     storm_mode = 0.0
     if freezing_mix:
-        storm_mode += 2.8 + (2.2 * wet_gate) + (1.2 * _softplus((wind - 20.0) / 5.0))
+        storm_mode += (
+            3.2
+            + (1.8 * wet_cold_load)
+            + (1.1 * _softplus((wind - 24.0) / 5.0))
+            + (1.0 * _softplus((25.0 - wc) / 7.0))
+        )
     if blizzard_mix:
-        storm_mode += 3.0 + (2.0 * _softplus((25.0 - wc) / 6.0)) + (1.2 * _softplus((wind - 22.0) / 4.0))
+        storm_mode += (
+            3.2
+            + (1.8 * _softplus((10.0 - temp) / 6.0))
+            + (1.1 * _softplus((wind - 25.0) / 4.0))
+            + (0.8 * _softplus((15.0 - wc) / 6.0))
+        )
 
     risk_raw = _logsumexp([heat_mode, cold_mode, cold_wet_mode, storm_mode])
-    risk_tail_activation = _softplus((risk_raw - 5.2) / 1.1) - _softplus((2.5 - 5.2) / 1.1)
-    risk_tail_points = 22.0 * max(0.0, risk_tail_activation)
+    risk_tail_activation = _softplus((risk_raw - 8.1) / 1.5) - _softplus((2.5 - 8.1) / 1.5)
+    risk_tail_points = 12.5 * max(0.0, risk_tail_activation)
 
     # Final index: discomfort plus gated risk tail.
     raw_score = discomfort_score + risk_tail_points
@@ -549,6 +599,7 @@ def calculate_misery_index_components(
         "component_gale_cold": round(wind_cold_exposure_points, 3),
         "component_rain_hot": round(rain_hot_points, 3),
         "component_rain_cold": round(rain_cold_points, 3),
+        "component_rain_temperate": round(rain_temperate_points, 3),
         "component_cold_rain_extra": round(cold_rain_extra, 3),
         "component_rain_hint": round(rain_hint_points, 3),
         "component_snow": round(snow_points, 3),

@@ -347,16 +347,18 @@ Template usage:
 - `{{ misery.index.polarity }}`
 - `{{ misery.index.severity }}`
 
-### Example Scenarios
-These are computed with the live algorithm in this repo.
+### Severity Matrix Examples
+These are computed with the live algorithm in this repo and include one hot-polarity and one cold-polarity example for every severity bucket.
 
-| Scenario | Temp (F) | Dew Point (F) | Humidity (%) | Wind (mph) | Conditions | MI | Bucket |
-| --- | ---: | ---: | ---: | ---: | --- | ---: | --- |
-| Goldilocks target | 50.0 | 45.0 | 70 | 2.0 | Slightly cloudy, light breeze | 0.0 | 😀 Ideal |
-| Wind burden example | 63.0 | 49.6 | 61 | 11.9 | Clear, windy | 14.9 | 😒 Mild (hot) |
-| Cold rain/snow | 34.0 | 30.0 | 90 | 8.0 | Moderate snow | 105.2 | ☠️ Death (cold) |
-| Winter grind | 24.1 | 5.0 | 43 | 16.5 | Windy, mixed precip chance | 196.4 | ☠️ Death (cold) |
-| Humid hammer | 89.8 | 80.2 | 78 | 2.7 | Humid, low breeze | 187.3 | ☠️ Death (hot) |
+| Bucket | Hot Example (Temp/Dew/RH/Wind/Conditions) | Hot MI | Cold Example (Temp/Dew/RH/Wind/Conditions) | Cold MI |
+| --- | --- | ---: | --- | ---: |
+| `ideal` | `64F / 40F / 60% / 4 mph / Clear` | `2.7` `😀` | `45F / 20F / 45% / 6 mph / Overcast` | `2.5` `😀` |
+| `mild` | `70F / 55F / 60% / 8 mph / Clear` | `9.4` `😒` | `38F / 24F / 45% / 8 mph / Overcast` | `10.2` `😒` |
+| `moderate` | `80F / 40F / 60% / 4 mph / Clear` | `22.3` `😓` | `38F / 22F / 65% / 12 mph / Overcast` | `23.0` `😓` |
+| `high` | `80F / 65F / 70% / 4 mph / Clear` | `40.0` `😭` | `30F / 18F / 65% / 14 mph / Overcast` | `40.0` `😭` |
+| `very_high` | `82F / 72F / 70% / 1 mph / Clear` | `62.5` `🥵` | `20F / 20F / 65% / 12 mph / Overcast` | `63.0` `😰` |
+| `extreme` | `88F / 76F / 60% / 4 mph / Clear` | `87.7` `😡` | `20F / 16F / 65% / 20 mph / Overcast` | `82.5` `🥶` |
+| `death` | `90F / 70F / 70% / 5 mph / Clear` | `110.4` `☠️` | `24F / 0F / 50% / 28 mph / Moderate snow` | `110.0` `☠️` |
 </details>
 
 ----
