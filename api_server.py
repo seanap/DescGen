@@ -1,13 +1,34 @@
 from __future__ import annotations
 
+import os
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlencode
 
+import requests
 from flask import Flask, render_template, request
 
 from activity_pipeline import run_once
 from config import Settings
-from storage import get_runtime_value, get_worker_heartbeat, is_worker_healthy, read_json
+from setup_config import (
+    PROVIDER_FIELDS,
+    PROVIDER_LINKS,
+    SETUP_ALLOWED_KEYS,
+    SETUP_SECRET_KEYS,
+    mask_setup_values,
+    merge_setup_overrides,
+    render_env_snippet,
+)
+from storage import (
+    delete_runtime_value,
+    get_runtime_value,
+    get_worker_heartbeat,
+    is_worker_healthy,
+    read_json,
+    set_runtime_value,
+    write_json,
+)
 from template_profiles import (
     get_template_profile,
     get_working_template_profile,
@@ -41,6 +62,121 @@ from template_schema import build_context_schema
 app = Flask(__name__)
 settings = Settings.from_env()
 settings.ensure_state_paths()
+
+STRAVA_OAUTH_SCOPE = "read,activity:read_all,activity:write"
+STRAVA_OAUTH_RUNTIME_KEY = "setup.strava.oauth"
+STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
+STRAVA_AUTHORIZE_URL = "https://www.strava.com/oauth/authorize"
+
+
+def _effective_settings() -> Settings:
+    current = Settings.from_env()
+    current.ensure_state_paths()
+    return current
+
+
+def _setup_effective_values() -> dict[str, object]:
+    current = _effective_settings()
+    values: dict[str, object] = {
+        "STRAVA_CLIENT_ID": current.strava_client_id,
+        "STRAVA_CLIENT_SECRET": current.strava_client_secret,
+        "STRAVA_REFRESH_TOKEN": current.strava_refresh_token,
+        "STRAVA_ACCESS_TOKEN": current.strava_access_token or "",
+        "ENABLE_GARMIN": current.enable_garmin,
+        "GARMIN_EMAIL": current.garmin_email or "",
+        "GARMIN_PASSWORD": current.garmin_password or "",
+        "ENABLE_INTERVALS": current.enable_intervals,
+        "INTERVALS_API_KEY": current.intervals_api_key or "",
+        "INTERVALS_USER_ID": current.intervals_user_id or "",
+        "ENABLE_WEATHER": current.enable_weather,
+        "WEATHER_API_KEY": current.weather_api_key or "",
+        "ENABLE_SMASHRUN": current.enable_smashrun,
+        "SMASHRUN_ACCESS_TOKEN": current.smashrun_access_token or "",
+        "ENABLE_CRONO_API": current.enable_crono_api,
+        "CRONO_API_BASE_URL": current.crono_api_base_url or "",
+        "CRONO_API_KEY": current.crono_api_key or "",
+        "TIMEZONE": current.timezone,
+    }
+
+    cached_tokens = read_json(current.strava_token_file) or {}
+    cached_refresh = cached_tokens.get("refresh_token")
+    if (
+        isinstance(cached_refresh, str)
+        and cached_refresh.strip()
+        and not str(values.get("STRAVA_REFRESH_TOKEN") or "").strip()
+    ):
+        values["STRAVA_REFRESH_TOKEN"] = cached_refresh.strip()
+    cached_access = cached_tokens.get("access_token")
+    if (
+        isinstance(cached_access, str)
+        and cached_access.strip()
+        and not str(values.get("STRAVA_ACCESS_TOKEN") or "").strip()
+    ):
+        values["STRAVA_ACCESS_TOKEN"] = cached_access.strip()
+
+    return values
+
+
+def _setup_strava_status(values: dict[str, object]) -> dict[str, object]:
+    client_id = str(values.get("STRAVA_CLIENT_ID") or "").strip()
+    client_secret = str(values.get("STRAVA_CLIENT_SECRET") or "").strip()
+    refresh_token = str(values.get("STRAVA_REFRESH_TOKEN") or "").strip()
+    access_token = str(values.get("STRAVA_ACCESS_TOKEN") or "").strip()
+    return {
+        "client_configured": bool(client_id and client_secret),
+        "connected": bool(refresh_token),
+        "has_refresh_token": bool(refresh_token),
+        "has_access_token": bool(access_token),
+    }
+
+
+def _public_setup_values(values: dict[str, object]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key in SETUP_ALLOWED_KEYS:
+        value = values.get(key)
+        if key in SETUP_SECRET_KEYS:
+            result[key] = ""
+            continue
+        if value is None:
+            result[key] = ""
+            continue
+        result[key] = value
+    return result
+
+
+def _setup_payload() -> dict[str, object]:
+    values = _setup_effective_values()
+    masked_values = mask_setup_values(values)
+    secret_presence = {
+        key: bool(str(values.get(key) or "").strip())
+        for key in sorted(SETUP_SECRET_KEYS)
+    }
+    provider_fields = {
+        provider: fields
+        for provider, fields in PROVIDER_FIELDS.items()
+    }
+    return {
+        "status": "ok",
+        "values": _public_setup_values(values),
+        "masked_values": masked_values,
+        "secret_presence": secret_presence,
+        "provider_links": PROVIDER_LINKS,
+        "provider_fields": provider_fields,
+        "allowed_keys": sorted(SETUP_ALLOWED_KEYS),
+        "secret_keys": sorted(SETUP_SECRET_KEYS),
+        "strava": _setup_strava_status(values),
+    }
+
+
+def _default_setup_callback_url() -> str:
+    return request.url_root.rstrip("/") + "/setup/strava/callback"
+
+
+def _redirect_setup_with_status(status: str, reason: str = ""):
+    params = {"strava_oauth": status}
+    if reason:
+        params["reason"] = reason
+    return app.redirect_class(f"/setup?{urlencode(params)}", 302)
 
 
 def _latest_payload() -> dict | None:
@@ -163,6 +299,202 @@ def service_metrics() -> tuple[dict, int]:
         "status": "ok",
         "time_utc": datetime.now(timezone.utc).isoformat(),
         "cycle_service_calls": cycle_metrics if isinstance(cycle_metrics, dict) else {},
+    }, 200
+
+
+@app.get("/setup")
+def setup_page() -> str:
+    return render_template("setup.html")
+
+
+@app.get("/setup/api/config")
+def setup_config_get() -> tuple[dict, int]:
+    return _setup_payload(), 200
+
+
+@app.put("/setup/api/config")
+def setup_config_put() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    values = body.get("values", body)
+    if not isinstance(values, dict):
+        return {"status": "error", "error": "values must be a JSON object."}, 400
+
+    updates: dict[str, object] = {}
+    for key, value in values.items():
+        if key not in SETUP_ALLOWED_KEYS:
+            continue
+        if key in SETUP_SECRET_KEYS and isinstance(value, str) and not value.strip():
+            # Empty secret input means "keep existing secret".
+            continue
+        updates[key] = value
+
+    merge_setup_overrides(settings.state_dir, updates)
+    return _setup_payload(), 200
+
+
+@app.get("/setup/api/env")
+def setup_env_get() -> tuple[dict, int]:
+    values = _setup_effective_values()
+    filtered: dict[str, object] = {}
+    for key in sorted(SETUP_ALLOWED_KEYS):
+        value = values.get(key)
+        if isinstance(value, bool):
+            filtered[key] = value
+        elif isinstance(value, str):
+            text = value.strip()
+            if text:
+                filtered[key] = text
+    return {
+        "status": "ok",
+        "env": render_env_snippet(filtered),
+    }, 200
+
+
+@app.get("/setup/api/strava/status")
+def setup_strava_status_get() -> tuple[dict, int]:
+    values = _setup_effective_values()
+    return {
+        "status": "ok",
+        "strava": _setup_strava_status(values),
+    }, 200
+
+
+@app.post("/setup/api/strava/oauth/start")
+def setup_strava_oauth_start_post() -> tuple[dict, int]:
+    values = _setup_effective_values()
+    client_id = str(values.get("STRAVA_CLIENT_ID") or "").strip()
+    client_secret = str(values.get("STRAVA_CLIENT_SECRET") or "").strip()
+    if not client_id or not client_secret:
+        return {
+            "status": "error",
+            "error": "Set STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET before starting OAuth.",
+        }, 400
+
+    body = request.get_json(silent=True) or {}
+    redirect_uri = body.get("redirect_uri")
+    if not isinstance(redirect_uri, str) or not redirect_uri.strip():
+        redirect_uri = _default_setup_callback_url()
+    redirect_uri = redirect_uri.strip()
+
+    state_token = secrets.token_urlsafe(24)
+    set_runtime_value(
+        settings.processed_log_file,
+        STRAVA_OAUTH_RUNTIME_KEY,
+        {
+            "state": state_token,
+            "redirect_uri": redirect_uri,
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+    authorize_url = (
+        f"{STRAVA_AUTHORIZE_URL}?"
+        f"{urlencode({'client_id': client_id, 'response_type': 'code', 'redirect_uri': redirect_uri, 'approval_prompt': 'force', 'scope': STRAVA_OAUTH_SCOPE, 'state': state_token})}"
+    )
+    return {
+        "status": "ok",
+        "authorize_url": authorize_url,
+        "state": state_token,
+        "redirect_uri": redirect_uri,
+    }, 200
+
+
+@app.get("/setup/strava/callback")
+def setup_strava_oauth_callback_get():
+    error = str(request.args.get("error") or "").strip()
+    if error:
+        return _redirect_setup_with_status("error", error)
+
+    code = str(request.args.get("code") or "").strip()
+    state_token = str(request.args.get("state") or "").strip()
+    runtime_state = get_runtime_value(settings.processed_log_file, STRAVA_OAUTH_RUNTIME_KEY, {})
+    saved_state = str(runtime_state.get("state") or "").strip() if isinstance(runtime_state, dict) else ""
+    redirect_uri = (
+        str(runtime_state.get("redirect_uri") or "").strip()
+        if isinstance(runtime_state, dict)
+        else ""
+    )
+    if not redirect_uri:
+        redirect_uri = _default_setup_callback_url()
+
+    if not code:
+        return _redirect_setup_with_status("error", "missing_code")
+    if not state_token or state_token != saved_state:
+        return _redirect_setup_with_status("error", "state_mismatch")
+
+    values = _setup_effective_values()
+    client_id = str(values.get("STRAVA_CLIENT_ID") or "").strip()
+    client_secret = str(values.get("STRAVA_CLIENT_SECRET") or "").strip()
+    if not client_id or not client_secret:
+        return _redirect_setup_with_status("error", "missing_client_credentials")
+
+    try:
+        response = requests.post(
+            STRAVA_TOKEN_URL,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException:
+        return _redirect_setup_with_status("error", "token_exchange_failed")
+
+    refresh_token = payload.get("refresh_token")
+    access_token = payload.get("access_token")
+    if not isinstance(refresh_token, str) or not refresh_token.strip():
+        return _redirect_setup_with_status("error", "missing_refresh_token")
+    if not isinstance(access_token, str) or not access_token.strip():
+        return _redirect_setup_with_status("error", "missing_access_token")
+
+    merge_setup_overrides(
+        settings.state_dir,
+        {
+            "STRAVA_REFRESH_TOKEN": refresh_token.strip(),
+            "STRAVA_ACCESS_TOKEN": access_token.strip(),
+        },
+    )
+
+    current = _effective_settings()
+    write_json(
+        current.strava_token_file,
+        {
+            "access_token": access_token.strip(),
+            "refresh_token": refresh_token.strip(),
+        },
+    )
+    delete_runtime_value(settings.processed_log_file, STRAVA_OAUTH_RUNTIME_KEY)
+    return _redirect_setup_with_status("connected")
+
+
+@app.post("/setup/api/strava/disconnect")
+def setup_strava_disconnect_post() -> tuple[dict, int]:
+    merge_setup_overrides(
+        settings.state_dir,
+        {
+            "STRAVA_REFRESH_TOKEN": None,
+            "STRAVA_ACCESS_TOKEN": None,
+        },
+    )
+    current = _effective_settings()
+    current.strava_token_file.unlink(missing_ok=True)
+
+    env_refresh = (
+        str(os.getenv("STRAVA_REFRESH_TOKEN") or "").strip()
+        or str(os.getenv("REFRESH_TOKEN") or "").strip()
+    )
+    env_access = (
+        str(os.getenv("STRAVA_ACCESS_TOKEN") or "").strip()
+        or str(os.getenv("ACCESS_TOKEN") or "").strip()
+    )
+    return {
+        "status": "ok",
+        "strava": _setup_strava_status(_setup_effective_values()),
+        "env_managed_tokens": bool(env_refresh or env_access),
     }, 200
 
 

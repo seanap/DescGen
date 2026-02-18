@@ -174,6 +174,14 @@ http://localhost:1609/editor
 - `GET /ready`
 - `GET /latest`
 - `GET /service-metrics`
+- `GET /setup` (web onboarding for provider config + OAuth)
+- `GET /setup/api/config` (current setup values with secret masking)
+- `PUT /setup/api/config` (save setup values into state overrides)
+- `GET /setup/api/env` (render effective `.env` snippet)
+- `GET /setup/api/strava/status` (Strava OAuth/config status)
+- `POST /setup/api/strava/oauth/start` (start Strava OAuth authorization flow)
+- `GET /setup/strava/callback` (Strava OAuth callback endpoint)
+- `POST /setup/api/strava/disconnect` (remove Strava token overrides/cache)
 - `POST /rerun/latest` (rerun most recent activity)
 - `POST /rerun/activity/<activity_id>` (rerun specific Strava activity)
 - `POST /rerun` with optional JSON body: `{ "activity_id": 1234567890 }`
@@ -209,6 +217,11 @@ Editor UI:
 curl -X POST http://localhost:1609/rerun/latest
 curl -X POST http://localhost:1609/rerun/activity/1234567890
 curl -X POST http://localhost:1609/rerun -H "Content-Type: application/json" -d '{"activity_id":1234567890}'
+curl http://localhost:1609/setup
+curl http://localhost:1609/setup/api/config
+curl -X PUT http://localhost:1609/setup/api/config -H "Content-Type: application/json" -d '{"values":{"TIMEZONE":"America/New_York","ENABLE_WEATHER":true,"WEATHER_API_KEY":"your_key"}}'
+curl http://localhost:1609/setup/api/env
+curl -X POST http://localhost:1609/setup/api/strava/oauth/start -H "Content-Type: application/json" -d '{"redirect_uri":"http://localhost:1609/setup/strava/callback"}'
 curl "http://localhost:1609/editor/schema?context_mode=latest_or_sample"
 curl http://localhost:1609/editor/fixtures
 curl http://localhost:1609/editor/profiles

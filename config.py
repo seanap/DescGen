@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
+
+from setup_config import read_setup_overrides
 
 try:
     from dotenv import load_dotenv
@@ -14,28 +17,31 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
 load_dotenv()
 
 
-def _bool_env(name: str, default: bool) -> bool:
-    value = os.getenv(name)
+EnvGetter = Callable[[str], str | None]
+
+
+def _bool_env(name: str, default: bool, *, getenv: EnvGetter = os.getenv) -> bool:
+    value = getenv(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _str_env(*names: str, default: str = "") -> str:
+def _str_env(*names: str, default: str = "", getenv: EnvGetter = os.getenv) -> str:
     for name in names:
-        value = os.getenv(name)
+        value = getenv(name)
         if value is not None:
             return value.strip()
     return default
 
 
-def _optional_str_env(*names: str) -> str | None:
-    value = _str_env(*names, default="")
+def _optional_str_env(*names: str, getenv: EnvGetter = os.getenv) -> str | None:
+    value = _str_env(*names, default="", getenv=getenv)
     return value or None
 
 
-def _hour_env(name: str, default: int) -> int:
-    value = os.getenv(name)
+def _hour_env(name: str, default: int, *, getenv: EnvGetter = os.getenv) -> int:
+    value = getenv(name)
     if value is None:
         return default
     try:
@@ -47,8 +53,15 @@ def _hour_env(name: str, default: int) -> int:
     return default
 
 
-def _int_env(name: str, default: int, minimum: int | None = None, maximum: int | None = None) -> int:
-    value = os.getenv(name)
+def _int_env(
+    name: str,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+    *,
+    getenv: EnvGetter = os.getenv,
+) -> int:
+    value = getenv(name)
     if value is None:
         parsed = default
     else:
@@ -64,8 +77,15 @@ def _int_env(name: str, default: int, minimum: int | None = None, maximum: int |
     return parsed
 
 
-def _float_env(name: str, default: float, minimum: float | None = None, maximum: float | None = None) -> float:
-    value = os.getenv(name)
+def _float_env(
+    name: str,
+    default: float,
+    minimum: float | None = None,
+    maximum: float | None = None,
+    *,
+    getenv: EnvGetter = os.getenv,
+) -> float:
+    value = getenv(name)
     if value is None:
         parsed = default
     else:
@@ -81,8 +101,8 @@ def _float_env(name: str, default: float, minimum: float | None = None, maximum:
     return parsed
 
 
-def _optional_float_env(name: str) -> float | None:
-    value = os.getenv(name)
+def _optional_float_env(name: str, *, getenv: EnvGetter = os.getenv) -> float | None:
+    value = getenv(name)
     if value is None:
         return None
     text = value.strip()
@@ -153,6 +173,16 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         state_dir = Path(os.getenv("STATE_DIR", "state")).resolve()
+        setup_overrides = read_setup_overrides(state_dir)
+
+        def env_with_setup_overrides(name: str) -> str | None:
+            if name in setup_overrides:
+                overridden = setup_overrides[name]
+                if isinstance(overridden, bool):
+                    return "true" if overridden else "false"
+                return str(overridden)
+            return os.getenv(name)
+
         processed_log_file = state_dir / os.getenv(
             "PROCESSED_LOG_FILE", "processed_activities.log"
         )
@@ -175,21 +205,35 @@ class Settings:
         api_port = _int_env("API_PORT", 1609, minimum=1, maximum=65535)
 
         return cls(
-            strava_client_id=_str_env("STRAVA_CLIENT_ID", "CLIENT_ID"),
-            strava_client_secret=_str_env("STRAVA_CLIENT_SECRET", "CLIENT_SECRET"),
-            strava_refresh_token=_str_env("STRAVA_REFRESH_TOKEN", "REFRESH_TOKEN"),
-            strava_access_token=_optional_str_env("STRAVA_ACCESS_TOKEN", "ACCESS_TOKEN"),
-            garmin_email=_optional_str_env("GARMIN_EMAIL"),
-            garmin_password=_optional_str_env("GARMIN_PASSWORD"),
-            intervals_api_key=_optional_str_env("INTERVALS_API_KEY"),
-            intervals_user_id=_optional_str_env("INTERVALS_USER_ID", "USER_ID"),
-            weather_api_key=_optional_str_env("WEATHER_API_KEY"),
-            smashrun_access_token=_optional_str_env("SMASHRUN_ACCESS_TOKEN"),
-            crono_api_base_url=_optional_str_env("CRONO_API_BASE_URL"),
-            crono_api_key=_optional_str_env("CRONO_API_KEY"),
+            strava_client_id=_str_env(
+                "STRAVA_CLIENT_ID", "CLIENT_ID", getenv=env_with_setup_overrides
+            ),
+            strava_client_secret=_str_env(
+                "STRAVA_CLIENT_SECRET", "CLIENT_SECRET", getenv=env_with_setup_overrides
+            ),
+            strava_refresh_token=_str_env(
+                "STRAVA_REFRESH_TOKEN", "REFRESH_TOKEN", getenv=env_with_setup_overrides
+            ),
+            strava_access_token=_optional_str_env(
+                "STRAVA_ACCESS_TOKEN", "ACCESS_TOKEN", getenv=env_with_setup_overrides
+            ),
+            garmin_email=_optional_str_env("GARMIN_EMAIL", getenv=env_with_setup_overrides),
+            garmin_password=_optional_str_env("GARMIN_PASSWORD", getenv=env_with_setup_overrides),
+            intervals_api_key=_optional_str_env("INTERVALS_API_KEY", getenv=env_with_setup_overrides),
+            intervals_user_id=_optional_str_env(
+                "INTERVALS_USER_ID", "USER_ID", getenv=env_with_setup_overrides
+            ),
+            weather_api_key=_optional_str_env("WEATHER_API_KEY", getenv=env_with_setup_overrides),
+            smashrun_access_token=_optional_str_env(
+                "SMASHRUN_ACCESS_TOKEN", getenv=env_with_setup_overrides
+            ),
+            crono_api_base_url=_optional_str_env(
+                "CRONO_API_BASE_URL", getenv=env_with_setup_overrides
+            ),
+            crono_api_key=_optional_str_env("CRONO_API_KEY", getenv=env_with_setup_overrides),
             poll_interval_seconds=poll_interval_seconds,
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
-            timezone=_str_env("TIMEZONE", "TZ", default="UTC"),
+            timezone=_str_env("TIMEZONE", "TZ", default="UTC", getenv=env_with_setup_overrides),
             api_port=api_port,
             api_workers=_int_env("API_WORKERS", 2, minimum=1, maximum=8),
             api_threads=_int_env("API_THREADS", 4, minimum=1, maximum=32),
@@ -210,11 +254,11 @@ class Settings:
             strava_token_file=strava_token_file,
             description_template_file=description_template_file,
             runtime_db_file=runtime_db_file,
-            enable_garmin=_bool_env("ENABLE_GARMIN", True),
-            enable_intervals=_bool_env("ENABLE_INTERVALS", True),
-            enable_weather=_bool_env("ENABLE_WEATHER", True),
-            enable_smashrun=_bool_env("ENABLE_SMASHRUN", True),
-            enable_crono_api=_bool_env("ENABLE_CRONO_API", False),
+            enable_garmin=_bool_env("ENABLE_GARMIN", True, getenv=env_with_setup_overrides),
+            enable_intervals=_bool_env("ENABLE_INTERVALS", True, getenv=env_with_setup_overrides),
+            enable_weather=_bool_env("ENABLE_WEATHER", True, getenv=env_with_setup_overrides),
+            enable_smashrun=_bool_env("ENABLE_SMASHRUN", True, getenv=env_with_setup_overrides),
+            enable_crono_api=_bool_env("ENABLE_CRONO_API", False, getenv=env_with_setup_overrides),
             enable_quiet_hours=_bool_env("ENABLE_QUIET_HOURS", True),
             quiet_hours_start_hour=_hour_env("QUIET_HOURS_START", 0),
             quiet_hours_end_hour=_hour_env("QUIET_HOURS_END", 4),
