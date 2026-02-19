@@ -11,6 +11,7 @@ from flask import Flask, render_template, request
 
 from activity_pipeline import run_once
 from config import Settings
+from dashboard_data import get_dashboard_payload
 from setup_config import (
     PROVIDER_FIELDS,
     PROVIDER_LINKS,
@@ -314,6 +315,22 @@ def service_metrics() -> tuple[dict, int]:
 @app.get("/setup")
 def setup_page() -> str:
     return render_template("setup.html")
+
+
+@app.get("/dashboard")
+def dashboard_page() -> str:
+    return render_template("dashboard.html")
+
+
+@app.get("/dashboard/data.json")
+def dashboard_data_get() -> tuple[dict, int]:
+    force_refresh = str(request.args.get("force") or "").strip().lower() in {"1", "true", "yes", "on"}
+    current = _effective_settings()
+    try:
+        payload = get_dashboard_payload(current, force_refresh=force_refresh)
+    except Exception as exc:
+        return {"status": "error", "error": f"Failed to build dashboard payload: {exc}"}, 500
+    return payload, 200
 
 
 @app.get("/setup/api/config")
@@ -1221,7 +1238,15 @@ def _run_rerun(force_update: bool, activity_id: int | None = None) -> tuple[dict
             result = run_once(force_update=force_update)
         else:
             result = run_once(force_update=force_update, activity_id=activity_id)
-        return {"status": "ok", "result": result}, 200
+
+        response: dict[str, object] = {"status": "ok", "result": result}
+        if isinstance(result, dict) and str(result.get("status") or "").strip().lower() == "updated":
+            try:
+                get_dashboard_payload(_effective_settings(), force_refresh=True)
+                response["dashboard_refresh"] = "updated"
+            except Exception as exc:
+                response["dashboard_refresh"] = f"error: {exc}"
+        return response, 200
     except Exception as exc:
         return {"status": "error", "error": str(exc)}, 500
 

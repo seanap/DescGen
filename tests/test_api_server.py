@@ -15,6 +15,7 @@ class TestApiServer(unittest.TestCase):
         self.client = api_server.app.test_client()
         self._original_run_once = api_server.run_once
         self._original_is_worker_healthy = api_server.is_worker_healthy
+        self._original_get_dashboard_payload = api_server.get_dashboard_payload
         self._original_settings = api_server.settings
         self._original_state_dir_env = os.environ.get("STATE_DIR")
         self._original_setup_env_file = os.environ.get("SETUP_ENV_FILE")
@@ -22,6 +23,7 @@ class TestApiServer(unittest.TestCase):
     def tearDown(self) -> None:
         api_server.run_once = self._original_run_once
         api_server.is_worker_healthy = self._original_is_worker_healthy
+        api_server.get_dashboard_payload = self._original_get_dashboard_payload
         api_server.settings = self._original_settings
         if self._original_state_dir_env is None:
             os.environ.pop("STATE_DIR", None)
@@ -39,19 +41,59 @@ class TestApiServer(unittest.TestCase):
         api_server.settings.ensure_state_paths()
 
     def test_rerun_latest_endpoint(self) -> None:
+        refresh_calls: list[tuple[tuple, dict]] = []
         api_server.run_once = lambda **kwargs: {"status": "updated", "kwargs": kwargs}
+        api_server.get_dashboard_payload = lambda *args, **kwargs: refresh_calls.append((args, kwargs)) or {
+            "generated_at": "2026-02-19T00:00:00+00:00",
+            "years": [2026],
+            "types": [],
+            "type_meta": {},
+            "other_bucket": "OtherSports",
+            "aggregates": {},
+            "units": {"distance": "mi", "elevation": "ft"},
+            "week_start": "sunday",
+            "activities": [],
+        }
         response = self.client.post("/rerun/latest")
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["result"]["kwargs"]["force_update"], True)
+        self.assertEqual(payload.get("dashboard_refresh"), "updated")
+        self.assertEqual(len(refresh_calls), 1)
+        self.assertTrue(refresh_calls[0][1].get("force_refresh"))
 
     def test_rerun_activity_endpoint(self) -> None:
+        refresh_calls: list[tuple[tuple, dict]] = []
         api_server.run_once = lambda **kwargs: {"status": "updated", "kwargs": kwargs}
+        api_server.get_dashboard_payload = lambda *args, **kwargs: refresh_calls.append((args, kwargs)) or {
+            "generated_at": "2026-02-19T00:00:00+00:00",
+            "years": [2026],
+            "types": [],
+            "type_meta": {},
+            "other_bucket": "OtherSports",
+            "aggregates": {},
+            "units": {"distance": "mi", "elevation": "ft"},
+            "week_start": "sunday",
+            "activities": [],
+        }
         response = self.client.post("/rerun/activity/123456")
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload["result"]["kwargs"]["activity_id"], 123456)
+        self.assertEqual(payload.get("dashboard_refresh"), "updated")
+        self.assertEqual(len(refresh_calls), 1)
+
+    def test_rerun_latest_skips_dashboard_refresh_when_not_updated(self) -> None:
+        refresh_calls: list[tuple[tuple, dict]] = []
+        api_server.run_once = lambda **kwargs: {"status": "already_processed", "kwargs": kwargs}
+        api_server.get_dashboard_payload = lambda *args, **kwargs: refresh_calls.append((args, kwargs)) or {}
+        response = self.client.post("/rerun/latest")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertNotIn("dashboard_refresh", payload)
+        self.assertEqual(len(refresh_calls), 0)
 
     def test_rerun_generic_with_invalid_id(self) -> None:
         response = self.client.post("/rerun", json={"activity_id": "abc"})
@@ -103,6 +145,29 @@ class TestApiServer(unittest.TestCase):
     def test_setup_page_endpoint(self) -> None:
         response = self.client.get("/setup")
         self.assertEqual(response.status_code, 200)
+
+    def test_dashboard_page_endpoint(self) -> None:
+        response = self.client.get("/dashboard")
+        self.assertEqual(response.status_code, 200)
+
+    def test_dashboard_data_endpoint(self) -> None:
+        api_server.get_dashboard_payload = lambda *_args, **_kwargs: {
+            "generated_at": "2026-02-19T00:00:00+00:00",
+            "years": [2026],
+            "types": ["Run"],
+            "type_meta": {"Run": {"label": "Run", "accent": "#01cdfe"}},
+            "other_bucket": "OtherSports",
+            "aggregates": {},
+            "units": {"distance": "mi", "elevation": "ft"},
+            "week_start": "sunday",
+            "activities": [],
+        }
+        response = self.client.get("/dashboard/data.json")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIn("years", payload)
+        self.assertIn("types", payload)
+        self.assertIn("activities", payload)
 
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

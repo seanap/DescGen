@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config import Settings
 from activity_pipeline import run_once
+from dashboard_data import get_dashboard_payload
 from storage import set_runtime_value, set_worker_heartbeat
 
 
@@ -43,6 +44,12 @@ def _seconds_until_quiet_end(
 
     delta = int((quiet_end - now_local).total_seconds())
     return max(60, delta)
+
+
+def _should_refresh_dashboard(result: object) -> bool:
+    if not isinstance(result, dict):
+        return False
+    return str(result.get("status") or "").strip().lower() == "updated"
 
 
 def main() -> None:
@@ -99,6 +106,11 @@ def main() -> None:
             set_runtime_value(settings.processed_log_file, "worker.state", "running_cycle")
             result = run_once(force_update=False)
             set_runtime_value(settings.processed_log_file, "worker.last_cycle_result", result)
+            if _should_refresh_dashboard(result):
+                try:
+                    get_dashboard_payload(settings, force_refresh=True)
+                except Exception as exc:
+                    logger.warning("Dashboard cache refresh failed: %s", exc)
             set_runtime_value(settings.processed_log_file, "worker.last_success_at_utc", datetime.now(timezone.utc).isoformat())
             logger.info("Cycle result: %s", result)
         except Exception as exc:

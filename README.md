@@ -10,6 +10,7 @@ I created this because I found that I kept checking 5 different sites for unique
 - Auto-updates new Strava activities descriptions on a heartbeat (default every 5 minutes).
 - Local API endpoint to read latest output and force reruns.
 - Graphical Template Editor Web UI
+- Git-sweaty style Dashboard Web UI
 - Different Profiles for different descriptions based on Run type.
 - Export/import template bundles so you can move configs between instances and share amung the community.
 
@@ -149,6 +150,16 @@ TIMEZONE=America/New_York
 #API_TIMEOUT_SECONDS=120
 #API_PORT=1609
 #DOCKER_IMAGE=seanap/descgen:latest
+
+# Dashboard tuning
+#DASHBOARD_CACHE_MAX_AGE_SECONDS=900
+#DASHBOARD_LOOKBACK_YEARS=3
+#DASHBOARD_START_DATE=2024-01-01
+#DASHBOARD_WEEK_START=sunday
+#DASHBOARD_DISTANCE_UNIT=mi
+#DASHBOARD_ELEVATION_UNIT=ft
+#DASHBOARD_REPO=owner/repo
+#DASHBOARD_STRAVA_PROFILE_URL=https://www.strava.com/athletes/<athlete_id>
 ```
 
 4. Confirm API is alive:
@@ -162,11 +173,20 @@ curl http://localhost:1609/ready
 
 ```bash
 http://localhost:1609/editor
+http://localhost:1609/dashboard
 ```
 
 <img width="2557" height="1470" alt="editor_top" src="https://github.com/user-attachments/assets/9a1197bb-f930-4538-8ef4-4f9f4607c2af" />
 <img width="2562" height="1197" alt="editor_bottom" src="https://github.com/user-attachments/assets/53655c58-965c-4518-894c-f593af91bf99" />
 
+## Dashboard Tuning
+- `DASHBOARD_LOOKBACK_YEARS` limits history pull size (recommended: `2-3` for fast local loads, `5+` for long-term history).
+- `DASHBOARD_START_DATE` (format `YYYY-MM-DD`) overrides lookback and hard-sets first day included.
+- `DASHBOARD_CACHE_MAX_AGE_SECONDS` controls cache freshness for `/dashboard/data.json` fallback rebuild logic.
+- `DASHBOARD_WEEK_START` accepts `sunday` or `monday`.
+- `DASHBOARD_DISTANCE_UNIT` accepts `mi` or `km`; `DASHBOARD_ELEVATION_UNIT` accepts `ft` or `m`.
+- Worker auto-refreshes dashboard cache only when a cycle result is `updated` (new activity processed).
+- Rerun endpoints (`/rerun/latest`, `/rerun/activity/<id>`, `/rerun`) also force dashboard refresh when rerun result is `updated`.
 
 ## API Endpoints
 <details>
@@ -209,6 +229,8 @@ http://localhost:1609/editor
 
 Editor UI:
 - `GET /editor` (web UI with builder, snippet palette, click-to-insert fields, and preview context switcher)
+- `GET /dashboard` (git-sweaty style dashboard web UI)
+- `GET /dashboard/data.json` (dashboard data payload, compatible with git-sweaty frontend contract)
 
 </details>
 
