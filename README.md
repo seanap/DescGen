@@ -405,6 +405,13 @@ These are computed with the live algorithm in this repo and include one hot-pola
 </details>
 
 ----
+## License
+This project is licensed under the MIT License. See `LICENSE`.
+
+Dashboard UI assets in `templates/dashboard.html` and `static/dashboard.js`
+are adapted from `aspain/git-sweaty` (MIT). See `NOTICE`.
+
+----
 ##### Want to contribute? I am very open to pull requests. I only have a Garmin watch so other brand stats will need to be community added.
 ----
 <!-- blank line -->

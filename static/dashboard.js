@@ -1,3 +1,8 @@
+/*
+ * Portions adapted from aspain/git-sweaty (MIT License).
+ * Source: https://github.com/aspain/git-sweaty
+ */
+
 const DEFAULT_COLORS = ["#1f2937", "#1f2937", "#1f2937", "#1f2937", "#1f2937"];
 const MULTI_TYPE_COLOR = "#b967ff";
 const TYPE_ACCENT_OVERRIDES = {
@@ -256,11 +261,12 @@ function normalizeRepoSlug(value) {
 }
 
 function shouldHideHostedFooter(repoCandidate) {
-  return normalizeRepoSlug(repoCandidate) === CREATOR_REPO_SLUG;
+  const repoSlug = normalizeRepoSlug(repoCandidate);
+  return !repoSlug || repoSlug === CREATOR_REPO_SLUG;
 }
 
 function footerPoweredLabelText(repoCandidate) {
-  return shouldHideHostedFooter(repoCandidate) ? "Powered" : "powered";
+  return "Inspired by";
 }
 
 function isGitHubHostedLocation(loc) {
@@ -341,9 +347,7 @@ function syncFooterHostedLink(fallbackRepo) {
   if (!footerHostedLink) return;
   const footerFallbackRepo = fallbackRepo
     || repoLink?.getAttribute("href")
-    || repoLink?.textContent
-    || footerHostedLink.getAttribute("href")
-    || footerHostedLink.textContent;
+    || repoLink?.textContent;
   const resolved = resolveFooterHostedLink(
     window.location,
     footerFallbackRepo,
