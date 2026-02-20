@@ -12,19 +12,20 @@
   {% include "_app_shell_nav.html" %}
   <div class="shell">
     <div class="card setup-shell-card">
-      <div class="topbar">
-        <div>
+      <div class="topbar setup-hero">
+        <div class="setup-hero-copy">
           <h1 class="setup-title">Chronicle Setup</h1>
           <p class="muted">Configure providers, connect Strava OAuth, and keep `.env` as source of truth.</p>
         </div>
-        <div class="inline-actions">
-          <button id="btnOpenEditor" type="button">Open Editor</button>
-          <button id="btnReload" type="button">Reload</button>
-          <button id="btnSave" class="primary" type="button">Save Setup</button>
+        <div class="setup-hero-side">
+          <div id="statusBox" class="status-badge">Loading setup state...</div>
+          <div class="inline-actions">
+            <button id="btnOpenEditor" type="button">Open Editor</button>
+            <button id="btnReload" type="button">Reload</button>
+            <button id="btnSave" class="primary" type="button">Save Setup</button>
+          </div>
         </div>
       </div>
-
-      <div id="statusBox" class="status">Loading setup state...</div>
 
       <div class="inline-actions section-actions">
         <button id="btnStravaConnect" class="primary" type="button">Connect Strava OAuth</button>

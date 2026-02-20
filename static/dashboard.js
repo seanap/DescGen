@@ -68,6 +68,11 @@ const footerHostedPrefix = document.getElementById("footerHostedPrefix");
 const footerHostedLink = document.getElementById("footerHostedLink");
 const footerPoweredLabel = document.getElementById("footerPoweredLabel");
 const dashboardTitle = document.getElementById("dashboardTitle");
+const dashboardSubtitle = document.getElementById("dashboardSubtitle");
+const dashboardTopStatus = document.getElementById("dashboardTopStatus");
+const dashboardSettingsToggle = document.getElementById("dashboardSettingsToggle");
+const dashboardSettingsPanel = document.getElementById("dashboardSettingsPanel");
+const dashboardThemeToggle = document.getElementById("dashboardThemeToggle");
 const isTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 const hasTouchInput = Number(window.navigator?.maxTouchPoints || 0) > 0;
 const useTouchInteractions = isTouch || hasTouchInput;
@@ -101,6 +106,7 @@ const TOUCH_TOOLTIP_TAP_MAX_MOVE_PX = 10;
 const TOUCH_TOOLTIP_TAP_MAX_SCROLL_PX = 2;
 const TOUCH_TOOLTIP_MAX_EFFECTIVE_ZOOM = 1.2;
 const TOUCH_TOOLTIP_MIN_SCALE = 0.5;
+const DASHBOARD_THEME_STORAGE_KEY = "chronicle.dashboard.theme";
 
 function resetPersistentSideStatSizing() {
   persistentSideStatCardWidth = 0;
@@ -953,11 +959,101 @@ function syncFilterControlState({
 
 function setDashboardTitle(source) {
   const provider = providerDisplayName(source);
-  const title = provider ? `${provider} Activity Heatmaps` : "Activity Heatmaps";
+  const title = "Heatmaps";
+  const subtitle = provider
+    ? `${provider} activity patterns and yearly volume at a glance.`
+    : "Year-over-year training patterns at a glance.";
   if (dashboardTitle) {
     dashboardTitle.textContent = title;
   }
-  document.title = title;
+  if (dashboardSubtitle) {
+    dashboardSubtitle.textContent = subtitle;
+  }
+  document.title = provider ? `${provider} Heatmaps` : "Heatmaps";
+}
+
+function setDashboardTopStatus(text, tone = "neutral") {
+  if (!dashboardTopStatus) return;
+  dashboardTopStatus.textContent = String(text || "").trim() || "Ready";
+  dashboardTopStatus.setAttribute("data-tone", tone);
+}
+
+function applyDashboardTheme(theme) {
+  const resolved = theme === "light" ? "light" : "dark";
+  document.body.setAttribute("data-theme", resolved);
+  if (dashboardThemeToggle) {
+    dashboardThemeToggle.checked = resolved === "dark";
+  }
+}
+
+function readStoredDashboardTheme() {
+  try {
+    const stored = localStorage.getItem(DASHBOARD_THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+  } catch (_error) {
+    // Ignore localStorage errors in restricted browser modes.
+  }
+  return "dark";
+}
+
+function persistDashboardTheme(theme) {
+  try {
+    localStorage.setItem(DASHBOARD_THEME_STORAGE_KEY, theme);
+  } catch (_error) {
+    // Ignore localStorage errors in restricted browser modes.
+  }
+}
+
+function setDashboardSettingsOpen(open) {
+  const expanded = Boolean(open);
+  if (dashboardSettingsPanel) {
+    dashboardSettingsPanel.setAttribute("aria-hidden", expanded ? "false" : "true");
+  }
+  if (dashboardSettingsToggle) {
+    dashboardSettingsToggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+}
+
+function initDashboardChrome() {
+  applyDashboardTheme(readStoredDashboardTheme());
+  setDashboardSettingsOpen(false);
+
+  if (dashboardThemeToggle) {
+    dashboardThemeToggle.addEventListener("change", () => {
+      const nextTheme = dashboardThemeToggle.checked ? "dark" : "light";
+      applyDashboardTheme(nextTheme);
+      persistDashboardTheme(nextTheme);
+    });
+  }
+
+  if (dashboardSettingsToggle) {
+    dashboardSettingsToggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const panelHidden = dashboardSettingsPanel?.getAttribute("aria-hidden") !== "false";
+      setDashboardSettingsOpen(panelHidden);
+    });
+  }
+
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (
+      dashboardSettingsPanel
+      && dashboardSettingsPanel.getAttribute("aria-hidden") === "false"
+      && dashboardSettingsToggle
+      && !dashboardSettingsPanel.contains(target)
+      && !dashboardSettingsToggle.contains(target)
+    ) {
+      setDashboardSettingsOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setDashboardSettingsOpen(false);
+    }
+  });
 }
 
 function readCssVar(name, fallback, scope) {
@@ -4002,6 +4098,7 @@ function renderLoadError(error) {
   const detail = error && typeof error.message === "string" && error.message
     ? error.message
     : "Unexpected error.";
+  setDashboardTopStatus(detail, "error");
   if (summary) {
     summary.innerHTML = "";
   }
@@ -4027,6 +4124,8 @@ function renderLoadError(error) {
 }
 
 async function init() {
+  initDashboardChrome();
+  setDashboardTopStatus("Loading dashboard...", "neutral");
   syncRepoLink();
   syncFooterHostedLink();
   syncStravaProfileLink();
@@ -4809,6 +4908,8 @@ async function init() {
   });
   syncUnitToggleState();
   update();
+  const activityCount = Array.isArray(payload.activities) ? payload.activities.length : 0;
+  setDashboardTopStatus(`Ready (${activityCount} activities)`, "ok");
 
   if (!useTouchInteractions && typeof window.ResizeObserver === "function" && !tooltipResizeObserver) {
     tooltipResizeObserver = new window.ResizeObserver(() => {
