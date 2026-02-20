@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
-from flask import Flask, render_template, request
+from flask import Flask, redirect, render_template, request
 
 from activity_pipeline import run_once
 from config import Settings
@@ -315,6 +315,11 @@ def service_metrics() -> tuple[dict, int]:
 @app.get("/setup")
 def setup_page() -> str:
     return render_template("setup.html")
+
+
+@app.get("/")
+def landing_page():
+    return redirect("/dashboard", code=302)
 
 
 @app.get("/dashboard")

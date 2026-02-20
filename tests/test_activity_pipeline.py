@@ -1,6 +1,12 @@
 import unittest
+from types import SimpleNamespace
 
-from activity_pipeline import _extract_strava_badges, _extract_strava_segment_notables
+from activity_pipeline import (
+    _extract_strava_badges,
+    _extract_strava_segment_notables,
+    _profile_activity_update_payload,
+    _profile_match_reasons,
+)
 
 
 class TestStravaSegmentNotables(unittest.TestCase):
@@ -56,6 +62,34 @@ class TestStravaSegmentNotables(unittest.TestCase):
         badges = _extract_strava_badges(activity, segment_notables=segment_notables)
         self.assertIn("Strava: Segment Effort Pr PR - Bridge Sprint", badges)
         self.assertIn("Strava PR: Bridge Sprint (1:15)", badges)
+
+
+class TestStrengthProfileBehavior(unittest.TestCase):
+    def test_strength_profile_matches_weight_training_sport_type(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Weight Training",
+            "type": "Workout",
+        }
+        reasons = _profile_match_reasons("strength_training", activity, settings)
+        self.assertTrue(reasons)
+        self.assertIn("sport_type=Weight Training", reasons)
+
+    def test_strength_profile_update_payload_sets_private_and_title(self) -> None:
+        payload = _profile_activity_update_payload(
+            "strength_training",
+            {"id": 123, "sport_type": "WeightTraining"},
+            "Sets: 5 | Reps: 5",
+        )
+        self.assertEqual(payload.get("description"), "Sets: 5 | Reps: 5")
+        self.assertTrue(payload.get("private"))
+        self.assertEqual(payload.get("name"), "Strength Training")
 
 
 if __name__ == "__main__":

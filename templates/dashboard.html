@@ -29,8 +29,8 @@
         --space-7: 16px;
         --space-8: 24px;
         --bg: var(--dg-bg-1);
-        --bg-2: rgba(19, 32, 58, 0.9);
-        --card: rgba(19, 32, 58, 0.78);
+        --bg-2: rgba(18, 18, 18, 0.92);
+        --card: rgba(22, 22, 22, 0.82);
         --text: var(--dg-text);
         --muted: var(--dg-muted);
         --accent: var(--dg-neon-cyan);
@@ -80,9 +80,16 @@
         font-family: "Space Grotesk", system-ui, sans-serif;
         color: var(--text);
         background:
-          radial-gradient(980px 460px at 8% 0%, rgba(0, 217, 255, 0.12), transparent 58%),
+          repeating-linear-gradient(
+            -45deg,
+            rgba(255, 255, 255, 0.03) 0px,
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px,
+            transparent 20px
+          ),
+          radial-gradient(980px 460px at 8% 0%, rgba(252, 76, 2, 0.12), transparent 58%),
           radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.1), transparent 54%),
-          linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 44%, #0a1428 100%);
+          linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 44%, #050505 100%);
         min-height: 100vh;
         padding: 0;
       }
@@ -109,7 +116,7 @@
 
       header {
         background:
-          linear-gradient(120deg, rgba(0, 217, 255, 0.11), rgba(252, 76, 2, 0.1)),
+          linear-gradient(120deg, rgba(252, 76, 2, 0.11), rgba(252, 76, 2, 0.1)),
           var(--card);
         border: 1px solid var(--dg-line);
         border-radius: var(--radius);
@@ -364,19 +371,19 @@
       }
 
       .filter-menu-check:checked {
-        border-color: rgba(56, 189, 248, 0.95);
+        border-color: rgba(252, 76, 2, 0.95);
         background: rgba(15, 23, 42, 0.95);
         box-shadow:
-          inset 0 0 0 4px rgba(56, 189, 248, 0.95),
-          0 0 0 2px rgba(56, 189, 248, 0.2);
+          inset 0 0 0 4px rgba(252, 76, 2, 0.95),
+          0 0 0 2px rgba(252, 76, 2, 0.2);
       }
 
       .filter-menu-done {
         width: 100%;
         margin-top: 0;
-        background: rgba(56, 189, 248, 0.12);
+        background: rgba(252, 76, 2, 0.12);
         color: var(--text);
-        border: 1px solid rgba(56, 189, 248, 0.5);
+        border: 1px solid rgba(252, 76, 2, 0.5);
         border-radius: 8px;
         padding: var(--space-3) var(--space-4);
         font-size: 13px;
@@ -432,22 +439,22 @@
       }
 
       .units-toggle-button.active {
-        background: rgba(0, 217, 255, 0.2);
+        background: rgba(252, 76, 2, 0.2);
       }
 
       .units-toggle-button:focus-visible {
-        outline: 2px solid rgba(56, 189, 248, 0.7);
+        outline: 2px solid rgba(252, 76, 2, 0.7);
         outline-offset: -2px;
       }
 
       @media (hover: hover) and (pointer: fine) {
         .units-toggle-button:hover {
-          background: rgba(56, 189, 248, 0.14);
+          background: rgba(252, 76, 2, 0.14);
         }
 
         .filter-clear-button:hover:not(:disabled) {
           border-color: var(--accent);
-          box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+          box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
         }
       }
 
@@ -508,7 +515,7 @@
 
       .filter-button.active {
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+        box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
       }
 
       .summary {
@@ -547,20 +554,20 @@
 
       .summary-card-action.active {
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+        box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
       }
 
       @media (hover: hover) and (pointer: fine) {
         .summary-card-action:hover {
           border-color: var(--accent);
-          box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+          box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
         }
       }
 
       .summary-card-action:focus-visible {
         outline: none;
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+        box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
       }
 
       .summary-card-action.summary-glow-cleared,
@@ -877,7 +884,7 @@
 
       .more-stats-metric-chip.active {
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+        box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
       }
 
       .more-stats-metric-chip:focus-visible {
@@ -888,7 +895,7 @@
         .more-stats-metric-chip:not(.is-unavailable):hover,
         .more-stats-metric-chip:not(.is-unavailable):focus-visible {
           border-color: var(--accent);
-          box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+          box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
         }
       }
 
@@ -948,7 +955,7 @@
 
       .more-stats-fact-button.active {
         border-color: var(--accent);
-        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+        box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
       }
 
       .more-stats-fact-button:focus-visible {
@@ -959,7 +966,7 @@
         .more-stats-fact-button:hover:not(:disabled),
         .more-stats-fact-button:focus-visible {
           border-color: var(--accent);
-          box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+          box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.4);
         }
       }
 
@@ -1284,12 +1291,12 @@
 
       @media (hover: hover) and (pointer: fine) {
         .cell:hover:not(.outside) {
-          box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 14px rgba(0, 217, 255, 0.78);
+          box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 14px rgba(252, 76, 2, 0.78);
         }
       }
 
       .cell.active {
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 16px rgba(0, 217, 255, 0.88);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 16px rgba(252, 76, 2, 0.88);
         filter: brightness(1.2);
       }
 
@@ -1331,7 +1338,7 @@
       }
 
       .tooltip-link:hover {
-        color: #9ef5ff;
+        color: #ffd1b5;
       }
 
       .tooltip.touch {
@@ -1538,7 +1545,7 @@
           color: var(--muted);
         }
         #resetAllRow .units-toggle-button.active {
-          background: rgba(56, 189, 248, 0.3);
+          background: rgba(252, 76, 2, 0.3);
           color: var(--text);
         }
 
@@ -1716,7 +1723,7 @@
         }
 
         #resetAllRow .units-toggle-button.active {
-          background: rgba(56, 189, 248, 0.3);
+          background: rgba(252, 76, 2, 0.3);
           color: var(--text);
         }
 
@@ -1906,7 +1913,7 @@
           border-left-color: rgba(148, 163, 184, 0.45);
         }
         #resetAllRow .units-toggle-button.active {
-          background: rgba(56, 189, 248, 0.3);
+          background: rgba(252, 76, 2, 0.3);
           color: var(--text);
         }
         #resetAllRow .units-toggle-button:focus-visible {

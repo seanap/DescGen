@@ -221,10 +221,133 @@ def _normalize_garmin_badges(payload: Any, max_items: int = 20) -> list[str]:
     return badges
 
 
-def _build_garmin_last_activity_context(last_activity: dict[str, Any]) -> dict[str, Any]:
+def _normalize_strength_summary_sets(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        sets = _as_int(item.get("sets"))
+        reps = _as_int(item.get("reps"))
+        max_weight = _as_float(item.get("maxWeight"))
+        duration_ms = _as_float(item.get("duration"))
+        rows.append(
+            {
+                "category": str(item.get("category") or "N/A"),
+                "sub_category": str(item.get("subCategory") or "N/A"),
+                "sets": sets if sets is not None else "N/A",
+                "reps": reps if reps is not None else "N/A",
+                "max_weight": round(max_weight, 2) if max_weight is not None else "N/A",
+                "duration_seconds": int(round(duration_ms / 1000.0))
+                if duration_ms is not None and duration_ms >= 0
+                else "N/A",
+            }
+        )
+    return rows
+
+
+def _normalize_exercise_sets(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get("exerciseSets")
+    if not isinstance(rows, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        repetition_count = _as_int(item.get("repetitionCount"))
+        weight = _as_float(item.get("weight"))
+        duration_seconds = _as_float(item.get("duration"))
+        exercise_names: list[str] = []
+        exercises = item.get("exercises")
+        if isinstance(exercises, list):
+            for exercise in exercises:
+                if not isinstance(exercise, dict):
+                    continue
+                name = str(exercise.get("name") or "").strip()
+                if not name or name in exercise_names:
+                    continue
+                exercise_names.append(name)
+
+        normalized.append(
+            {
+                "set_type": str(item.get("setType") or "UNKNOWN").strip().upper(),
+                "reps": repetition_count if repetition_count is not None else "N/A",
+                "weight": round(weight, 2) if weight is not None else "N/A",
+                "duration_seconds": int(round(duration_seconds))
+                if duration_seconds is not None and duration_seconds >= 0
+                else "N/A",
+                "exercise_names": exercise_names,
+            }
+        )
+
+    return normalized
+
+
+def _build_garmin_last_activity_context(
+    last_activity: dict[str, Any],
+    *,
+    exercise_sets_payload: Any | None = None,
+) -> dict[str, Any]:
     avg_power = _as_float(last_activity.get("avgPower"))
     norm_power = _as_float(last_activity.get("normPower"))
     max_power = _as_float(last_activity.get("maxPower"))
+    strength_summary_sets = _normalize_strength_summary_sets(last_activity.get("summarizedExerciseSets"))
+    exercise_sets = _normalize_exercise_sets(exercise_sets_payload)
+
+    active_sets_from_payload = [row for row in exercise_sets if str(row.get("set_type")) == "ACTIVE"]
+    total_sets = _as_int(last_activity.get("totalSets"))
+    active_sets = _as_int(last_activity.get("activeSets"))
+    total_reps = _as_int(last_activity.get("totalReps"))
+    max_weight = None
+
+    if total_sets is None:
+        if active_sets_from_payload:
+            total_sets = len(active_sets_from_payload)
+        else:
+            total_sets = 0
+            for row in strength_summary_sets:
+                row_sets = _as_int(row.get("sets"))
+                if row_sets is not None and row_sets > 0:
+                    total_sets += row_sets
+            if total_sets <= 0:
+                total_sets = None
+
+    if active_sets is None:
+        active_sets = len(active_sets_from_payload) if active_sets_from_payload else total_sets
+
+    if total_reps is None:
+        total_reps = 0
+        for row in active_sets_from_payload:
+            reps = _as_int(row.get("reps"))
+            if reps is not None and reps > 0:
+                total_reps += reps
+        if total_reps <= 0:
+            total_reps = 0
+            for row in strength_summary_sets:
+                reps = _as_int(row.get("reps"))
+                if reps is not None and reps > 0:
+                    total_reps += reps
+            if total_reps <= 0:
+                total_reps = None
+
+    for row in active_sets_from_payload:
+        weight = _as_float(row.get("weight"))
+        if weight is None:
+            continue
+        if max_weight is None or weight > max_weight:
+            max_weight = weight
+    if max_weight is None:
+        for row in strength_summary_sets:
+            weight = _as_float(row.get("max_weight"))
+            if weight is None:
+                continue
+            if max_weight is None or weight > max_weight:
+                max_weight = weight
+
     return {
         "activity_name": str(last_activity.get("activityName") or "N/A"),
         "activity_type": str(safe_get(last_activity, ["activityType", "typeKey"], default="N/A") or "N/A"),
@@ -283,6 +406,12 @@ def _build_garmin_last_activity_context(last_activity: dict[str, Any]) -> dict[s
         "lap_count": int(round(_as_float(last_activity.get("lapCount")) or 0))
         if isinstance(last_activity.get("lapCount"), (int, float))
         else "N/A",
+        "total_sets": total_sets if total_sets is not None else "N/A",
+        "active_sets": active_sets if active_sets is not None else "N/A",
+        "total_reps": total_reps if total_reps is not None else "N/A",
+        "max_weight": round(max_weight, 2) if max_weight is not None else "N/A",
+        "strength_summary_sets": strength_summary_sets,
+        "exercise_sets": exercise_sets,
         "hr_zone_summary": _zone_summary(last_activity, "hrTimeInZone_"),
         "power_zone_summary": _zone_summary(last_activity, "powerTimeInZone_"),
         "is_pr": bool(last_activity.get("pr")),
@@ -391,7 +520,19 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         if isinstance(last_activity.get("avgGradeAdjustedSpeed"), (int, float))
         else "N/A"
     )
-    metrics["garmin_last_activity"] = _build_garmin_last_activity_context(last_activity)
+    exercise_sets_payload: Any | None = None
+    activity_id = _as_int(last_activity.get("activityId"))
+    get_exercise_sets = getattr(client, "get_activity_exercise_sets", None)
+    if activity_id is not None and callable(get_exercise_sets):
+        try:
+            exercise_sets_payload = get_exercise_sets(activity_id)
+        except Exception as exc:
+            logger.debug("Garmin activity exercise sets unavailable: %s", exc)
+
+    metrics["garmin_last_activity"] = _build_garmin_last_activity_context(
+        last_activity,
+        exercise_sets_payload=exercise_sets_payload,
+    )
     metrics["garmin_segment_notables"] = _normalize_garmin_segment_notables(last_activity)
 
     try:

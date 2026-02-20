@@ -4,9 +4,15 @@ body {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   color: var(--dg-text);
   background:
-    radial-gradient(1200px 520px at -5% -20%, rgba(0, 217, 255, 0.12), transparent 62%),
-    radial-gradient(920px 480px at 105% 0%, rgba(252, 76, 2, 0.11), transparent 58%),
-    linear-gradient(180deg, var(--dg-bg-0), var(--dg-bg-1) 44%, #0a1428 100%);
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 20px
+    ),
+    radial-gradient(1000px 480px at 105% -10%, rgba(252, 76, 2, 0.14), transparent 60%),
+    linear-gradient(180deg, var(--dg-bg-0), var(--dg-bg-1) 48%, #050505 100%);
 }
 
 * {
@@ -49,7 +55,7 @@ button {
   border: 1px solid var(--dg-line);
   border-radius: 10px;
   padding: 8px 12px;
-  background: rgba(19, 32, 58, 0.75);
+  background: rgba(22, 22, 22, 0.86);
   color: var(--dg-text);
   cursor: pointer;
   font-family: inherit;
@@ -62,25 +68,21 @@ button {
 }
 
 button:hover {
-  border-color: rgba(0, 217, 255, 0.66);
-  box-shadow: 0 0 0 1px rgba(0, 217, 255, 0.18) inset;
+  border-color: rgba(252, 76, 2, 0.7);
+  box-shadow: 0 0 0 1px rgba(252, 76, 2, 0.2) inset;
   transform: translateY(-1px);
 }
 
 button:focus-visible {
   outline: none;
-  border-color: rgba(0, 217, 255, 0.85);
+  border-color: rgba(252, 76, 2, 0.85);
   box-shadow:
-    0 0 0 2px rgba(0, 217, 255, 0.23),
-    0 0 16px rgba(0, 217, 255, 0.22);
+    0 0 0 2px rgba(252, 76, 2, 0.24),
+    0 0 16px rgba(252, 76, 2, 0.22);
 }
 
 button.primary {
-  background: linear-gradient(
-    125deg,
-    rgba(252, 76, 2, 0.9),
-    rgba(0, 217, 255, 0.66)
-  );
+  background: linear-gradient(125deg, rgba(252, 76, 2, 0.95), rgba(255, 122, 26, 0.84));
   border-color: rgba(252, 76, 2, 0.85);
   color: #f8fcff;
 }
@@ -116,7 +118,7 @@ button:disabled {
   border-radius: 10px;
   border: 1px solid var(--dg-line);
   color: var(--dg-muted);
-  background: rgba(19, 32, 58, 0.52);
+  background: rgba(20, 20, 20, 0.72);
   white-space: pre-wrap;
 }
 
@@ -145,7 +147,7 @@ button:disabled {
 
 .grid .card {
   padding: 14px;
-  background: rgba(19, 32, 58, 0.7);
+  background: rgba(20, 20, 20, 0.78);
 }
 
 .provider-head {
@@ -163,13 +165,13 @@ button:disabled {
 
 .provider-link {
   font-size: 0.84rem;
-  color: var(--dg-neon-cyan);
+  color: var(--dg-strava);
   text-decoration: none;
   font-weight: 600;
 }
 
 .provider-link:hover {
-  color: #8ff1ff;
+  color: #ffad84;
 }
 
 .field {
@@ -192,17 +194,17 @@ button:disabled {
   border: 1px solid var(--dg-line);
   padding: 8px 10px;
   color: var(--dg-text);
-  background: rgba(9, 15, 29, 0.74);
+  background: rgba(10, 10, 10, 0.88);
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
 }
 
 .field input[type="text"]:focus-visible,
 .field input[type="password"]:focus-visible {
   outline: none;
-  border-color: rgba(0, 217, 255, 0.85);
+  border-color: rgba(252, 76, 2, 0.85);
   box-shadow:
-    0 0 0 2px rgba(0, 217, 255, 0.2),
-    0 0 16px rgba(0, 217, 255, 0.22);
+    0 0 0 2px rgba(252, 76, 2, 0.2),
+    0 0 16px rgba(252, 76, 2, 0.24);
 }
 
 .toggle {
@@ -235,16 +237,16 @@ button:disabled {
   padding: 10px;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.82rem;
-  color: #cfe3ff;
-  background: rgba(8, 14, 28, 0.9);
+  color: #ededed;
+  background: rgba(8, 8, 8, 0.92);
 }
 
 .env-wrap textarea:focus-visible {
   outline: none;
-  border-color: rgba(0, 217, 255, 0.8);
+  border-color: rgba(252, 76, 2, 0.85);
   box-shadow:
-    0 0 0 2px rgba(0, 217, 255, 0.18),
-    0 0 14px rgba(0, 217, 255, 0.2);
+    0 0 0 2px rgba(252, 76, 2, 0.2),
+    0 0 14px rgba(252, 76, 2, 0.25);
 }
 
 .muted {
