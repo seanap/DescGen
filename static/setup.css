@@ -49,9 +49,7 @@ body {
   padding: 16px 18px;
   border: 1px solid var(--dg-line);
   border-radius: 16px;
-  background:
-    linear-gradient(140deg, rgba(252, 76, 2, 0.09), transparent 52%),
-    rgba(16, 16, 16, 0.84);
+  background: var(--dg-panel);
   box-shadow: var(--dg-shadow);
 }
 
@@ -158,6 +156,11 @@ button:disabled {
 
 .section-actions {
   margin-bottom: 10px;
+}
+
+.strava-actions-inline {
+  margin-top: 8px;
+  align-items: center;
 }
 
 .grid {

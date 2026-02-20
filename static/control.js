@@ -391,7 +391,7 @@
   function setTopStatus(state, message) {
     if (!topStatus) return;
     topStatus.classList.remove("ok", "error", "running");
-    if (state === "success") {
+    if (state === "success" || state === "idle") {
       topStatus.classList.add("ok");
     } else if (state === "error") {
       topStatus.classList.add("error");
@@ -595,11 +595,11 @@
     for (const rowRef of rowRefs.values()) {
       setRowStatus(rowRef, "idle", "Not run yet.");
     }
-    setTopStatus("idle", "Ready");
+    setTopStatus("success", "Ready");
   }
 
   renderOperations();
-  setTopStatus("idle", "Ready");
+  setTopStatus("success", "Ready");
 
   if (filterInput) {
     filterInput.addEventListener("input", applyFilter);

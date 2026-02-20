@@ -30,35 +30,37 @@ body {
       transparent 1px,
       transparent 20px
     ),
-    radial-gradient(940px 520px at 12% -18%, rgba(252, 76, 2, 0.18), transparent 56%),
-    radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.14), transparent 58%),
+    radial-gradient(1000px 480px at 105% -10%, rgba(252, 76, 2, 0.14), transparent 60%),
     linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 48%, #050505 100%);
 }
 
 .control-shell {
   width: min(var(--control-shell-width), calc(100% - 30px));
   margin: calc(var(--dg-shell-offset) + 20px) auto 30px;
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  border-radius: var(--control-radius);
+  border: 1px solid var(--control-line);
+  background: var(--dg-panel);
+  box-shadow: var(--dg-shadow);
+}
+
+.control-hero {
+  padding: 16px 18px;
 }
 
 .control-card {
-  border-radius: var(--control-radius);
-  border: 1px solid var(--control-line);
-  background:
-    linear-gradient(150deg, rgba(252, 76, 2, 0.06), transparent 40%),
-    linear-gradient(180deg, var(--control-surface), var(--control-surface-deep));
-  box-shadow:
-    0 0 0 1px rgba(252, 76, 2, 0.08) inset,
-    0 30px 70px rgba(0, 0, 0, 0.54);
   overflow: hidden;
 }
 
-.control-header {
+.control-hero-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 22px;
-  padding: 18px 20px 16px;
-  border-bottom: 1px solid var(--control-line);
 }
 
 .control-header-copy {
@@ -119,7 +121,10 @@ h1 {
   grid-template-columns: auto minmax(270px, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-width: min(100%, 560px);
+  min-width: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--control-line);
+  justify-content: center;
 }
 
 .control-tools label {
@@ -329,18 +334,13 @@ tr.is-hidden {
     margin-top: calc(var(--dg-shell-offset) + 14px);
   }
 
-  .control-header {
+  .control-hero-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .control-header-side {
-    justify-items: stretch;
-  }
-
   .control-tools {
     grid-template-columns: 1fr;
-    min-width: 0;
   }
 
   .control-tools label {
