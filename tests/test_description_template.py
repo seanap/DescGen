@@ -344,9 +344,18 @@ class TestDescriptionTemplate(unittest.TestCase):
             self.assertEqual(default["label"], "Default")
             self.assertTrue(default["enabled"])
             self.assertTrue(default["locked"])
+            self.assertTrue(any(str(item.get("profile_id")) == "strength_training" for item in profiles))
+            strength = next(item for item in profiles if str(item.get("profile_id")) == "strength_training")
+            self.assertEqual(strength["label"], "Strength Training")
+            self.assertTrue(strength["enabled"])
+            self.assertFalse(strength["locked"])
 
             working = get_working_template_profile(settings)
             self.assertEqual(working["profile_id"], "default")
+
+            strength_template = get_active_template(settings, profile_id="strength_training")
+            self.assertIn("Sets:", strength_template["template"])
+            self.assertIn("Reps:", strength_template["template"])
 
     def test_profile_template_save_and_version_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -958,7 +958,8 @@ def _profile_match_reasons(
     settings: Settings,
 ) -> list[str]:
     workout_type = _to_int(activity.get("workout_type"))
-    sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip().lower()
+    raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip()
+    sport_type = raw_sport_type.lower()
     treadmill = _is_treadmill(activity)
     distance = _distance_miles(activity)
     gain_ft = _elevation_gain_feet(activity)
@@ -982,6 +983,11 @@ def _profile_match_reasons(
     if profile_id == "commute":
         if bool(activity.get("commute")):
             reasons.append("commute=true")
+        return reasons
+
+    if profile_id == "strength_training":
+        if sport_type in {"weighttraining", "weight training"}:
+            reasons.append(f"sport_type={raw_sport_type or 'WeightTraining'}")
         return reasons
 
     if profile_id == "trail":
@@ -1060,6 +1066,10 @@ def _select_activity_profile(settings: Settings, detailed_activity: dict[str, An
 
 def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[str, Any], description: str) -> dict[str, Any]:
     payload: dict[str, Any] = {"description": description}
+    if profile_id == "strength_training":
+        payload["private"] = True
+        payload["name"] = "Strength Training"
+        return payload
     if profile_id == "treadmill":
         speed_mps = _as_float(detailed_activity.get("average_speed")) or 0.0
         speed_mph = speed_mps * 2.23694

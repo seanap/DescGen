@@ -3,12 +3,17 @@
  * Source: https://github.com/aspain/git-sweaty
  */
 
-const DEFAULT_COLORS = ["#1f2937", "#1f2937", "#1f2937", "#1f2937", "#1f2937"];
-const MULTI_TYPE_COLOR = "#b967ff";
+const DEFAULT_COLORS = ["#2a2a2a", "#2a2a2a", "#2a2a2a", "#2a2a2a", "#2a2a2a"];
+const MULTI_TYPE_COLOR = "#ff8a3d";
 const TYPE_ACCENT_OVERRIDES = {
+  Run: "#fc4c02",
+  Ride: "#ff7a1a",
+  Walk: "#ff9b4a",
+  Hike: "#ff9b4a",
+  WeightTraining: "#ffb36e",
   Workout: "#ff8a5b",
 };
-const FALLBACK_VAPORWAVE = ["#f15bb5", "#fee440", "#00bbf9", "#00f5d4", "#9b5de5", "#fb5607", "#ffbe0b", "#72efdd"];
+const FALLBACK_VAPORWAVE = ["#fc4c02", "#ff6a1a", "#ff7a1a", "#ff8a2b", "#ff9b4a", "#ffad62", "#ffbe7a", "#d58f62"];
 const STAT_PLACEHOLDER = "- - -";
 const CREATOR_REPO_SLUG = "aspain/git-sweaty";
 const TYPE_LABEL_OVERRIDES = {

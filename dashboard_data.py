@@ -28,23 +28,23 @@ TYPE_LABEL_OVERRIDES = {
 }
 
 TYPE_ACCENT_OVERRIDES = {
-    "Run": "#01cdfe",
-    "Ride": "#05ffa1",
-    "Walk": "#d6ff6b",
-    "Hike": "#d6ff6b",
-    "WeightTraining": "#ff71ce",
+    "Run": "#fc4c02",
+    "Ride": "#ff7a1a",
+    "Walk": "#ff9b4a",
+    "Hike": "#ff9b4a",
+    "WeightTraining": "#ffb36e",
     "Workout": "#ff8a5b",
 }
 
 FALLBACK_ACCENTS = [
-    "#f15bb5",
-    "#fee440",
-    "#00bbf9",
-    "#00f5d4",
-    "#9b5de5",
-    "#fb5607",
-    "#ffbe0b",
-    "#72efdd",
+    "#fc4c02",
+    "#ff6a1a",
+    "#ff7a1a",
+    "#ff8a2b",
+    "#ff9b4a",
+    "#ffad62",
+    "#ffbe7a",
+    "#d58f62",
 ]
 
 

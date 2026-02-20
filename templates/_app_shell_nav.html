@@ -1,27 +1,39 @@
 {% set _path = request.path %}
+{% if _path.startswith('/setup') %}
+  {% set _section = 'Setup' %}
+{% elif _path.startswith('/editor') %}
+  {% set _section = 'Editor' %}
+{% elif _path.startswith('/dashboard') or _path == '/' %}
+  {% set _section = 'Dashboard' %}
+{% else %}
+  {% set _section = 'Dashboard' %}
+{% endif %}
 <div class="dg-shell">
   <div class="dg-shell-inner">
     <a class="dg-brand" href="/dashboard" aria-label="DescGen home">
       <span class="dg-brand-mark" aria-hidden="true"></span>
-      <span>DescGen</span>
-      <span class="dg-brand-sub">Dark Neon Strava</span>
+      <span class="dg-brand-text">DescGen</span>
     </a>
+    <div class="dg-shell-title" aria-live="polite">
+      <span class="dg-shell-kicker">Auto Stat Description</span>
+      <span class="dg-shell-heading">{{ _section }} Control Center</span>
+    </div>
     <nav class="dg-nav" aria-label="Primary">
       <a
-        class="dg-nav-link {% if _path.startswith('/setup') %}is-active{% endif %}"
-        href="/setup"
-        {% if _path.startswith('/setup') %}aria-current="page"{% endif %}
-      >Setup</a>
+        class="dg-nav-link {% if _path.startswith('/dashboard') %}is-active{% endif %}"
+        href="/dashboard"
+        {% if _path.startswith('/dashboard') %}aria-current="page"{% endif %}
+      >Dashboard</a>
       <a
         class="dg-nav-link {% if _path.startswith('/editor') %}is-active{% endif %}"
         href="/editor"
         {% if _path.startswith('/editor') %}aria-current="page"{% endif %}
       >Editor</a>
       <a
-        class="dg-nav-link {% if _path.startswith('/dashboard') %}is-active{% endif %}"
-        href="/dashboard"
-        {% if _path.startswith('/dashboard') %}aria-current="page"{% endif %}
-      >Dashboard</a>
+        class="dg-nav-link {% if _path.startswith('/setup') %}is-active{% endif %}"
+        href="/setup"
+        {% if _path.startswith('/setup') %}aria-current="page"{% endif %}
+      >Setup</a>
     </nav>
   </div>
 </div>

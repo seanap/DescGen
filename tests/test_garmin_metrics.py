@@ -6,6 +6,7 @@ from stat_modules.garmin_metrics import fetch_training_status_and_scores
 class _DummyGarminClient:
     def get_last_activity(self):
         return {
+            "activityId": 21922402831,
             "startTimeGMT": "2026-02-15 11:42:00",
             "duration": 3519,
             "movingDuration": 3490,
@@ -36,6 +37,27 @@ class _DummyGarminClient:
             "maxRespirationRate": 47.8,
             "steps": 10341,
             "lapCount": 8,
+            "totalSets": 2,
+            "activeSets": 2,
+            "totalReps": 47,
+            "summarizedExerciseSets": [
+                {
+                    "category": "ROW",
+                    "subCategory": "SEATED_CABLE_ROW",
+                    "reps": 29,
+                    "sets": 1,
+                    "maxWeight": 80,
+                    "duration": 52696,
+                },
+                {
+                    "category": "DIP",
+                    "subCategory": "BENCH_DIP",
+                    "reps": 18,
+                    "sets": 1,
+                    "maxWeight": 0,
+                    "duration": 53096,
+                },
+            ],
             "hrTimeInZone_1": 372,
             "hrTimeInZone_2": 1124,
             "powerTimeInZone_1": 298,
@@ -112,6 +134,34 @@ class _DummyGarminClient:
             }
         ]
 
+    def get_activity_exercise_sets(self, _activity_id):
+        return {
+            "activityId": 21922402831,
+            "exerciseSets": [
+                {
+                    "setType": "ACTIVE",
+                    "repetitionCount": 18,
+                    "weight": 80,
+                    "duration": 53.096,
+                    "exercises": [{"name": "BENCH_DIP"}],
+                },
+                {
+                    "setType": "REST",
+                    "repetitionCount": None,
+                    "weight": None,
+                    "duration": 23.207,
+                    "exercises": [],
+                },
+                {
+                    "setType": "ACTIVE",
+                    "repetitionCount": 29,
+                    "weight": 75,
+                    "duration": 52.696,
+                    "exercises": [{"name": "SEATED_CABLE_ROW"}],
+                },
+            ],
+        }
+
     def get_endurance_score(self, _end_date):
         return {"overallScore": 7312}
 
@@ -160,6 +210,12 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         self.assertEqual(last_activity["distance_miles"], "8.02 mi")
         self.assertEqual(last_activity["average_pace"], "7:19/mi")
         self.assertIn("Z1", last_activity["hr_zone_summary"])
+        self.assertEqual(last_activity["total_sets"], 2)
+        self.assertEqual(last_activity["active_sets"], 2)
+        self.assertEqual(last_activity["total_reps"], 47)
+        self.assertEqual(last_activity["max_weight"], 80.0)
+        self.assertEqual(len(last_activity["strength_summary_sets"]), 2)
+        self.assertEqual(len(last_activity["exercise_sets"]), 3)
 
         details = metrics["fitness_age_details"]
         self.assertIsInstance(details, dict)

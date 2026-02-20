@@ -42,9 +42,15 @@ body {
 
 body[data-theme="dark"] {
   background:
-    radial-gradient(980px 460px at 8% 0%, rgba(0, 217, 255, 0.12), transparent 58%),
-    radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.1), transparent 54%),
-    linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 44%, #0a1428 100%);
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 20px
+    ),
+    radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.14), transparent 58%),
+    linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 48%, #050505 100%);
 }
 
 .bg-shape {
@@ -60,7 +66,7 @@ body[data-theme="dark"] {
   height: 440px;
   top: -200px;
   left: -120px;
-  background: linear-gradient(145deg, #00d9ff, #2aa5ff);
+  background: linear-gradient(145deg, rgba(252, 76, 2, 0.55), rgba(90, 90, 90, 0.32));
 }
 
 .bg-shape-b {
@@ -68,7 +74,7 @@ body[data-theme="dark"] {
   height: 380px;
   right: -130px;
   bottom: -170px;
-  background: linear-gradient(120deg, #fc4c02, #ff8d5a);
+  background: linear-gradient(120deg, rgba(252, 76, 2, 0.72), rgba(40, 40, 40, 0.44));
 }
 
 .card {
@@ -283,7 +289,7 @@ h3 {
 }
 
 .workspace-tab:hover {
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
 }
 
 .preview-head {
@@ -330,7 +336,7 @@ h3 {
   height: 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel-soft) 90%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 90%, #080808);
   overflow: hidden;
 }
 
@@ -363,7 +369,7 @@ h3 {
 }
 
 .tab.active {
-  background: color-mix(in srgb, var(--panel) 84%, #0a1428);
+  background: color-mix(in srgb, var(--panel) 84%, #080808);
   border-color: var(--secondary);
   color: var(--secondary);
 }
@@ -582,7 +588,7 @@ label[for="templateEditor"] {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 8px;
-  background: color-mix(in srgb, var(--panel-soft) 90%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 90%, #080808);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 0.75rem;
 }
@@ -603,7 +609,7 @@ label[for="templateEditor"] {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px;
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 0.74rem;
   line-height: 1.35;
@@ -683,7 +689,7 @@ label[for="templateEditor"] {
   font-size: 0.66rem;
   font-weight: 700;
   color: var(--muted);
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
   margin-right: 4px;
   margin-bottom: 3px;
 }
@@ -710,7 +716,7 @@ label[for="templateEditor"] {
 .field-favorite {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-soft) 90%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 90%, #080808);
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 700;
@@ -768,7 +774,7 @@ label[for="templateEditor"] {
 .mini-btn {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
   cursor: pointer;
   width: 30px;
   height: 28px;
@@ -826,7 +832,7 @@ label[for="templateEditor"] {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 10px;
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
 }
 
 .snippet-head h3 {
@@ -858,7 +864,7 @@ label[for="templateEditor"] {
   border-radius: 10px;
   padding: 10px;
   min-height: 70px;
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
   font-size: 0.84rem;
 }
 
@@ -930,7 +936,7 @@ label[for="templateEditor"] {
   left: 0;
   width: min(420px, 92vw);
   height: 100vh;
-  background: color-mix(in srgb, var(--panel) 94%, #0a1428);
+  background: color-mix(in srgb, var(--panel) 94%, #080808);
   border-right: 1px solid var(--line);
   box-shadow: var(--shadow);
   transform: translateX(-102%);
@@ -986,7 +992,7 @@ label[for="templateEditor"] {
 
 .theme-corner {
   position: fixed;
-  top: 70px;
+  top: calc(var(--dg-shell-offset, 90px) + 8px);
   right: 14px;
   z-index: 70;
   display: grid;
@@ -1010,7 +1016,7 @@ label[for="templateEditor"] {
   width: min(340px, 92vw);
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 94%, #0a1428);
+  background: color-mix(in srgb, var(--panel) 94%, #080808);
   box-shadow: var(--shadow);
   padding: 10px;
   display: none;
@@ -1076,7 +1082,7 @@ label[for="templateEditor"] {
   height: 36px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel-soft) 90%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 90%, #080808);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1099,7 +1105,7 @@ label[for="templateEditor"] {
   height: 26px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 85%, #0a1428);
+  background: color-mix(in srgb, var(--panel) 85%, #080808);
   transition: transform 0.16s ease;
 }
 
@@ -1181,7 +1187,7 @@ label[for="templateEditor"] {
 .tour-body {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--panel-soft) 92%, #0a1428);
+  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
   padding: 12px;
   font-size: 0.9rem;
   line-height: 1.45;
