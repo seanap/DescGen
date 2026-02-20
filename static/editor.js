@@ -133,11 +133,11 @@ const FALLBACK_SNIPPETS = [
   },
 ];
 
-const DRAFT_KEY = "auto_stat_description_editor_draft";
-const THEME_KEY = "auto_stat_description_editor_theme";
-const TOUR_SEEN_KEY = "auto_stat_description_editor_tour_seen_v1";
-const CATALOG_FAVORITES_KEY = "auto_stat_description_editor_catalog_favorites_v1";
-const CATALOG_RECENTS_KEY = "auto_stat_description_editor_catalog_recents_v1";
+const DRAFT_KEY = "chronicle_editor_draft";
+const THEME_KEY = "chronicle_editor_theme";
+const TOUR_SEEN_KEY = "chronicle_editor_tour_seen_v1";
+const CATALOG_FAVORITES_KEY = "chronicle_editor_catalog_favorites_v1";
+const CATALOG_RECENTS_KEY = "chronicle_editor_catalog_recents_v1";
 
 const TOUR_STEPS = [
   {
@@ -165,7 +165,7 @@ const TOUR_STEPS = [
 const state = {
   templateActive: "",
   templateDefault: "",
-  templateName: "Auto Stat Template",
+  templateName: "Chronicle Template",
   templateMeta: null,
   profiles: [],
   workingProfileId: "default",
@@ -341,7 +341,7 @@ function updateCurrentTemplateDisplay(name = "") {
     elements.currentTemplateDisplay.textContent = fromInput;
     return;
   }
-  elements.currentTemplateDisplay.textContent = String(state.templateName || "Auto Stat Template");
+  elements.currentTemplateDisplay.textContent = String(state.templateName || "Chronicle Template");
 }
 
 function currentProfileId() {
@@ -1953,7 +1953,7 @@ function renderTemplateMeta(meta) {
     return;
   }
   const lines = [];
-  lines.push(`Name: ${meta.name || "Auto Stat Template"}`);
+  lines.push(`Name: ${meta.name || "Chronicle Template"}`);
   lines.push(`Version: ${meta.current_version || "none"}`);
   lines.push(`Updated: ${meta.updated_at_utc || "unknown"}`);
   lines.push(`By: ${meta.updated_by || "unknown"} | Source: ${meta.source || "unknown"}`);
@@ -2507,11 +2507,11 @@ function downloadTextFile(filename, text) {
 }
 
 function buildExportFilename(name) {
-  const baseRaw = String(name || "auto-stat-template").trim().toLowerCase();
+  const baseRaw = String(name || "chronicle-template").trim().toLowerCase();
   const base = baseRaw
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "") || "auto-stat-template";
+    .replace(/^-+|-+$/g, "") || "chronicle-template";
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `${base}-${stamp}.json`;
 }
@@ -2528,7 +2528,7 @@ async function exportTemplateBundle() {
     return;
   }
   const payload = res.payload || {};
-  const filename = buildExportFilename(payload.name || state.templateName || "auto-stat-template");
+  const filename = buildExportFilename(payload.name || state.templateName || "chronicle-template");
   downloadTextFile(filename, `${JSON.stringify(payload, null, 2)}\n`);
   setStatus(`Template exported: ${filename}`, "ok");
 }
@@ -2752,7 +2752,7 @@ async function loadEditorBootstrap() {
   state.templateMeta = activeRes.payload || null;
   state.workingProfileId = String(activeRes.payload.profile_id || state.workingProfileId || "default");
   renderProfileWorkspace();
-  state.templateName = String(activeRes.payload.name || "Auto Stat Template");
+  state.templateName = String(activeRes.payload.name || "Chronicle Template");
   state.lastValidationOk = null;
   clearActivePreviewCache();
 
@@ -2916,7 +2916,7 @@ async function saveTemplate(options = {}) {
   const { source = "editor-ui" } = options;
   const template = getEditorText();
   const author = (elements.repoTemplateAuthorInput?.value || "editor-user").trim();
-  const name = (elements.repoTemplateNameInput?.value || "Auto Stat Template").trim();
+  const name = (elements.repoTemplateNameInput?.value || "Chronicle Template").trim();
   const contextMode = elements.previewContextMode.value || "sample";
   const fixtureName = selectedFixtureName();
   const res = await requestJSON("/editor/template", {
@@ -2925,7 +2925,7 @@ async function saveTemplate(options = {}) {
       template,
       author: author || "editor-user",
       source,
-      name: name || "Auto Stat Template",
+      name: name || "Chronicle Template",
       context_mode: contextMode,
       fixture_name: fixtureName,
       profile_id: currentProfileId(),
@@ -2942,7 +2942,7 @@ async function saveTemplate(options = {}) {
   state.workingProfileId = String(res.payload.profile_id || state.workingProfileId || "default");
   state.templateActive = template;
   state.templateMeta = res.payload.active || state.templateMeta;
-  state.templateName = String(name || state.templateName || "Auto Stat Template");
+  state.templateName = String(name || state.templateName || "Chronicle Template");
   state.lastValidationOk = true;
   clearActivePreviewCache();
   setEditorDirty(false);

@@ -1784,7 +1784,7 @@ def _new_version_id(template_text: str) -> str:
 
 def _template_metadata_defaults() -> dict[str, Any]:
     return {
-        "name": "Auto Stat Template",
+        "name": "Chronicle Template",
         "current_version": None,
         "updated_at_utc": None,
         "updated_by": "system",
@@ -1832,7 +1832,7 @@ def _build_template_version_record(
     version_id = _new_version_id(normalized)
     return {
         "version_id": version_id,
-        "name": name.strip() or "Auto Stat Template",
+        "name": name.strip() or "Chronicle Template",
         "author": author.strip() or "unknown",
         "source": source.strip() or "editor",
         "operation": operation,
@@ -1922,7 +1922,7 @@ def rollback_template_version(
         raise ValueError("Selected template version has no template body.")
 
     current = get_active_template(settings, profile_id=profile_id)
-    rollback_name = str(record.get("name") or current.get("name") or "Auto Stat Template")
+    rollback_name = str(record.get("name") or current.get("name") or "Chronicle Template")
     saved = save_active_template(
         settings,
         template_text,
@@ -2005,7 +2005,7 @@ def save_active_template(
     current = get_active_template(settings, profile_id=normalized_profile_id)
     record = _build_template_version_record(
         template_text=normalized,
-        name=name or str(current.get("name") or "Auto Stat Template"),
+        name=name or str(current.get("name") or "Chronicle Template"),
         author=author,
         source=source,
         notes=notes,

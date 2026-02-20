@@ -1,7 +1,7 @@
 services:
-  auto-stat-worker:
-    image: ${DOCKER_IMAGE:-seanap/descgen:latest}
-    container_name: auto-stat-worker
+  chronicle-worker:
+    image: ${DOCKER_IMAGE:-seanap/chronicle:latest}
+    container_name: chronicle-worker
     command: ["python", "worker.py"]
     network_mode: bridge
     env_file:
@@ -20,9 +20,9 @@ services:
       start_period: 45s
     restart: unless-stopped
 
-  auto-stat-api:
-    image: ${DOCKER_IMAGE:-seanap/descgen:latest}
-    container_name: auto-stat-api
+  chronicle-api:
+    image: ${DOCKER_IMAGE:-seanap/chronicle:latest}
+    container_name: chronicle-api
     command:
       [
         "/bin/sh",

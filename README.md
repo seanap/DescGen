@@ -1,8 +1,8 @@
-# DescGen
+# Chronicle
 
 Turn every Strava activity description into a rich, auto-generated training report.
 
-`DescGen` is a dockerized application that checks for new activities, pulls stats from all of your connected services, writes a detailed Strava description, and exposes the latest payload as a local JSON API for other dashboards and automations.
+`Chronicle` is a dockerized application that checks for new activities, pulls stats from all of your connected services, writes a detailed Strava description, and exposes the latest payload as a local JSON API for other dashboards and automations.
 
 I created this because I found that I kept checking 5 different sites for unique stats that they provided. I decided to just pull all of the stats that I want into one place, now I only check my Strava description and I can see everything at a glance. I found over time this gives me a fantastic snapshot of exactly where I was at in my training, what the conditions were, and what kind of load I was under.
 
@@ -45,9 +45,9 @@ I created this because I found that I kept checking 5 different sites for unique
 
 ```yaml
 services:
-  auto-stat-worker:
-    image: seanap/descgen:latest
-    container_name: auto-stat-worker
+  chronicle-worker:
+    image: seanap/chronicle:latest
+    container_name: chronicle-worker
     command: ["python", "worker.py"]
     network_mode: bridge
     env_file:
@@ -62,9 +62,9 @@ services:
       start_period: 45s
     restart: unless-stopped
 
-  auto-stat-api:
-    image: seanap/descgen:latest
-    container_name: auto-stat-api
+  chronicle-api:
+    image: seanap/chronicle:latest
+    container_name: chronicle-api
     command: ["/bin/sh", "-c", "gunicorn --bind 0.0.0.0:${API_PORT:-1609} --workers ${API_WORKERS:-2} --threads ${API_THREADS:-4} --timeout ${API_TIMEOUT_SECONDS:-120} api_server:app"]
     network_mode: bridge
     env_file:
@@ -123,7 +123,7 @@ ENABLE_QUIET_HOURS=true
 QUIET_HOURS_START=0
 QUIET_HOURS_END=4
 
-# DescGen Runtime
+# Chronicle Runtime
 TIMEZONE=America/New_York
 # Legacy alias still supported: TZ
 #POLL_INTERVAL_SECONDS=300
@@ -149,7 +149,7 @@ TIMEZONE=America/New_York
 #API_THREADS=4
 #API_TIMEOUT_SECONDS=120
 #API_PORT=1609
-#DOCKER_IMAGE=seanap/descgen:latest
+#DOCKER_IMAGE=seanap/chronicle:latest
 
 # Dashboard tuning
 #DASHBOARD_CACHE_MAX_AGE_SECONDS=900

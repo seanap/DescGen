@@ -66,7 +66,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: seanap/descgen
+          images: seanap/chronicle
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
