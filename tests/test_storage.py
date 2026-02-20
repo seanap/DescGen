@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import storage
-from storage import (
+import chronicle.storage as storage
+from chronicle.storage import (
     acquire_runtime_lock,
     get_runtime_value,
     is_activity_processed,

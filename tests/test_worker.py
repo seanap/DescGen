@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from worker import _in_quiet_hours, _seconds_until_quiet_end, _should_refresh_dashboard
+from chronicle.worker import _in_quiet_hours, _seconds_until_quiet_end, _should_refresh_dashboard
 
 
 class TestWorkerTiming(unittest.TestCase):

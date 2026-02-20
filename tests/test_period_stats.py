@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from stat_modules.period_stats import get_garmin_period_fallback, get_period_stats, summarize_period
+from chronicle.stat_modules.period_stats import get_garmin_period_fallback, get_period_stats, summarize_period
 
 
 class TestPeriodStats(unittest.TestCase):

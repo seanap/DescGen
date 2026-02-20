@@ -11,8 +11,8 @@ from typing import Any
 from jinja2 import StrictUndefined, TemplateError, meta, pass_context
 from jinja2.sandbox import SandboxedEnvironment
 
-from config import Settings
-from numeric_utils import as_float as _shared_as_float
+from .config import Settings
+from .numeric_utils import as_float as _shared_as_float
 
 
 class _DisplayValueMapping(dict):

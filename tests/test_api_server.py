@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 try:
-    import api_server
+    import chronicle.api_server as api_server
 except ModuleNotFoundError:
     api_server = None
 

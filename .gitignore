@@ -4,7 +4,7 @@ state/
 __pycache__/
 *.pyc
 *.pyo
-stat_modules/__pycache__/
+chronicle/stat_modules/__pycache__/
 .venv/
 
 processed_activities.log
@@ -16,3 +16,8 @@ UI_REDESIGN_PLAN.local.md
 
 # Local planning/design notes
 local/
+
+# Local desktop artifacts
+Thumbs.db
+Chronicle.png
+View_hero_layout.png

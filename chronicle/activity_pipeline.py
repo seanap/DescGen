@@ -11,20 +11,20 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from config import Settings
-from numeric_utils import (
+from .config import Settings
+from .numeric_utils import (
     as_float as _shared_as_float,
     meters_to_feet_int as _shared_meters_to_feet_int,
     mps_to_mph as _shared_mps_to_mph,
 )
-from stat_modules import beers_earned, period_stats
-from stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
-from stat_modules.intervals_data import get_intervals_activity_data
-from stat_modules.misery_index import (
+from .stat_modules import beers_earned, period_stats
+from .stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
+from .stat_modules.intervals_data import get_intervals_activity_data
+from .stat_modules.misery_index import (
     get_misery_index_details_for_activity,
     get_misery_index_for_activity,
 )
-from stat_modules.smashrun import (
+from .stat_modules.smashrun import (
     aggregate_elevation_totals,
     get_activity_record,
     get_activity_elevation_feet,
@@ -33,9 +33,9 @@ from stat_modules.smashrun import (
     get_notables,
     get_stats as get_smashrun_stats,
 )
-from stat_modules.garmin_metrics import default_metrics as default_garmin_metrics
-from stat_modules.garmin_metrics import fetch_training_status_and_scores
-from storage import (
+from .stat_modules.garmin_metrics import default_metrics as default_garmin_metrics
+from .stat_modules.garmin_metrics import fetch_training_status_and_scores
+from .storage import (
     acquire_runtime_lock,
     delete_runtime_value,
     get_runtime_lock_owner,
@@ -46,9 +46,9 @@ from storage import (
     set_runtime_value,
     write_json,
 )
-from template_profiles import list_template_profiles
-from template_rendering import render_with_active_template
-from strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
+from .template_profiles import list_template_profiles
+from .template_rendering import render_with_active_template
+from .strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
 
 
 logger = logging.getLogger(__name__)

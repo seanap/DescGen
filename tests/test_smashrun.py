@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
-from stat_modules.smashrun import (
+from chronicle.stat_modules.smashrun import (
     aggregate_elevation_totals,
     get_activity_elevation_feet,
     get_badges,
@@ -118,7 +118,7 @@ class TestSmashrunAggregation(unittest.TestCase):
 
 
 class TestSmashrunBadges(unittest.TestCase):
-    @patch("stat_modules.smashrun.requests.get")
+    @patch("chronicle.stat_modules.smashrun.requests.get")
     def test_get_badges_handles_list_payload(self, mock_get: Mock) -> None:
         response = Mock()
         response.json.return_value = [{"badgeName": "Milestone"}, {"badgeName": "Elevation"}]
@@ -129,7 +129,7 @@ class TestSmashrunBadges(unittest.TestCase):
         self.assertEqual(len(badges), 2)
         self.assertEqual(badges[0]["badgeName"], "Milestone")
 
-    @patch("stat_modules.smashrun.requests.get")
+    @patch("chronicle.stat_modules.smashrun.requests.get")
     def test_get_badges_handles_wrapped_payload(self, mock_get: Mock) -> None:
         response = Mock()
         response.json.return_value = {"badges": [{"badgeName": "Consistency"}]}

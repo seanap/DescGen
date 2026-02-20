@@ -1,6 +1,6 @@
 import unittest
 
-from stat_modules.crono_api import format_crono_line
+from chronicle.stat_modules.crono_api import format_crono_line
 
 
 class TestCronoApiFormatting(unittest.TestCase):

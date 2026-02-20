@@ -6,8 +6,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest import mock
 
-from config import Settings
-from dashboard_data import get_dashboard_payload
+from chronicle.config import Settings
+from chronicle.dashboard_data import get_dashboard_payload
 
 
 class TestDashboardPayloadContract(unittest.TestCase):
@@ -49,7 +49,7 @@ class TestDashboardPayloadContract(unittest.TestCase):
                 },
             ]
 
-            with mock.patch("dashboard_data.StravaClient") as mock_client_cls:
+            with mock.patch("chronicle.dashboard_data.StravaClient") as mock_client_cls:
                 mock_client = mock_client_cls.return_value
                 mock_client.get_activities_after.return_value = fake_activities
                 payload = get_dashboard_payload(settings, force_refresh=True)

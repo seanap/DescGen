@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from config import Settings
-from dashboard_data import dashboard_data_path, get_dashboard_payload
-from storage import write_json
+from chronicle.config import Settings
+from chronicle.dashboard_data import dashboard_data_path, get_dashboard_payload
+from chronicle.storage import write_json
 
 
 class TestDashboardData(unittest.TestCase):
@@ -51,7 +51,7 @@ class TestDashboardData(unittest.TestCase):
                 },
             ]
 
-            with mock.patch("dashboard_data.StravaClient") as mock_client_cls:
+            with mock.patch("chronicle.dashboard_data.StravaClient") as mock_client_cls:
                 mock_client = mock_client_cls.return_value
                 mock_client.get_activities_after.return_value = fake_activities
                 payload = get_dashboard_payload(settings, force_refresh=True)
@@ -86,7 +86,7 @@ class TestDashboardData(unittest.TestCase):
             }
             write_json(dashboard_data_path(settings), cached_payload)
 
-            with mock.patch("dashboard_data.build_dashboard_payload") as mock_build:
+            with mock.patch("chronicle.dashboard_data.build_dashboard_payload") as mock_build:
                 payload = get_dashboard_payload(settings, force_refresh=False, max_age_seconds=3600)
 
             self.assertEqual(payload["generated_at"], now_iso)
@@ -111,7 +111,7 @@ class TestDashboardData(unittest.TestCase):
             write_json(path, stale_payload)
 
             with mock.patch(
-                "dashboard_data.build_dashboard_payload",
+                "chronicle.dashboard_data.build_dashboard_payload",
                 side_effect=RuntimeError("boom"),
             ):
                 payload = get_dashboard_payload(settings, force_refresh=True)
@@ -123,7 +123,7 @@ class TestDashboardData(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             settings = self._settings_for(td)
             with mock.patch(
-                "dashboard_data.build_dashboard_payload",
+                "chronicle.dashboard_data.build_dashboard_payload",
                 side_effect=RuntimeError("boom"),
             ):
                 payload = get_dashboard_payload(settings, force_refresh=True)

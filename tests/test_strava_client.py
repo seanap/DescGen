@@ -1,8 +1,8 @@
 import unittest
 from datetime import datetime
 
-import strava_client
-from strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
+import chronicle.strava_client as strava_client
+from chronicle.strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
 
 
 class _DummyResponse:

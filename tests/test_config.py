@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from config import Settings
-from storage import write_json
+from chronicle.config import Settings
+from chronicle.storage import write_json
 
 
 class TestConfigEnvAliases(unittest.TestCase):

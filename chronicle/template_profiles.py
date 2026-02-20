@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from description_template import (
+from .description_template import (
     get_template_profile,
     get_working_template_profile,
     list_template_profiles,

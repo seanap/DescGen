@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from strava_client import get_gap_speed_mps, mps_to_pace
+from ..strava_client import get_gap_speed_mps, mps_to_pace
 
 
 logger = logging.getLogger(__name__)

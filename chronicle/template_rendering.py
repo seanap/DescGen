@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from config import Settings
-from description_template import (
+from .config import Settings
+from .description_template import (
     normalize_template_context,
     render_template_text,
     render_with_active_template,

@@ -1,6 +1,6 @@
 import unittest
 
-from stat_modules.misery_index import (
+from chronicle.stat_modules.misery_index import (
     calculate_misery_index,
     calculate_misery_index_components,
     get_aqi_description,

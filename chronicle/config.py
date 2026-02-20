@@ -7,7 +7,7 @@ from typing import Callable
 
 from datetime import datetime, timezone
 
-from setup_config import read_setup_overrides_payload
+from .setup_config import read_setup_overrides_payload
 
 try:
     from dotenv import load_dotenv

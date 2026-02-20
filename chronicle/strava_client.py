@@ -6,9 +6,9 @@ from typing import Any
 
 import requests
 
-from config import Settings
-from numeric_utils import mps_to_pace as _mps_to_pace
-from storage import read_json, write_json
+from .config import Settings
+from .numeric_utils import mps_to_pace as _mps_to_pace
+from .storage import read_json, write_json
 
 
 logger = logging.getLogger(__name__)

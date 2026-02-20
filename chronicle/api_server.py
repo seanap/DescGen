@@ -9,10 +9,10 @@ from urllib.parse import urlencode
 import requests
 from flask import Flask, redirect, render_template, request
 
-from activity_pipeline import run_once
-from config import Settings
-from dashboard_data import get_dashboard_payload
-from setup_config import (
+from .activity_pipeline import run_once
+from .config import Settings
+from .dashboard_data import get_dashboard_payload
+from .setup_config import (
     PROVIDER_FIELDS,
     PROVIDER_LINKS,
     SETUP_ALLOWED_KEYS,
@@ -23,7 +23,7 @@ from setup_config import (
     setup_env_file_path,
     update_setup_env_file,
 )
-from storage import (
+from .storage import (
     delete_runtime_value,
     get_runtime_value,
     get_worker_heartbeat,
@@ -32,14 +32,14 @@ from storage import (
     set_runtime_value,
     write_json,
 )
-from template_profiles import (
+from .template_profiles import (
     get_template_profile,
     get_working_template_profile,
     list_template_profiles,
     set_working_template_profile,
     update_template_profile,
 )
-from template_repository import (
+from .template_repository import (
     create_template_repository_template,
     duplicate_template_repository_template,
     export_template_repository_bundle,
@@ -58,11 +58,18 @@ from template_repository import (
     save_active_template,
     update_template_repository_template,
 )
-from template_rendering import normalize_template_context, render_template_text, validate_template_text
-from template_schema import build_context_schema
+from .template_rendering import normalize_template_context, render_template_text, validate_template_text
+from .template_schema import build_context_schema
 
 
-app = Flask(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+app = Flask(
+    __name__,
+    template_folder=str(PROJECT_ROOT / "templates"),
+    static_folder=str(PROJECT_ROOT / "static"),
+    static_url_path="/static",
+)
 settings = Settings.from_env()
 settings.ensure_state_paths()
 

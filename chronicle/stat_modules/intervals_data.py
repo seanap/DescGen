@@ -6,7 +6,7 @@ from typing import Any
 
 import requests
 
-from numeric_utils import (
+from ..numeric_utils import (
     as_float as _shared_as_float,
     meters_to_feet_int as _shared_meters_to_feet_int,
     meters_to_miles as _shared_meters_to_miles,

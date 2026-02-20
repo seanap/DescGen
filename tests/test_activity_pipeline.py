@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from activity_pipeline import (
+from chronicle.activity_pipeline import (
     _extract_strava_badges,
     _extract_strava_segment_notables,
     _profile_activity_update_payload,

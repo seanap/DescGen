@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from description_template import (
+from .description_template import (
     create_template_repository_template,
     duplicate_template_repository_template,
     export_template_repository_bundle,

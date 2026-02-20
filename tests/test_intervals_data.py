@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from stat_modules.intervals_data import get_intervals_activity_data
+from chronicle.stat_modules.intervals_data import get_intervals_activity_data
 
 
 def _response_with_json(payload):
@@ -12,7 +12,7 @@ def _response_with_json(payload):
 
 
 class TestIntervalsData(unittest.TestCase):
-    @patch("stat_modules.intervals_data.requests.get")
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
     def test_handles_null_achievements(self, mock_get) -> None:
         mock_get.side_effect = [
             _response_with_json([{"id": 12345}]),
@@ -25,7 +25,7 @@ class TestIntervalsData(unittest.TestCase):
         assert result is not None
         self.assertEqual(result["achievements"], [])
 
-    @patch("stat_modules.intervals_data.requests.get")
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
     def test_skips_invalid_achievement_items(self, mock_get) -> None:
         mock_get.side_effect = [
             _response_with_json([{"id": 12345}]),
@@ -49,7 +49,7 @@ class TestIntervalsData(unittest.TestCase):
         self.assertIn("New best power: 321W for 1m 15s", result["achievements"])
         self.assertIn("Big day", result["achievements"])
 
-    @patch("stat_modules.intervals_data.requests.get")
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
     def test_handles_dict_activities_payload(self, mock_get) -> None:
         mock_get.side_effect = [
             _response_with_json({"activities": [{"id": 222}]}),
@@ -65,7 +65,7 @@ class TestIntervalsData(unittest.TestCase):
         self.assertEqual(result["avg_pace"], "N/A")
         self.assertEqual(result["zone_summary"], "N/A")
 
-    @patch("stat_modules.intervals_data.requests.get")
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
     def test_formats_extended_metrics(self, mock_get) -> None:
         mock_get.side_effect = [
             _response_with_json([{"id": 888}]),

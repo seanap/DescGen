@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import Settings
-from storage import read_json, write_json
-from strava_client import MAX_ACTIVITY_PAGES, StravaClient
+from .config import Settings
+from .storage import read_json, write_json
+from .strava_client import MAX_ACTIVITY_PAGES, StravaClient
 
 
 logger = logging.getLogger(__name__)

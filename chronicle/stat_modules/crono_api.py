@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
-from numeric_utils import as_float
+from ..numeric_utils import as_float
 
 
 logger = logging.getLogger(__name__)

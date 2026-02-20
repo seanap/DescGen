@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from description_template import (
+from chronicle.description_template import (
     build_context_schema,
     create_template_repository_template,
     duplicate_template_repository_template,

@@ -1,6 +1,6 @@
 import unittest
 
-from stat_modules.garmin_metrics import fetch_training_status_and_scores
+from chronicle.stat_modules.garmin_metrics import fetch_training_status_and_scores
 
 
 class _DummyGarminClient:

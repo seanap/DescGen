@@ -15,4 +15,4 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY . /app
 RUN mkdir -p /app/state
 
-CMD ["python", "worker.py"]
+CMD ["python", "-m", "chronicle.worker"]
