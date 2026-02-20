@@ -1,4 +1,4 @@
-# Sources Setup Guide (Non-Technical)
+# Sources Setup Guide
 
 This guide walks you through getting your credentials and connecting each source from the Chronicle `Sources` page:
 - `http://localhost:1609/setup`
@@ -8,37 +8,41 @@ This guide walks you through getting your credentials and connecting each source
 - You can open `http://localhost:1609/setup` in your browser.
 - You only need to configure the sources you actually use.
 
-![Screenshot Placeholder: Sources page overview](images/sources-page-overview.svg)
-
 ---
 
 ## Step 1: Open Sources Page
 1. Open `http://localhost:1609/setup`.
 2. You will see provider cards (Strava, Garmin, Intervals, Weather, Smashrun, Crono, etc.).
-3. Fill fields and click **Save Setup**.
 
-![Screenshot Placeholder: Sources page cards](images/sources-overview-cards.svg)
+<img width="2336" height="1939" alt="Screenshot 2026-02-20 115752 REDACTED" src="https://github.com/user-attachments/assets/b2d7056b-6dae-4c94-b3be-2ddda7a51155" />
 
 ---
 
 ## Step 2: Strava (Required)
-Where to get it:
-- Strava API settings: https://www.strava.com/settings/api
+1. Open Strava api settings: https://www.strava.com/settings/api
+2. Create `My API Application`
+3. Fill app fields:
+  - Application Name: anything (ex: Chronicle)
+  - Category: any relevant category
+  - Website: for local setup, http://localhost is fine
+  - Authorization Callback Domain: this is the important one (host only)
+<img width="1085" height="1156" alt="Screenshot 2026-02-20 122551 Highlighted" src="https://github.com/user-attachments/assets/a96a0d94-e466-44e2-b8d0-7cdfb19b38ee" />
 
-Fields in `Sources`:
-- `STRAVA_CLIENT_ID`
-- `STRAVA_CLIENT_SECRET`
-- `STRAVA_REFRESH_TOKEN` (usually filled by OAuth flow)
-- `STRAVA_ACCESS_TOKEN` (usually filled by OAuth flow)
+4. Set callback domain based on how you open Chronicle:
+  - If you use http://localhost:1609/setup -> set callback domain to localhost
+5. Copy your `CLIENT_ID` and `CLIENT_SECRET`
 
-Recommended flow in Chronicle:
-1. Enter `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`.
-2. Click **Save Setup**.
-3. Click **Connect Strava OAuth** inside the Strava card.
-4. Approve access on Strava.
-5. Chronicle stores tokens after callback.
+<img width="1298" height="1884" alt="Screenshot 2026-02-20 121252 REDACTED" src="https://github.com/user-attachments/assets/e667fb1c-4922-41d4-9ad3-3a74f8cf327e" />
 
-![Screenshot Placeholder: Strava card and OAuth buttons](images/sources-strava.svg)
+6. Go to Chronicle Sources `/setup` page: 
+  *  Enter `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`. 
+  * Click **Save Setup**. 
+  * Click **Connect Strava OAuth** inside the Strava card. 
+  * Approve access on Strava. 
+  * You should be redirected back to /setup as connected 
+
+<img width="705" height="939" alt="Screenshot 2026-02-20 123909 Highlighted" src="https://github.com/user-attachments/assets/f5a13bfa-da5b-462a-81e7-0de4c4f19121" />
+
 
 Common issues:
 - OAuth start fails: client id/secret not saved yet.
@@ -60,8 +64,6 @@ Steps:
 2. Enter your Garmin login email and password.
 3. Save setup.
 
-![Screenshot Placeholder: Garmin card](images/sources-garmin.svg)
-
 ---
 
 ## Step 4: Intervals.icu (Optional)
@@ -79,8 +81,6 @@ Steps:
 2. Paste API key and user ID.
 3. Save setup.
 
-![Screenshot Placeholder: Intervals card](images/sources-intervals.svg)
-
 ---
 
 ## Step 5: WeatherAPI (Optional)
@@ -95,8 +95,6 @@ Steps:
 1. Enable Weather toggle.
 2. Paste your WeatherAPI key.
 3. Save setup.
-
-![Screenshot Placeholder: Weather card](images/sources-weather.svg)
 
 ---
 
@@ -113,8 +111,6 @@ Steps:
 2. Paste access token.
 3. Save setup.
 
-![Screenshot Placeholder: Smashrun card](images/sources-smashrun.svg)
-
 ---
 
 ## Step 7: Crono API (Optional)
@@ -124,28 +120,24 @@ Where to get it:
 Fields in `Sources`:
 - `ENABLE_CRONO_API` (toggle)
 - `CRONO_API_BASE_URL` (example: `http://<your-ip>:8777`)
-- `CRONO_API_KEY` (if your instance requires one)
+- `CRONO_API_KEY` (Only if your instance requires one)
 
 Steps:
 1. Enable Crono API toggle.
 2. Enter base URL (and API key if required).
 3. Save setup.
 
-![Screenshot Placeholder: Crono API card](images/sources-crono.svg)
-
 ---
 
 ## Step 8: Timezone (General)
 Field in `Sources`:
-- `TIMEZONE` (example: `America/New_York`)
+- `TIMEZONE`
 
 Use an IANA timezone value. Examples:
 - `America/Los_Angeles`
 - `America/Denver`
 - `America/Chicago`
 - `America/New_York`
-
-![Screenshot Placeholder: General/timezone card](images/sources-timezone.svg)
 
 ---
 
@@ -160,15 +152,9 @@ curl http://localhost:1609/ready
 curl http://localhost:1609/setup/api/config
 ```
 
-![Screenshot Placeholder: Save and success status](images/sources-save-verify.svg)
 
 ---
 
 ## What Gets Saved
-- `.env` is the canonical saved config.
-- Chronicle also writes runtime setup overrides so changes apply immediately.
-
-## Safety Notes
-- Treat API keys/tokens/passwords as secrets.
-- Do not post `.env` publicly.
-- Rotate keys immediately if exposed.
+- `.env` is the canonical saved config. If changing  `.env` manually you will need to restart the container.
+- Chronicle also writes runtime setup overrides so `.env` changes apply immediately without a restart when using the `/setup`
