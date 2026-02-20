@@ -1,39 +1,29 @@
 {% set _path = request.path %}
-{% if _path.startswith('/setup') %}
-  {% set _section = 'Setup' %}
-{% elif _path.startswith('/editor') %}
-  {% set _section = 'Editor' %}
-{% elif _path.startswith('/dashboard') or _path == '/' %}
-  {% set _section = 'Dashboard' %}
-{% else %}
-  {% set _section = 'Dashboard' %}
-{% endif %}
 <div class="dg-shell">
   <div class="dg-shell-inner">
-    <a class="dg-brand" href="/dashboard" aria-label="DescGen home">
-      <span class="dg-brand-mark" aria-hidden="true"></span>
-      <span class="dg-brand-text">DescGen</span>
+    <a class="dg-brand" href="/dashboard" aria-label="Training Arc home">
+      <span class="dg-brand-title">Training Arc</span>
+      <span class="dg-brand-tagline">Build your arc, one session at a time.</span>
     </a>
-    <div class="dg-shell-title" aria-live="polite">
-      <span class="dg-shell-kicker">Auto Stat Description</span>
-      <span class="dg-shell-heading">{{ _section }} Control Center</span>
-    </div>
     <nav class="dg-nav" aria-label="Primary">
       <a
         class="dg-nav-link {% if _path.startswith('/dashboard') %}is-active{% endif %}"
         href="/dashboard"
         {% if _path.startswith('/dashboard') %}aria-current="page"{% endif %}
-      >Dashboard</a>
+      >View</a>
+      <span class="dg-nav-sep" aria-hidden="true">|</span>
       <a
         class="dg-nav-link {% if _path.startswith('/editor') %}is-active{% endif %}"
         href="/editor"
         {% if _path.startswith('/editor') %}aria-current="page"{% endif %}
-      >Editor</a>
+      >Build</a>
+      <span class="dg-nav-sep" aria-hidden="true">|</span>
       <a
         class="dg-nav-link {% if _path.startswith('/setup') %}is-active{% endif %}"
         href="/setup"
         {% if _path.startswith('/setup') %}aria-current="page"{% endif %}
-      >Setup</a>
+      >Sources</a>
     </nav>
+    <div class="dg-shell-spacer" aria-hidden="true"></div>
   </div>
 </div>

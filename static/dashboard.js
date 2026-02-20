@@ -6,14 +6,14 @@
 const DEFAULT_COLORS = ["#2a2a2a", "#2a2a2a", "#2a2a2a", "#2a2a2a", "#2a2a2a"];
 const MULTI_TYPE_COLOR = "#ff8a3d";
 const TYPE_ACCENT_OVERRIDES = {
-  Run: "#fc4c02",
-  Ride: "#ff7a1a",
-  Walk: "#ff9b4a",
-  Hike: "#ff9b4a",
-  WeightTraining: "#ffb36e",
-  Workout: "#ff8a5b",
+  Run: "#3fa8ff",
+  Ride: "#39d98a",
+  Walk: "#ffd166",
+  Hike: "#8ecae6",
+  WeightTraining: "#b392f0",
+  Workout: "#ff7aa2",
 };
-const FALLBACK_VAPORWAVE = ["#fc4c02", "#ff6a1a", "#ff7a1a", "#ff8a2b", "#ff9b4a", "#ffad62", "#ffbe7a", "#d58f62"];
+const FALLBACK_VAPORWAVE = ["#3fa8ff", "#39d98a", "#ffd166", "#b392f0", "#ff7aa2", "#7bdff2", "#95d5b2", "#cdb4db"];
 const STAT_PLACEHOLDER = "- - -";
 const CREATOR_REPO_SLUG = "aspain/git-sweaty";
 const TYPE_LABEL_OVERRIDES = {

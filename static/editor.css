@@ -1,23 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
-  --bg: #eef3ff;
-  --panel: #f7faff;
-  --panel-soft: #edf2fa;
-  --ink: #17263f;
-  --muted: #5d7397;
-  --line: #ccdaef;
+  --bg: #070707;
+  --panel: rgba(17, 17, 17, 0.92);
+  --panel-soft: rgba(13, 13, 13, 0.96);
+  --ink: #f2f2f2;
+  --muted: #a8a8a8;
+  --line: rgba(255, 255, 255, 0.14);
   --primary: #fc4c02;
   --primary-ink: #ffffff;
-  --secondary: #007fa4;
+  --secondary: #ff9b4a;
   --accent: #fc4c02;
-  --shadow: 0 16px 42px rgba(17, 31, 55, 0.14);
+  --shadow: 0 22px 56px rgba(0, 0, 0, 0.5);
+}
+
+body[data-theme="light"] {
+  --bg: #efece7;
+  --panel: rgba(248, 246, 242, 0.95);
+  --panel-soft: rgba(242, 239, 233, 0.98);
+  --ink: #1f1f1f;
+  --muted: #6f6f6f;
+  --line: rgba(0, 0, 0, 0.16);
+  --primary: #fc4c02;
+  --primary-ink: #ffffff;
+  --secondary: #b65b1e;
+  --accent: #fc4c02;
+  --shadow: 0 16px 42px rgba(0, 0, 0, 0.12);
 }
 
 body[data-theme="dark"] {
-  --bg: var(--dg-bg-0);
-  --panel: rgba(19, 32, 58, 0.88);
-  --panel-soft: rgba(17, 30, 52, 0.94);
+  --bg: #070707;
+  --panel: rgba(17, 17, 17, 0.92);
+  --panel-soft: rgba(13, 13, 13, 0.96);
   --ink: var(--dg-text);
   --muted: var(--dg-muted);
   --line: var(--dg-line);
@@ -36,7 +50,16 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  background: radial-gradient(circle at 10% 0%, #ebf4ff 0%, #f2f7ff 45%, #eaf1fe 100%);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 1px,
+      transparent 1px,
+      transparent 20px
+    ),
+    radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.14), transparent 58%),
+    linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 48%, #050505 100%);
   color: var(--ink);
 }
 
@@ -51,6 +74,10 @@ body[data-theme="dark"] {
     ),
     radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.14), transparent 58%),
     linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 48%, #050505 100%);
+}
+
+body[data-theme="light"] {
+  background: linear-gradient(180deg, #f0ece7 0%, #e7e1db 100%);
 }
 
 .bg-shape {
