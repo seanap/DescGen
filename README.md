@@ -1,5 +1,7 @@
 # Chronicle
 
+<img src="./static/chronicle.png" alt="Chronicle icon" width="120" />
+
 Turn every Strava activity description into a rich, auto-generated training report.
 
 `Chronicle` is a dockerized application that checks for new activities, pulls stats from all of your connected services, writes a detailed Strava description, and exposes the latest payload as a local JSON API for other dashboards and automations.

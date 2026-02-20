@@ -77,6 +77,23 @@
   z-index: 1;
 }
 
+.dg-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dg-brand-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid rgba(252, 76, 2, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
+    0 0 18px rgba(252, 76, 2, 0.16);
+  object-fit: cover;
+}
+
 .dg-brand-title {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   font-weight: 700;
@@ -195,6 +212,11 @@
 
   .dg-brand-title {
     font-size: 0.92rem;
+  }
+
+  .dg-brand-icon {
+    width: 22px;
+    height: 22px;
   }
 
   .dg-brand-tagline {
