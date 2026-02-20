@@ -938,15 +938,11 @@ function syncFilterControlState({
       : "",
   );
   if (typeClearButton) {
-    if (allTypesSelected) {
-      typeClearButton.textContent = "Select All";
-      typeClearButton.disabled = allTypeValues.length === 0;
-    } else {
-      typeClearButton.textContent = "Clear";
-      typeClearButton.disabled = false;
-    }
+    typeClearButton.textContent = "Clear";
+    typeClearButton.disabled = allTypesSelected;
   }
   if (yearClearButton) {
+    yearClearButton.textContent = "Select All";
     yearClearButton.disabled = allYearsSelected;
   }
   if (keepTypeMenuOpen) {
@@ -4810,24 +4806,12 @@ async function init() {
   }
   if (typeClearButton) {
     typeClearButton.addEventListener("click", () => {
-      const narrowLayout = isNarrowLayoutViewport();
-      if (areAllTypesSelected()) {
-        if (!payload.types.length) return;
-        draftTypeMenuSelection = null;
-        setMenuOpenState(typeMenu, typeMenuButton, false);
-        allTypesMode = false;
-        selectedTypes = new Set(payload.types);
-        update();
-        return;
-      }
+      if (areAllTypesSelected()) return;
       draftTypeMenuSelection = null;
       setMenuOpenState(typeMenu, typeMenuButton, false);
       allTypesMode = true;
       selectedTypes.clear();
       update();
-      if (narrowLayout) {
-        typeClearButton.blur();
-      }
     });
   }
   if (yearClearButton) {

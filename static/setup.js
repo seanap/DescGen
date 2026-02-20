@@ -1,17 +1,15 @@
 const state = {
   payload: null,
+  stravaStatusEl: null,
 };
 
 const elements = {
   statusBox: document.getElementById("statusBox"),
   providersGrid: document.getElementById("providersGrid"),
-  stravaStatus: document.getElementById("stravaStatus"),
   envSnippet: document.getElementById("envSnippet"),
   btnOpenEditor: document.getElementById("btnOpenEditor"),
   btnReload: document.getElementById("btnReload"),
   btnSave: document.getElementById("btnSave"),
-  btnStravaConnect: document.getElementById("btnStravaConnect"),
-  btnStravaDisconnect: document.getElementById("btnStravaDisconnect"),
   btnRefreshEnv: document.getElementById("btnRefreshEnv"),
   btnCopyEnv: document.getElementById("btnCopyEnv"),
 };
@@ -105,6 +103,7 @@ function secretFieldPresent(key) {
 function renderProviders() {
   if (!elements.providersGrid) return;
   elements.providersGrid.innerHTML = "";
+  state.stravaStatusEl = null;
 
   const providerFields = state.payload?.provider_fields || {};
   const providerLinks = state.payload?.provider_links || {};
@@ -194,22 +193,48 @@ function renderProviders() {
       card.appendChild(field);
     }
 
+    if (providerId === "strava") {
+      const actions = document.createElement("div");
+      actions.className = "inline-actions strava-actions-inline";
+
+      const connectButton = document.createElement("button");
+      connectButton.type = "button";
+      connectButton.className = "primary";
+      connectButton.textContent = "Connect Strava OAuth";
+      connectButton.addEventListener("click", startStravaOAuth);
+      actions.appendChild(connectButton);
+
+      const disconnectButton = document.createElement("button");
+      disconnectButton.type = "button";
+      disconnectButton.className = "warn";
+      disconnectButton.textContent = "Disconnect Strava Tokens";
+      disconnectButton.addEventListener("click", disconnectStrava);
+      actions.appendChild(disconnectButton);
+
+      const statusText = document.createElement("span");
+      statusText.className = "muted";
+      actions.appendChild(statusText);
+      state.stravaStatusEl = statusText;
+
+      card.appendChild(actions);
+    }
+
     elements.providersGrid.appendChild(card);
   }
 }
 
 function renderStravaStatus() {
-  if (!elements.stravaStatus) return;
+  if (!state.stravaStatusEl) return;
   const strava = state.payload?.strava || {};
   const clientConfigured = Boolean(strava.client_configured);
   const connected = Boolean(strava.connected);
 
   if (connected) {
-    elements.stravaStatus.textContent = "Strava OAuth: connected";
+    state.stravaStatusEl.textContent = "Strava OAuth: connected";
   } else if (clientConfigured) {
-    elements.stravaStatus.textContent = "Strava OAuth: ready to connect";
+    state.stravaStatusEl.textContent = "Strava OAuth: ready to connect";
   } else {
-    elements.stravaStatus.textContent = "Strava OAuth: add client ID + secret first";
+    state.stravaStatusEl.textContent = "Strava OAuth: add client ID + secret first";
   }
 }
 
@@ -358,8 +383,6 @@ function bindEvents() {
     await refreshEnvSnippet();
   });
   elements.btnSave?.addEventListener("click", saveConfig);
-  elements.btnStravaConnect?.addEventListener("click", startStravaOAuth);
-  elements.btnStravaDisconnect?.addEventListener("click", disconnectStrava);
   elements.btnRefreshEnv?.addEventListener("click", refreshEnvSnippet);
   elements.btnCopyEnv?.addEventListener("click", copyEnvSnippet);
 }

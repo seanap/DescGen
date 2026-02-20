@@ -12,22 +12,22 @@
   {% include "_app_shell_nav.html" %}
 
   <div class="control-shell">
-    <section class="control-card">
-      <div class="control-header">
+    <section class="control-hero card">
+      <div class="control-hero-header">
         <div class="control-header-copy">
           <h1>Control</h1>
           <p class="muted">Run API operations without terminal commands and monitor request outcomes inline.</p>
         </div>
-        <div class="control-header-side">
-          <div id="controlTopStatus" class="status-badge">Ready</div>
-          <div class="control-tools">
-            <label for="operationFilter">Filter</label>
-            <input id="operationFilter" class="dg-focusable" type="text" placeholder="Search method, route, or description">
-            <button id="clearStatuses" class="btn-clear" type="button">Clear Status</button>
-          </div>
-        </div>
+        <div id="controlTopStatus" class="status-badge ok">Ready</div>
       </div>
+    </section>
 
+    <section class="control-card card">
+      <div class="control-tools">
+        <label for="operationFilter">Filter</label>
+        <input id="operationFilter" class="dg-focusable" type="text" placeholder="Search method, route, or description">
+        <button id="clearStatuses" class="btn-clear" type="button">Clear Status</button>
+      </div>
       <div class="table-wrap" role="region" aria-label="API operations">
         <table class="ops-table">
           <thead>
