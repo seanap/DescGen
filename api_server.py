@@ -327,6 +327,11 @@ def dashboard_page() -> str:
     return render_template("dashboard.html")
 
 
+@app.get("/control")
+def control_page() -> str:
+    return render_template("control.html")
+
+
 @app.get("/dashboard/data.json")
 def dashboard_data_get() -> tuple[dict, int]:
     force_refresh = str(request.args.get("force") or "").strip().lower() in {"1", "true", "yes", "on"}

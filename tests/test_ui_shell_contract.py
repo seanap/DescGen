@@ -12,6 +12,7 @@ class TestUiShellContract(unittest.TestCase):
 
         self.assertIn('href="/setup"', nav)
         self.assertIn('href="/editor"', nav)
+        self.assertIn('href="/control"', nav)
         self.assertIn('href="/dashboard"', nav)
         self.assertIn("aria-label=\"Primary\"", nav)
         self.assertIn("aria-current=\"page\"", nav)
@@ -42,6 +43,16 @@ class TestUiShellContract(unittest.TestCase):
                     '{% include "_app_shell_nav.html" %}',
                 ],
                 "forbidden": [],
+            },
+            "templates/control.html": {
+                "required": [
+                    '<link rel="stylesheet" href="/static/ui-theme.css">',
+                    '{% include "_app_shell_nav.html" %}',
+                    '<link rel="stylesheet" href="/static/control.css">',
+                ],
+                "forbidden": [
+                    "<style>",
+                ],
             },
         }
 

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chronicle Control</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='chronicle.png') }}">
+  <link rel="stylesheet" href="/static/ui-theme.css">
+  <link rel="stylesheet" href="/static/control.css">
+</head>
+<body>
+  {% include "_app_shell_nav.html" %}
+
+  <div class="control-shell">
+    <section class="control-card">
+      <div class="control-header">
+        <div>
+          <p class="eyebrow">Chronicle Control</p>
+          <h1>API Operations Console</h1>
+          <p class="muted">Run API actions without terminal commands. Use filter to narrow a long list quickly.</p>
+        </div>
+        <div class="control-tools">
+          <label for="operationFilter">Filter</label>
+          <input id="operationFilter" class="dg-focusable" type="text" placeholder="Search method, route, or description">
+          <button id="clearStatuses" class="btn-clear" type="button">Clear Status</button>
+        </div>
+      </div>
+
+      <div class="table-wrap" role="region" aria-label="API operations">
+        <table class="ops-table">
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Method</th>
+              <th>Command</th>
+              <th>User Input</th>
+              <th>Description</th>
+              <th>Operation Status</th>
+            </tr>
+          </thead>
+          <tbody id="operationsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/static/control.js"></script>
+</body>
+</html>

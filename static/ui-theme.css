@@ -23,55 +23,62 @@
 .dg-shell {
   position: sticky;
   top: 0;
-  z-index: 65;
+  z-index: 70;
   margin: 0;
-  padding: 12px 16px 10px;
-  backdrop-filter: blur(10px);
+  padding: 10px 18px 8px;
+  backdrop-filter: blur(14px) saturate(1.12);
   background:
+    radial-gradient(960px 360px at 18% -30%, rgba(252, 76, 2, 0.13), transparent 62%),
+    radial-gradient(860px 300px at 84% -42%, rgba(255, 255, 255, 0.06), transparent 70%),
     repeating-linear-gradient(
       -45deg,
-      rgba(255, 255, 255, 0.025) 0px,
-      rgba(255, 255, 255, 0.025) 1px,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
       transparent 1px,
-      transparent 20px
+      transparent 24px
     ),
-    radial-gradient(920px 340px at 24% -26%, rgba(252, 76, 2, 0.14), transparent 62%),
-    linear-gradient(180deg, rgba(10, 10, 10, 0.96), rgba(6, 6, 6, 0.94));
-  border-bottom: 1px solid var(--dg-line);
+    linear-gradient(180deg, rgba(10, 10, 10, 0.94), rgba(7, 7, 7, 0.9));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.dg-shell::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: min(860px, calc(100% - 80px));
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, rgba(252, 76, 2, 0.62), transparent);
+  pointer-events: none;
 }
 
 .dg-shell-inner {
   max-width: 1320px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto minmax(260px, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 12px 18px;
-  border: 1px solid rgba(252, 76, 2, 0.24);
-  border-radius: 16px;
-  background:
-    linear-gradient(140deg, rgba(252, 76, 2, 0.08), transparent 44%),
-    linear-gradient(180deg, rgba(17, 17, 17, 0.96), rgba(8, 8, 8, 0.98));
-  box-shadow:
-    0 0 0 1px rgba(252, 76, 2, 0.08) inset,
-    0 22px 54px rgba(0, 0, 0, 0.42);
+  grid-template-columns: minmax(280px, 1fr) auto minmax(180px, 1fr);
+  align-items: end;
+  gap: 14px;
+  padding: 4px 2px 7px;
   position: relative;
-  overflow: hidden;
 }
 
 .dg-shell-inner::before {
   content: "";
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
   pointer-events: none;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), transparent 14%);
-  opacity: 0.12;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  opacity: 0.5;
 }
 
 .dg-brand {
-  display: grid;
-  gap: 2px;
+  display: inline-grid;
+  gap: 1px;
   text-decoration: none;
   color: inherit;
   z-index: 1;
@@ -80,79 +87,114 @@
 .dg-brand-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .dg-brand-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 1px solid rgba(252, 76, 2, 0.28);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(252, 76, 2, 0.34);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(252, 76, 2, 0.1));
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.45) inset,
-    0 0 18px rgba(252, 76, 2, 0.16);
+    0 0 0 1px rgba(0, 0, 0, 0.58) inset,
+    0 10px 24px rgba(0, 0, 0, 0.42),
+    0 0 20px rgba(252, 76, 2, 0.18);
   object-fit: cover;
 }
 
 .dg-brand-title {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: 0.08em;
+  font-size: 1.03rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #fff9f5;
-  text-shadow: 0 0 12px rgba(252, 76, 2, 0.14);
+  color: #fffbf8;
+  text-shadow:
+    0 0 1px rgba(255, 255, 255, 0.5),
+    0 6px 18px rgba(0, 0, 0, 0.42);
 }
 
 .dg-brand-tagline {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   font-weight: 500;
-  font-size: 0.78rem;
-  color: var(--dg-muted);
-  letter-spacing: 0.01em;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-left: 44px;
 }
 
 .dg-shell-spacer {
   min-height: 1px;
+  justify-self: end;
 }
 
 .dg-nav {
   display: inline-flex;
   align-items: center;
   justify-self: center;
-  gap: 10px;
+  gap: 11px;
+  padding-bottom: 2px;
   z-index: 1;
 }
 
 .dg-nav-sep {
-  color: rgba(255, 255, 255, 0.35);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.28);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
   user-select: none;
 }
 
 .dg-nav-link {
+  position: relative;
+  padding: 2px 0;
   color: rgba(255, 255, 255, 0.78);
   text-decoration: none;
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-weight: 600;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.42);
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
   transition:
     color 0.16s ease,
-    text-shadow 0.16s ease;
+    text-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.dg-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -7px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(252, 76, 2, 0.94), transparent);
+  opacity: 0;
+  transform: scaleX(0.64);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
 }
 
 .dg-nav-link:hover {
   color: #fff3eb;
   text-shadow: 0 0 14px rgba(252, 76, 2, 0.3);
+  transform: translateY(-1px);
 }
 
 .dg-nav-link:focus-visible {
   outline: none;
   color: #fff3eb;
   text-shadow: 0 0 14px rgba(252, 76, 2, 0.34);
+  transform: translateY(-1px);
+}
+
+.dg-nav-link:hover::after,
+.dg-nav-link:focus-visible::after {
+  opacity: 0.72;
+  transform: scaleX(1);
 }
 
 .dg-nav-link.is-active {
@@ -160,6 +202,11 @@
   text-shadow:
     0 0 14px rgba(252, 76, 2, 0.34),
     0 0 1px rgba(255, 255, 255, 0.44);
+}
+
+.dg-nav-link.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .dg-card {
@@ -184,12 +231,14 @@
 @media (max-width: 1100px) {
   .dg-shell-inner {
     grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 11px 14px;
+    align-items: center;
+    gap: 11px;
+    padding: 3px 0 6px;
   }
 
   .dg-nav {
     justify-self: center;
+    padding-bottom: 0;
   }
 
   .dg-shell-spacer {
@@ -199,28 +248,31 @@
 
 @media (max-width: 720px) {
   :root {
-    --dg-shell-offset: 136px;
+    --dg-shell-offset: 138px;
   }
 
   .dg-shell {
-    padding: 9px 12px;
+    padding: 9px 12px 7px;
   }
 
-  .dg-shell-inner {
-    padding: 10px 12px;
+  .dg-brand-lockup {
+    gap: 10px;
   }
 
   .dg-brand-title {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
+    letter-spacing: 0.15em;
   }
 
   .dg-brand-icon {
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
   }
 
   .dg-brand-tagline {
-    font-size: 0.74rem;
+    font-size: 0.68rem;
+    padding-left: 38px;
   }
 
   .dg-nav {

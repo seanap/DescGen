@@ -155,6 +155,10 @@ class TestApiServer(unittest.TestCase):
         response = self.client.get("/dashboard")
         self.assertEqual(response.status_code, 200)
 
+    def test_control_page_endpoint(self) -> None:
+        response = self.client.get("/control")
+        self.assertEqual(response.status_code, 200)
+
     def test_dashboard_data_endpoint(self) -> None:
         api_server.get_dashboard_payload = lambda *_args, **_kwargs: {
             "generated_at": "2026-02-19T00:00:00+00:00",

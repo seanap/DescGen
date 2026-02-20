@@ -1,12 +1,12 @@
 {% set _path = request.path %}
 <div class="dg-shell">
   <div class="dg-shell-inner">
-    <a class="dg-brand" href="/dashboard" aria-label="Training Arc home">
+    <a class="dg-brand" href="/dashboard" aria-label="Chronicle home">
       <span class="dg-brand-lockup">
         <img class="dg-brand-icon" src="{{ url_for('static', filename='chronicle.png') }}" alt="Chronicle icon">
-        <span class="dg-brand-title">Training Arc</span>
+        <span class="dg-brand-title">Chronicle</span>
       </span>
-      <span class="dg-brand-tagline">Build your arc, one session at a time.</span>
+      <span class="dg-brand-tagline">Your training timeline, automated.</span>
     </a>
     <nav class="dg-nav" aria-label="Primary">
       <a
@@ -20,6 +20,12 @@
         href="/editor"
         {% if _path.startswith('/editor') %}aria-current="page"{% endif %}
       >Build</a>
+      <span class="dg-nav-sep" aria-hidden="true">|</span>
+      <a
+        class="dg-nav-link {% if _path.startswith('/control') %}is-active{% endif %}"
+        href="/control"
+        {% if _path.startswith('/control') %}aria-current="page"{% endif %}
+      >Control</a>
       <span class="dg-nav-sep" aria-hidden="true">|</span>
       <a
         class="dg-nav-link {% if _path.startswith('/setup') %}is-active{% endif %}"
