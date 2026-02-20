@@ -51,7 +51,7 @@ docker compose up -d
 
 ### Step 4: Open the app
 ```bash
-http://<your.local.ip>:1609
+http://localhost:1609
 ```
 
 - Dashboard (`View`): http://localhost:1609/dashboard
