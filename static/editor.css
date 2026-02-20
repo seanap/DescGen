@@ -113,7 +113,7 @@ body[data-theme="light"] {
 
 .app-shell {
   width: min(1580px, 96vw);
-  margin: 18px auto 30px;
+  margin: var(--dg-page-top-gap) auto 30px;
   position: relative;
   z-index: 2;
 }
@@ -1282,7 +1282,7 @@ body[data-theme="dark"] .data-table thead th {
 @media (max-width: 760px) {
   .app-shell {
     width: min(98vw, 98vw);
-    margin-top: 12px;
+    margin-top: var(--dg-page-top-gap);
   }
 
   .topbar {

@@ -22,7 +22,7 @@ body {
 .shell {
   max-width: 1160px;
   margin: 0 auto;
-  padding: 24px 20px 32px;
+  padding: var(--dg-page-top-gap) 20px 32px;
 }
 
 .card {

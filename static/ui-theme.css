@@ -18,6 +18,7 @@
   --dg-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   --dg-radius: 14px;
   --dg-shell-offset: 92px;
+  --dg-page-top-gap: 18px;
 }
 
 .dg-shell {
@@ -249,6 +250,7 @@
 @media (max-width: 720px) {
   :root {
     --dg-shell-offset: 138px;
+    --dg-page-top-gap: 12px;
   }
 
   .dg-shell {

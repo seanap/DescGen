@@ -36,7 +36,7 @@ body {
 
 .control-shell {
   width: min(var(--control-shell-width), calc(100% - 30px));
-  margin: calc(var(--dg-shell-offset) + 20px) auto 30px;
+  margin: var(--dg-page-top-gap) auto 30px;
   display: grid;
   gap: 14px;
 }
@@ -331,7 +331,7 @@ tr.is-hidden {
 @media (max-width: 1080px) {
   .control-shell {
     width: calc(100% - 20px);
-    margin-top: calc(var(--dg-shell-offset) + 14px);
+    margin-top: var(--dg-page-top-gap);
   }
 
   .control-hero-header {
