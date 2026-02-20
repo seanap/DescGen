@@ -14,15 +14,17 @@
   <div class="control-shell">
     <section class="control-card">
       <div class="control-header">
-        <div>
-          <p class="eyebrow">Chronicle Control</p>
-          <h1>API Operations Console</h1>
-          <p class="muted">Run API actions without terminal commands. Use filter to narrow a long list quickly.</p>
+        <div class="control-header-copy">
+          <h1>Control</h1>
+          <p class="muted">Run API operations without terminal commands and monitor request outcomes inline.</p>
         </div>
-        <div class="control-tools">
-          <label for="operationFilter">Filter</label>
-          <input id="operationFilter" class="dg-focusable" type="text" placeholder="Search method, route, or description">
-          <button id="clearStatuses" class="btn-clear" type="button">Clear Status</button>
+        <div class="control-header-side">
+          <div id="controlTopStatus" class="status-badge">Ready</div>
+          <div class="control-tools">
+            <label for="operationFilter">Filter</label>
+            <input id="operationFilter" class="dg-focusable" type="text" placeholder="Search method, route, or description">
+            <button id="clearStatuses" class="btn-clear" type="button">Clear Status</button>
+          </div>
         </div>
       </div>
 

@@ -23,16 +23,16 @@ body {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   color: var(--dg-text);
   background:
-    radial-gradient(940px 520px at 12% -18%, rgba(252, 76, 2, 0.18), transparent 56%),
-    radial-gradient(880px 420px at 84% -24%, rgba(252, 76, 2, 0.11), transparent 62%),
     repeating-linear-gradient(
       -45deg,
-      rgba(255, 255, 255, 0.02) 0px,
-      rgba(255, 255, 255, 0.02) 1px,
+      rgba(255, 255, 255, 0.03) 0px,
+      rgba(255, 255, 255, 0.03) 1px,
       transparent 1px,
-      transparent 21px
+      transparent 20px
     ),
-    linear-gradient(180deg, #060606 0%, #050505 100%);
+    radial-gradient(940px 520px at 12% -18%, rgba(252, 76, 2, 0.18), transparent 56%),
+    radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.14), transparent 58%),
+    linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 48%, #050505 100%);
 }
 
 .control-shell {
@@ -54,32 +54,64 @@ body {
 
 .control-header {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 22px;
   padding: 18px 20px 16px;
   border-bottom: 1px solid var(--control-line);
 }
 
-.eyebrow {
-  margin: 0 0 5px;
-  color: rgba(252, 76, 2, 0.9);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  font-weight: 700;
+.control-header-copy {
+  min-width: 0;
 }
 
 h1 {
-  margin: 0;
-  font-size: 1.24rem;
-  letter-spacing: 0.03em;
+  margin: 0 0 6px;
+  font-size: 1.38rem;
+  letter-spacing: 0.02em;
 }
 
 .muted {
-  margin: 7px 0 0;
+  margin: 0;
   color: var(--dg-muted);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.control-header-side {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.status-badge {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--control-line);
+  color: var(--dg-muted);
+  background: rgba(20, 20, 20, 0.72);
+  white-space: nowrap;
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.status-badge.ok {
+  border-color: rgba(57, 217, 138, 0.58);
+  background: rgba(57, 217, 138, 0.11);
+  color: #9ef2c8;
+}
+
+.status-badge.error {
+  border-color: rgba(255, 87, 119, 0.62);
+  background: rgba(255, 87, 119, 0.12);
+  color: #ffc2d0;
+}
+
+.status-badge.running {
+  border-color: rgba(255, 180, 95, 0.62);
+  background: rgba(255, 180, 95, 0.14);
+  color: #ffd9a2;
 }
 
 .control-tools {
@@ -300,6 +332,10 @@ tr.is-hidden {
   .control-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .control-header-side {
+    justify-items: stretch;
   }
 
   .control-tools {

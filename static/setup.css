@@ -38,11 +38,31 @@ body {
 
 .topbar {
   display: flex;
-  gap: 10px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-end;
   justify-content: space-between;
   margin-bottom: 14px;
   flex-wrap: wrap;
+}
+
+.setup-hero {
+  padding: 16px 18px;
+  border: 1px solid var(--dg-line);
+  border-radius: 16px;
+  background:
+    linear-gradient(140deg, rgba(252, 76, 2, 0.09), transparent 52%),
+    rgba(16, 16, 16, 0.84);
+  box-shadow: var(--dg-shadow);
+}
+
+.setup-hero-copy {
+  min-width: 0;
+}
+
+.setup-hero-side {
+  display: grid;
+  gap: 10px;
+  justify-items: end;
 }
 
 .inline-actions {
@@ -112,23 +132,25 @@ button:disabled {
   line-height: 1.2;
 }
 
-.status {
-  margin: 12px 0;
-  padding: 10px 12px;
-  border-radius: 10px;
+.status-badge {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
   border: 1px solid var(--dg-line);
   color: var(--dg-muted);
   background: rgba(20, 20, 20, 0.72);
-  white-space: pre-wrap;
+  white-space: nowrap;
+  font-size: 0.83rem;
+  font-weight: 700;
 }
 
-.status.ok {
+.status-badge.ok {
   border-color: rgba(57, 217, 138, 0.58);
-  background: rgba(57, 217, 138, 0.1);
+  background: rgba(57, 217, 138, 0.11);
   color: #9ef2c8;
 }
 
-.status.error {
+.status-badge.error {
   border-color: rgba(255, 87, 119, 0.62);
   background: rgba(255, 87, 119, 0.12);
   color: #ffc2d0;
@@ -253,4 +275,23 @@ button:disabled {
   color: var(--dg-muted);
   font-size: 0.84rem;
   margin: 0;
+}
+
+@media (max-width: 860px) {
+  .setup-hero {
+    align-items: flex-start;
+  }
+
+  .setup-hero-side {
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .setup-hero-side .inline-actions {
+    width: 100%;
+  }
+
+  .setup-hero-side .inline-actions button {
+    flex: 1 1 auto;
+  }
 }

@@ -4,6 +4,7 @@
   const tableBody = document.getElementById("operationsTableBody");
   const filterInput = document.getElementById("operationFilter");
   const clearStatusesButton = document.getElementById("clearStatuses");
+  const topStatus = document.getElementById("controlTopStatus");
 
   if (!tableBody) {
     return;
@@ -387,6 +388,19 @@
     rowRef.statusText.textContent = message || "";
   }
 
+  function setTopStatus(state, message) {
+    if (!topStatus) return;
+    topStatus.classList.remove("ok", "error", "running");
+    if (state === "success") {
+      topStatus.classList.add("ok");
+    } else if (state === "error") {
+      topStatus.classList.add("error");
+    } else if (state === "running") {
+      topStatus.classList.add("running");
+    }
+    topStatus.textContent = String(message || "").trim() || "Ready";
+  }
+
   function summarizeResponse(response, payload, text) {
     const statusCode = String(response.status);
     if (payload && typeof payload === "object") {
@@ -435,12 +449,15 @@
     try {
       requestSpec = op.buildRequest(inputValue);
     } catch (error) {
-      setRowStatus(rowRef, "error", String(error && error.message ? error.message : error));
+      const message = String(error && error.message ? error.message : error);
+      setRowStatus(rowRef, "error", message);
+      setTopStatus("error", message);
       return;
     }
 
     rowRef.button.disabled = true;
     setRowStatus(rowRef, "running", "Running...");
+    setTopStatus("running", `${op.method} ${requestSpec.url}`);
 
     const options = {
       method: op.method,
@@ -465,8 +482,11 @@
 
       const summary = summarizeResponse(response, payload, responseText);
       setRowStatus(rowRef, response.ok ? "success" : "error", summary);
+      setTopStatus(response.ok ? "success" : "error", summary);
     } catch (error) {
-      setRowStatus(rowRef, "error", `Network error: ${String(error && error.message ? error.message : error)}`);
+      const message = `Network error: ${String(error && error.message ? error.message : error)}`;
+      setRowStatus(rowRef, "error", message);
+      setTopStatus("error", message);
     } finally {
       rowRef.button.disabled = false;
     }
@@ -575,9 +595,11 @@
     for (const rowRef of rowRefs.values()) {
       setRowStatus(rowRef, "idle", "Not run yet.");
     }
+    setTopStatus("idle", "Ready");
   }
 
   renderOperations();
+  setTopStatus("idle", "Ready");
 
   if (filterInput) {
     filterInput.addEventListener("input", applyFilter);
