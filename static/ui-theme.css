@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --dg-bg-0: #090f1d;
+  --dg-bg-1: #0d162a;
+  --dg-bg-2: #13203a;
+  --dg-panel: rgba(19, 32, 58, 0.82);
+  --dg-panel-solid: #14233f;
+  --dg-text: #e8f1ff;
+  --dg-muted: #94a9cb;
+  --dg-line: rgba(138, 164, 208, 0.26);
+  --dg-neon-cyan: #00d9ff;
+  --dg-neon-cyan-soft: rgba(0, 217, 255, 0.18);
+  --dg-strava: #fc4c02;
+  --dg-strava-soft: rgba(252, 76, 2, 0.2);
+  --dg-danger: #ff5777;
+  --dg-ok: #39d98a;
+  --dg-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+  --dg-radius: 14px;
+}
+
+.dg-shell {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  margin: 0;
+  padding: 12px 16px;
+  backdrop-filter: blur(10px);
+  background:
+    linear-gradient(90deg, rgba(0, 217, 255, 0.08) 0%, rgba(252, 76, 2, 0.06) 100%),
+    rgba(9, 15, 29, 0.76);
+  border-bottom: 1px solid var(--dg-line);
+}
+
+.dg-shell-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--dg-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dg-brand-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--dg-strava);
+  box-shadow: 0 0 14px rgba(252, 76, 2, 0.7);
+}
+
+.dg-brand-sub {
+  color: var(--dg-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.dg-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dg-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--dg-line);
+  background: rgba(19, 32, 58, 0.55);
+  color: var(--dg-muted);
+  text-decoration: none;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.dg-nav-link:hover {
+  border-color: rgba(0, 217, 255, 0.65);
+  color: var(--dg-text);
+  box-shadow: 0 0 0 1px rgba(0, 217, 255, 0.2) inset;
+}
+
+.dg-nav-link.is-active {
+  color: #f8fcff;
+  border-color: rgba(252, 76, 2, 0.75);
+  background:
+    linear-gradient(120deg, rgba(252, 76, 2, 0.18), rgba(0, 217, 255, 0.1)),
+    rgba(19, 32, 58, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(252, 76, 2, 0.2) inset,
+    0 0 20px rgba(252, 76, 2, 0.16);
+}
+
+.dg-card {
+  border-radius: var(--dg-radius);
+  border: 1px solid var(--dg-line);
+  background: var(--dg-panel);
+  box-shadow: var(--dg-shadow);
+}
+
+.dg-mono {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.dg-focusable:focus-visible {
+  outline: none;
+  border-color: rgba(0, 217, 255, 0.85) !important;
+  box-shadow:
+    0 0 0 2px rgba(0, 217, 255, 0.22),
+    0 0 18px rgba(0, 217, 255, 0.24);
+}
+
+@media (max-width: 720px) {
+  .dg-shell {
+    padding: 10px 12px;
+  }
+
+  .dg-shell-inner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

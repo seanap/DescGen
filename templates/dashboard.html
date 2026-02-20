@@ -16,6 +16,7 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/static/ui-theme.css" />
     <style>
       :root {
         --space-0: 0px;
@@ -27,12 +28,12 @@
         --space-6: 14px;
         --space-7: 16px;
         --space-8: 24px;
-        --bg: #0f172a;
-        --bg-2: #111827;
-        --card: rgba(255, 255, 255, 0.06);
-        --text: #e5e7eb;
-        --muted: #94a3b8;
-        --accent: #38bdf8;
+        --bg: var(--dg-bg-1);
+        --bg-2: rgba(19, 32, 58, 0.9);
+        --card: rgba(19, 32, 58, 0.78);
+        --text: var(--dg-text);
+        --muted: var(--dg-muted);
+        --accent: var(--dg-neon-cyan);
         --cell: 12px;
         --gap: 2px;
         --grid-pad-top: 6px;
@@ -61,8 +62,8 @@
           (var(--summary-desktop-columns) * var(--summary-card-max-width)) +
           ((var(--summary-desktop-columns) - 1) * var(--summary-grid-gap))
         );
-        --radius: 14px;
-        --shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+        --radius: var(--dg-radius);
+        --shadow: var(--dg-shadow);
       }
 
       html {
@@ -78,14 +79,18 @@
         margin: 0;
         font-family: "Space Grotesk", system-ui, sans-serif;
         color: var(--text);
-        background: #1e293b;
+        background:
+          radial-gradient(980px 460px at 8% 0%, rgba(0, 217, 255, 0.12), transparent 58%),
+          radial-gradient(920px 440px at 98% -8%, rgba(252, 76, 2, 0.1), transparent 54%),
+          linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 44%, #0a1428 100%);
         min-height: 100vh;
-        padding: 40px 20px;
+        padding: 0;
       }
 
       .app {
         max-width: 1240px;
         margin: 0 auto;
+        padding: 40px 20px;
         display: grid;
         gap: var(--space-8);
         min-width: 0;
@@ -103,8 +108,10 @@
       }
 
       header {
-        background: rgba(56, 189, 248, 0.15);
-        border: 1px solid rgba(148, 163, 184, 0.2);
+        background:
+          linear-gradient(120deg, rgba(0, 217, 255, 0.11), rgba(252, 76, 2, 0.1)),
+          var(--card);
+        border: 1px solid var(--dg-line);
         border-radius: var(--radius);
         padding: var(--space-8);
         box-shadow: var(--shadow);
@@ -182,7 +189,7 @@
       }
 
       .header-link:hover {
-        color: var(--accent);
+        color: var(--dg-strava);
       }
 
       h1 {
@@ -220,7 +227,7 @@
         min-width: 0;
         background: var(--bg-2);
         color: var(--text);
-        border: 1px solid rgba(148, 163, 184, 0.3);
+        border: 1px solid var(--dg-line);
         border-radius: 10px;
         padding: var(--space-3) var(--space-5);
         font-size: 14px;
@@ -268,7 +275,7 @@
         max-width: 100%;
         z-index: 20;
         background: var(--bg-2);
-        border: 1px solid rgba(148, 163, 184, 0.35);
+        border: 1px solid var(--dg-line);
         border-radius: 10px;
         padding: var(--space-3);
         box-shadow: var(--shadow);
@@ -296,9 +303,9 @@
       .filter-menu-option {
         width: 100%;
         min-width: 0;
-        background: rgba(15, 23, 42, 0.45);
+        background: rgba(9, 15, 29, 0.6);
         color: var(--text);
-        border: 1px solid rgba(148, 163, 184, 0.25);
+        border: 1px solid var(--dg-line);
         border-radius: 8px;
         padding: var(--space-3) var(--space-4);
         font-size: 13px;
@@ -383,13 +390,13 @@
         background: var(--bg-2);
         padding-top: var(--space-2);
         margin-top: var(--space-2);
-        border-top: 1px solid rgba(148, 163, 184, 0.25);
+        border-top: 1px solid var(--dg-line);
       }
 
       .filter-clear-button {
-        background: rgba(71, 85, 105, 0.2);
+        background: rgba(19, 32, 58, 0.65);
         color: var(--text);
-        border: 1px solid rgba(148, 163, 184, 0.35);
+        border: 1px solid var(--dg-line);
         border-radius: 10px;
         padding: var(--space-3) var(--space-4);
         font-size: 13px;
@@ -403,10 +410,10 @@
       .units-toggle {
         display: inline-flex;
         align-items: stretch;
-        border: 1px solid rgba(148, 163, 184, 0.35);
+        border: 1px solid var(--dg-line);
         border-radius: 10px;
         overflow: hidden;
-        background: rgba(71, 85, 105, 0.2);
+        background: rgba(19, 32, 58, 0.65);
       }
 
       .units-toggle-button {
@@ -421,11 +428,11 @@
       }
 
       .units-toggle-button + .units-toggle-button {
-        border-left: 1px solid rgba(148, 163, 184, 0.35);
+        border-left: 1px solid var(--dg-line);
       }
 
       .units-toggle-button.active {
-        background: rgba(56, 189, 248, 0.2);
+        background: rgba(0, 217, 255, 0.2);
       }
 
       .units-toggle-button:focus-visible {
@@ -487,7 +494,7 @@
       .filter-button {
         background: var(--bg-2);
         color: var(--text);
-        border: 1px solid rgba(148, 163, 184, 0.3);
+        border: 1px solid var(--dg-line);
         border-radius: 999px;
         padding: 6px 12px;
         font-size: 13px;
@@ -515,7 +522,7 @@
 
       .summary-card {
         background: var(--card);
-        border: 1px solid rgba(148, 163, 184, 0.2);
+        border: 1px solid var(--dg-line);
         border-radius: 12px;
         padding: calc(var(--space-5) - 2px);
         box-shadow: var(--shadow);
@@ -558,7 +565,7 @@
 
       .summary-card-action.summary-glow-cleared,
       .summary-card-action.summary-glow-cleared:focus-visible {
-        border-color: rgba(148, 163, 184, 0.2);
+        border-color: var(--dg-line);
         box-shadow: none;
       }
 
@@ -620,7 +627,7 @@
 
       .card {
         background: var(--card);
-        border: 1px solid rgba(148, 163, 184, 0.2);
+        border: 1px solid var(--dg-line);
         border-radius: var(--radius);
         padding: var(--space-8);
         box-shadow: var(--shadow);
@@ -1247,7 +1254,7 @@
         width: max-content;
         display: grid;
         border-radius: 12px;
-        background: rgba(15, 23, 42, 0.8);
+        background: rgba(9, 15, 29, 0.8);
       }
 
       .axis-x-label {
@@ -1258,7 +1265,7 @@
         width: var(--cell);
         height: var(--cell);
         border-radius: 3px;
-        background: #1f2937;
+        background: rgba(148, 163, 184, 0.22);
         transition: box-shadow 0.15s ease, filter 0.15s ease;
         position: relative;
         touch-action: manipulation;
@@ -1277,20 +1284,20 @@
 
       @media (hover: hover) and (pointer: fine) {
         .cell:hover:not(.outside) {
-          box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 14px rgba(56, 189, 248, 0.75);
+          box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 14px rgba(0, 217, 255, 0.78);
         }
       }
 
       .cell.active {
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 16px rgba(56, 189, 248, 0.85);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 16px rgba(0, 217, 255, 0.88);
         filter: brightness(1.2);
       }
 
       .tooltip {
         position: fixed;
         pointer-events: none;
-        background: rgba(15, 23, 42, 0.9);
-        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: rgba(9, 15, 29, 0.92);
+        border: 1px solid var(--dg-line);
         color: var(--text);
         padding: var(--space-4) var(--space-5);
         border-radius: 10px;
@@ -1312,7 +1319,7 @@
       }
 
       .tooltip-link {
-        color: #7dd3fc;
+        color: var(--accent);
         text-decoration: underline;
         text-underline-offset: 2px;
         touch-action: manipulation;
@@ -1324,7 +1331,7 @@
       }
 
       .tooltip-link:hover {
-        color: #bae6fd;
+        color: #9ef5ff;
       }
 
       .tooltip.touch {
@@ -1357,6 +1364,8 @@
         text-align: center;
         width: min(100%, var(--dashboard-content-rail-width));
         margin: 0 auto;
+        border-top: 1px solid var(--dg-line);
+        padding-top: 10px;
       }
 
       .dashboard-footer-link {
@@ -1383,7 +1392,7 @@
 
       @media (min-width: 901px) {
         body {
-          padding: 24px 20px 28px;
+          padding: 0;
         }
 
         .app {
@@ -2027,6 +2036,7 @@
     </style>
   </head>
   <body>
+    {% include "_app_shell_nav.html" %}
     <div class="app">
       <header>
         <div class="header-top">

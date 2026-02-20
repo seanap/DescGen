@@ -1,0 +1,27 @@
+{% set _path = request.path %}
+<div class="dg-shell">
+  <div class="dg-shell-inner">
+    <a class="dg-brand" href="/dashboard" aria-label="DescGen home">
+      <span class="dg-brand-mark" aria-hidden="true"></span>
+      <span>DescGen</span>
+      <span class="dg-brand-sub">Dark Neon Strava</span>
+    </a>
+    <nav class="dg-nav" aria-label="Primary">
+      <a
+        class="dg-nav-link {% if _path.startswith('/setup') %}is-active{% endif %}"
+        href="/setup"
+        {% if _path.startswith('/setup') %}aria-current="page"{% endif %}
+      >Setup</a>
+      <a
+        class="dg-nav-link {% if _path.startswith('/editor') %}is-active{% endif %}"
+        href="/editor"
+        {% if _path.startswith('/editor') %}aria-current="page"{% endif %}
+      >Editor</a>
+      <a
+        class="dg-nav-link {% if _path.startswith('/dashboard') %}is-active{% endif %}"
+        href="/dashboard"
+        {% if _path.startswith('/dashboard') %}aria-current="page"{% endif %}
+      >Dashboard</a>
+    </nav>
+  </div>
+</div>

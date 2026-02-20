@@ -4,170 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DescGen Setup</title>
-  <style>
-    :root {
-      --bg: #f3f7fb;
-      --panel: #ffffff;
-      --text: #17324d;
-      --muted: #5b7288;
-      --accent: #1f7ae0;
-      --ok: #1f9d5a;
-      --err: #c23232;
-      --line: #d6e2ee;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", Tahoma, sans-serif;
-      background: linear-gradient(140deg, #e7f1fb, var(--bg));
-      color: var(--text);
-    }
-    .shell {
-      max-width: 1160px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      box-shadow: 0 8px 24px rgba(19, 47, 76, 0.06);
-      padding: 16px;
-    }
-    .topbar {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-      flex-wrap: wrap;
-    }
-    .inline-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    button {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px 12px;
-      background: #fff;
-      color: var(--text);
-      cursor: pointer;
-      font-weight: 600;
-    }
-    button.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-    button.warn {
-      border-color: #f4b8b8;
-      color: #962727;
-      background: #fff7f7;
-    }
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    .status {
-      margin: 12px 0;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      color: var(--muted);
-      white-space: pre-wrap;
-    }
-    .status.ok {
-      border-color: #b7e9cc;
-      background: #effcf5;
-      color: #1e7f4f;
-    }
-    .status.error {
-      border-color: #f2c0c0;
-      background: #fff2f2;
-      color: var(--err);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 12px;
-      margin-top: 12px;
-    }
-    .provider-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    .provider-title {
-      margin: 0;
-      font-size: 1rem;
-    }
-    .provider-link {
-      font-size: 0.84rem;
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 600;
-    }
-    .field {
-      margin-bottom: 10px;
-    }
-    .field label {
-      display: block;
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-bottom: 4px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-    }
-    .field input[type="text"],
-    .field input[type="password"] {
-      width: 100%;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      padding: 8px 10px;
-      color: var(--text);
-    }
-    .toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.9rem;
-    }
-    .mask-note {
-      font-size: 0.74rem;
-      color: var(--muted);
-      margin-top: 3px;
-    }
-    .env-wrap {
-      margin-top: 14px;
-    }
-    .env-wrap textarea {
-      width: 100%;
-      min-height: 180px;
-      border-radius: 8px;
-      border: 1px solid var(--line);
-      padding: 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.82rem;
-      color: #123;
-      background: #fbfdff;
-    }
-    .muted {
-      color: var(--muted);
-      font-size: 0.84rem;
-      margin: 0;
-    }
-  </style>
+  <link rel="stylesheet" href="/static/ui-theme.css">
+  <link rel="stylesheet" href="/static/setup.css">
 </head>
 <body>
+  {% include "_app_shell_nav.html" %}
   <div class="shell">
-    <div class="card">
+    <div class="card setup-shell-card">
       <div class="topbar">
         <div>
-          <h1 style="margin:0;font-size:1.32rem;">DescGen Setup</h1>
+          <h1 class="setup-title">DescGen Setup</h1>
           <p class="muted">Configure providers, connect Strava OAuth, and keep `.env` as source of truth.</p>
         </div>
         <div class="inline-actions">
@@ -179,7 +25,7 @@
 
       <div id="statusBox" class="status">Loading setup state...</div>
 
-      <div class="inline-actions" style="margin-bottom:10px;">
+      <div class="inline-actions section-actions">
         <button id="btnStravaConnect" class="primary" type="button">Connect Strava OAuth</button>
         <button id="btnStravaDisconnect" class="warn" type="button">Disconnect Strava Tokens</button>
         <span id="stravaStatus" class="muted"></span>
@@ -188,9 +34,9 @@
       <div id="providersGrid" class="grid"></div>
 
       <section class="env-wrap">
-        <div class="topbar" style="margin-bottom:8px;">
+        <div class="topbar">
           <div>
-            <h2 style="margin:0;font-size:1rem;">Generated .env Snippet</h2>
+            <h2 class="section-title">Generated .env Snippet</h2>
             <p class="muted">These values are written to `.env` and mirrored to runtime overrides for immediate effect.</p>
           </div>
           <div class="inline-actions">
