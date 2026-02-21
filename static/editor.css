@@ -936,42 +936,28 @@ label[for="templateEditor"] {
   background: color-mix(in srgb, var(--panel) 94%, #080808);
   border-right: 1px solid var(--line);
   box-shadow: var(--shadow);
-  transform: translateX(calc(-100% + 44px));
+  transform: translateX(-100%);
   transition: transform 0.22s ease;
   z-index: 120;
   display: grid;
   grid-template-rows: auto 1fr;
-  overflow: hidden;
-  padding: 12px 56px 12px 12px;
-  pointer-events: none;
+  overflow: visible;
+  padding: 12px;
+  pointer-events: auto;
 }
 
 .left-drawer.open {
   transform: translateX(0);
-  pointer-events: auto;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .left-drawer:not(.open) {
-  background: transparent;
   border-right-color: transparent;
   box-shadow: none;
-  scrollbar-width: none;
-}
-
-.left-drawer:not(.open) .drawer-head,
-.left-drawer:not(.open) .drawer-workspace {
-  visibility: hidden;
-}
-
-.left-drawer:not(.open)::-webkit-scrollbar {
-  display: none;
 }
 
 .workspace-handles {
   position: absolute;
-  right: 0;
+  right: -44px;
   top: calc(var(--dg-shell-offset, 92px) + 8px);
   width: 44px;
   display: grid;
@@ -1031,6 +1017,10 @@ label[for="templateEditor"] {
 
 .drawer-workspace {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .left-drawer[data-workspace-mode="profile"] .drawer-section[data-workspace-scope="profile"] {
@@ -1396,12 +1386,11 @@ body[data-theme="dark"] .data-table thead th {
 
   .left-drawer {
     width: min(95vw, 95vw);
-    transform: translateX(calc(-100% + 36px));
-    padding-right: 46px;
+    transform: translateX(-100%);
   }
 
   .workspace-handles {
-    right: 0;
+    right: -36px;
     top: calc(var(--dg-shell-offset, 138px) + 8px);
     width: 36px;
   }
