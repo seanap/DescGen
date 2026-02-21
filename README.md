@@ -30,7 +30,6 @@ Chronicle automatically builds rich Strava activity descriptions by combining da
 ### Step 0: Install Docker Desktop for Mac
 1. Watch this quick setup video: https://www.youtube.com/watch?v=agkOZr27d3Y
 2. Install Docker Desktop and launch it.
-3. Wait until Docker says it is running.
 
 ### Step 1: Open Terminal
 - Open `Terminal.app`.
@@ -47,11 +46,6 @@ cp .env.example .env
 ### Step 3: Start Chronicle
 ```bash
 docker compose up -d
-```
-
-If you are upgrading from older `DescGen` / `Auto-Stat-Description` setups, verify your `.env` contains:
-```bash
-DOCKER_IMAGE=seanap/chronicle:latest
 ```
 
 ### Step 4: Open the app
