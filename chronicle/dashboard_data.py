@@ -805,10 +805,31 @@ def _empty_payload(*, error: str | None = None) -> dict[str, Any]:
         "units": dict(DEFAULT_UNITS),
         "week_start": DEFAULT_WEEK_START,
         "activities": [],
+        "intervals": {
+            "enabled": False,
+            "records": 0,
+            "matched_activities": 0,
+        },
+        "intervals_year_type_metrics": {},
     }
     if error:
         payload["error"] = error
     return payload
+
+
+def _normalize_dashboard_payload(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    normalized = dict(payload)
+    intervals_raw = normalized.get("intervals")
+    intervals = dict(intervals_raw) if isinstance(intervals_raw, dict) else {}
+    intervals["enabled"] = bool(settings.enable_intervals)
+    intervals.setdefault("records", 0)
+    intervals.setdefault("matched_activities", 0)
+    normalized["intervals"] = intervals
+    intervals_year_type_metrics = normalized.get("intervals_year_type_metrics")
+    normalized["intervals_year_type_metrics"] = (
+        intervals_year_type_metrics if isinstance(intervals_year_type_metrics, dict) else {}
+    )
+    return normalized
 
 
 def _refresh_lock_ttl_seconds() -> int:
@@ -826,7 +847,7 @@ def _build_and_persist_payload(
     *,
     latest_marker: tuple[str | None, str | None] | None = None,
 ) -> dict[str, Any]:
-    payload = build_dashboard_payload(settings, latest_marker=latest_marker)
+    payload = _normalize_dashboard_payload(build_dashboard_payload(settings, latest_marker=latest_marker), settings)
     write_json(data_path, payload)
     return payload
 
@@ -899,12 +920,12 @@ def ensure_dashboard_cache_warm(settings: Settings) -> dict[str, Any]:
     data_path = dashboard_data_path(settings)
     cached = read_json(data_path)
     if isinstance(cached, dict):
-        return cached
+        return _normalize_dashboard_payload(cached, settings)
     try:
         return _build_and_persist_payload(settings, data_path)
     except Exception:
         logger.exception("Dashboard warmup failed; serving empty payload.")
-        return _empty_payload(error="dashboard_warmup_failed")
+        return _normalize_dashboard_payload(_empty_payload(error="dashboard_warmup_failed"), settings)
 
 
 def get_dashboard_payload(
@@ -924,24 +945,24 @@ def get_dashboard_payload(
         except Exception:
             if isinstance(cached, dict):
                 logger.exception("Forced dashboard rebuild failed; serving stale cached payload.")
-                return cached
+                return _normalize_dashboard_payload(cached, settings)
             logger.exception("Forced dashboard rebuild failed with no cache; serving empty payload.")
-            return _empty_payload(error="dashboard_build_failed")
+            return _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings)
 
     if isinstance(cached, dict):
         if _is_payload_fresh(cached, max_age_seconds=age_limit):
-            return cached
+            return _normalize_dashboard_payload(cached, settings)
         revalidating = _schedule_background_refresh(settings, reason="stale_cached_request") if allow_async_refresh else False
         stale_response = dict(cached)
         stale_response["cache_state"] = "stale_revalidating" if revalidating else "stale"
         stale_response["revalidating"] = revalidating
-        return stale_response
+        return _normalize_dashboard_payload(stale_response, settings)
 
     try:
         return _build_and_persist_payload(settings, data_path)
     except Exception:
         if isinstance(cached, dict):
             logger.exception("Dashboard rebuild failed; serving stale cached payload.")
-            return cached
+            return _normalize_dashboard_payload(cached, settings)
         logger.exception("Dashboard rebuild failed with no cache; serving empty payload.")
-        return _empty_payload(error="dashboard_build_failed")
+        return _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings)

@@ -2298,6 +2298,20 @@ function formatPaceFromMps(valueMps, units) {
   return `${minutes}:${String(seconds).padStart(2, "0")}/${unitLabel}`;
 }
 
+function derivePaceMpsFromEntry(entry) {
+  if (!entry || typeof entry !== "object") return 0;
+  const explicit = Number(entry[PACE_METRIC_KEY] || 0);
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  const distance = Number(entry.distance || 0);
+  const movingTime = Number(entry.moving_time || 0);
+  if (distance > 0 && movingTime > 0) {
+    return distance / movingTime;
+  }
+  return 0;
+}
+
 function formatEfficiency(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric <= 0) {
@@ -3091,6 +3105,8 @@ function buildHeatmapArea(aggregates, year, units, colors, type, layout, options
     if (metricHeatmapActive) {
       const metricValue = metricHeatmapKey === ACTIVE_DAYS_METRIC_KEY
         ? (filled ? 1 : 0)
+        : metricHeatmapKey === PACE_METRIC_KEY
+        ? derivePaceMpsFromEntry(entry)
         : Number(entry[metricHeatmapKey] || 0);
       cell.style.backgroundImage = "none";
       cell.style.background = metricValue > 0
@@ -3445,7 +3461,8 @@ function buildCard(type, year, aggregates, units, options = {}) {
     metricMaxByKey.distance = Math.max(metricMaxByKey.distance, Number(entry.distance || 0));
     metricMaxByKey.moving_time = Math.max(metricMaxByKey.moving_time, Number(entry.moving_time || 0));
     metricMaxByKey.elevation_gain = Math.max(metricMaxByKey.elevation_gain, Number(entry.elevation_gain || 0));
-    metricMaxByKey[PACE_METRIC_KEY] = Math.max(metricMaxByKey[PACE_METRIC_KEY], Number(entry[PACE_METRIC_KEY] || 0));
+    const entryPace = derivePaceMpsFromEntry(entry);
+    metricMaxByKey[PACE_METRIC_KEY] = Math.max(metricMaxByKey[PACE_METRIC_KEY], entryPace);
     metricMaxByKey[EFFICIENCY_METRIC_KEY] = Math.max(
       metricMaxByKey[EFFICIENCY_METRIC_KEY],
       Number(entry[EFFICIENCY_METRIC_KEY] || 0),
@@ -3461,7 +3478,7 @@ function buildCard(type, year, aggregates, units, options = {}) {
 
     const dayWeightSeconds = Number(entry.moving_time || 0);
     const dayCount = Number(entry.count || 0);
-    const dayPace = Number(entry[PACE_METRIC_KEY] || 0);
+    const dayPace = entryPace;
     if (dayWeightSeconds > 0 && dayPace > 0) {
       totals._pace_weighted_sum += dayPace * dayWeightSeconds;
       totals._pace_weight_seconds += dayWeightSeconds;
@@ -3670,7 +3687,7 @@ function combineYearAggregates(yearData, types) {
       combined[dateStr].elevation_gain += entry.elevation_gain || 0;
       const entryMovingTime = Number(entry.moving_time || 0);
       const entryCount = Number(entry.count || 0);
-      const entryPace = Number(entry[PACE_METRIC_KEY] || 0);
+      const entryPace = derivePaceMpsFromEntry(entry);
       if (entryMovingTime > 0 && entryPace > 0) {
         combined[dateStr]._pace_weighted_sum += entryPace * entryMovingTime;
         combined[dateStr]._pace_weight_seconds += entryMovingTime;

@@ -164,6 +164,31 @@ class TestDashboardData(unittest.TestCase):
             self.assertTrue(payload.get("revalidating"))
             schedule.assert_called_once()
 
+    def test_cached_payload_normalizes_intervals_enabled_from_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base_settings = self._settings_for(td)
+            settings = replace(base_settings, enable_intervals=True)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+
+            payload = get_dashboard_payload(settings, force_refresh=False, max_age_seconds=3600)
+
+            self.assertIn("intervals", payload)
+            self.assertTrue(payload["intervals"]["enabled"])
+            self.assertIn("intervals_year_type_metrics", payload)
+
     def test_smart_revalidate_touches_payload_when_latest_activity_is_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             settings = self._settings_for(td)
