@@ -201,10 +201,13 @@ const state = {
   catalogRecents: [],
   commandPaletteItems: [],
   commandPaletteActiveIndex: 0,
+  workspaceMode: "template",
 };
 
 const elements = {
   leftDrawer: document.getElementById("leftDrawer"),
+  drawerTitle: document.getElementById("drawerTitle"),
+  workspaceScopeSections: Array.from(document.querySelectorAll("[data-workspace-scope]")),
   profileWorkspaceSection: document.getElementById("profileWorkspaceSection"),
   profileWorkspaceMeta: document.getElementById("profileWorkspaceMeta"),
   profileList: document.getElementById("profileList"),
@@ -516,29 +519,55 @@ function closeDrawer() {
   elements.drawerBackdrop.setAttribute("aria-hidden", "true");
 }
 
-function openDrawer() {
+function setWorkspaceMode(mode) {
+  const nextMode = mode === "profile" ? "profile" : "template";
+  state.workspaceMode = nextMode;
+
+  if (elements.drawerTitle) {
+    elements.drawerTitle.textContent = nextMode === "profile" ? "Profile Workshop" : "Template Workshop";
+  }
+
+  for (const section of elements.workspaceScopeSections) {
+    const scope = String(section?.dataset?.workspaceScope || "template");
+    section.hidden = scope !== nextMode;
+  }
+
+  if (elements.btnProfileDrawerToggle) {
+    elements.btnProfileDrawerToggle.classList.toggle("is-active", nextMode === "profile");
+  }
+  if (elements.btnDrawerToggle) {
+    elements.btnDrawerToggle.classList.toggle("is-active", nextMode === "template");
+  }
+}
+
+function openDrawer(mode = state.workspaceMode) {
   if (!elements.leftDrawer || !elements.drawerBackdrop) return;
+  setWorkspaceMode(mode);
   elements.leftDrawer.classList.add("open");
   elements.leftDrawer.setAttribute("aria-hidden", "false");
   elements.drawerBackdrop.classList.add("open");
   elements.drawerBackdrop.setAttribute("aria-hidden", "false");
 }
 
-function openProfileWorkspace() {
-  openDrawer();
-  loadProfiles();
+async function openProfileWorkspace() {
+  openDrawer("profile");
+  await loadProfiles();
   if (elements.profileWorkspaceSection) {
     elements.profileWorkspaceSection.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
-function toggleDrawer() {
+function openTemplateWorkspace() {
+  openDrawer("template");
+}
+
+function toggleDrawer(mode = state.workspaceMode) {
   if (!elements.leftDrawer) return;
   const open = elements.leftDrawer.classList.contains("open");
   if (open) {
     closeDrawer();
   } else {
-    openDrawer();
+    openDrawer(mode);
   }
 }
 
@@ -2973,8 +3002,9 @@ function bindUI() {
   if (elements.schemaInspector) {
     elements.schemaInspector.tabIndex = -1;
   }
+  setWorkspaceMode(state.workspaceMode);
   if (elements.btnDrawerToggle) {
-    elements.btnDrawerToggle.addEventListener("click", openDrawer);
+    elements.btnDrawerToggle.addEventListener("click", openTemplateWorkspace);
   }
   if (elements.btnProfileDrawerToggle) {
     elements.btnProfileDrawerToggle.addEventListener("click", openProfileWorkspace);

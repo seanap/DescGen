@@ -1451,6 +1451,32 @@ def _template_repository_builtin_records() -> list[dict[str, Any]]:
                 "can_overwrite": False,
             }
         )
+    profile_builtins = sorted(
+        _profile_builtin_map().values(),
+        key=lambda item: (
+            -int(item.get("priority", 0)),
+            str(item.get("label") or item.get("profile_id") or "").lower(),
+        ),
+    )
+    for profile in profile_builtins:
+        profile_id = _normalize_profile_id(profile.get("profile_id"))
+        if not profile_id or profile_id == DEFAULT_PROFILE_ID:
+            continue
+        label = str(profile.get("label") or profile_id.title())
+        records.append(
+            {
+                "template_id": f"profile-default-{profile_id}",
+                "name": f"Profile Default - {label}",
+                "author": "system",
+                "description": f"Default template seed for the {label} profile.",
+                "template": _normalize_template_text(_profile_template_seed(profile_id)),
+                "source": f"builtin-profile-default:{profile_id}",
+                "created_at_utc": None,
+                "updated_at_utc": None,
+                "is_builtin": True,
+                "can_overwrite": False,
+            }
+        )
     return records
 
 

@@ -25,76 +25,77 @@
 
   <aside id="leftDrawer" class="left-drawer" aria-hidden="true">
     <div class="drawer-head">
-      <h2>Workspace</h2>
+      <h2 id="drawerTitle">Template Workshop</h2>
       <button id="btnDrawerClose" class="btn btn-ghost" type="button">Close</button>
     </div>
+    <div class="drawer-workspace">
+      <section id="profileWorkspaceSection" class="drawer-section" data-workspace-scope="profile">
+        <h3>Profile Workspace</h3>
+        <p class="subtext">Enable profiles and choose which profile template you are editing.</p>
+        <div id="profileWorkspaceMeta" class="meta">Loading profiles...</div>
+        <div id="profileList" class="catalog"></div>
+      </section>
 
-    <section id="profileWorkspaceSection" class="drawer-section">
-      <h3>Profile Workspace</h3>
-      <p class="subtext">Enable profiles and choose which profile template you are editing.</p>
-      <div id="profileWorkspaceMeta" class="meta">Loading profiles...</div>
-      <div id="profileList" class="catalog"></div>
-    </section>
+      <section class="drawer-section" data-workspace-scope="template">
+        <h3>Template Controls</h3>
+        <p class="subtext">Load and manage local working drafts.</p>
+        <div class="inline-actions">
+          <button id="btnLoadActive" class="btn btn-ghost" type="button">Load Active</button>
+          <button id="btnLoadDefault" class="btn btn-ghost" type="button">Load Default</button>
+          <button id="btnLoadDraft" class="btn btn-ghost" type="button" title="Load your locally saved browser draft">Load Draft</button>
+          <button id="btnSaveDraft" class="btn btn-ghost" type="button" title="Save current editor content locally in your browser">Save Draft</button>
+        </div>
+      </section>
 
-    <section class="drawer-section">
-      <h3>Template Controls</h3>
-      <p class="subtext">Load and manage local working drafts.</p>
-      <div class="inline-actions">
-        <button id="btnLoadActive" class="btn btn-ghost" type="button">Load Active</button>
-        <button id="btnLoadDefault" class="btn btn-ghost" type="button">Load Default</button>
-        <button id="btnLoadDraft" class="btn btn-ghost" type="button" title="Load your locally saved browser draft">Load Draft</button>
-        <button id="btnSaveDraft" class="btn btn-ghost" type="button" title="Save current editor content locally in your browser">Save Draft</button>
-      </div>
-    </section>
+      <section class="drawer-section" data-workspace-scope="template">
+        <h3>Template Repository</h3>
+        <p class="subtext">Load, save, duplicate, import, and export templates.</p>
+        <div class="advanced-toolbar repository-select-row">
+          <label for="repositoryTemplateSelect">Library</label>
+          <select id="repositoryTemplateSelect">
+            <option value="" selected>Loading templates...</option>
+          </select>
+          <button id="btnRepoLoad" class="btn btn-secondary" type="button">Load Highlighted</button>
+        </div>
+        <div class="advanced-toolbar repository-meta-row">
+          <label for="repoTemplateNameInput">Title</label>
+          <input id="repoTemplateNameInput" type="text" placeholder="Template title">
+          <label for="repoTemplateAuthorInput">Author</label>
+          <input id="repoTemplateAuthorInput" type="text" placeholder="Template author">
+        </div>
+        <div id="repositoryTemplateMeta" class="meta">No repository template selected.</div>
+        <div class="inline-actions">
+          <button id="btnRepoSave" class="btn btn-secondary" type="button">Save</button>
+          <button id="btnRepoSaveAs" class="btn btn-ghost" type="button">Save As</button>
+          <button id="btnRepoDuplicate" class="btn btn-ghost" type="button">Duplicate</button>
+          <button id="btnRepoImport" class="btn btn-ghost" type="button">Import</button>
+          <button id="btnRepoExport" class="btn btn-ghost" type="button">Export</button>
+        </div>
+        <input id="importTemplateFile" type="file" accept="application/json,.json" hidden>
+      </section>
 
-    <section class="drawer-section">
-      <h3>Template Repository</h3>
-      <p class="subtext">Load, save, duplicate, import, and export templates.</p>
-      <div class="advanced-toolbar repository-select-row">
-        <label for="repositoryTemplateSelect">Library</label>
-        <select id="repositoryTemplateSelect">
-          <option value="" selected>Loading templates...</option>
-        </select>
-        <button id="btnRepoLoad" class="btn btn-secondary" type="button">Load Highlighted</button>
-      </div>
-      <div class="advanced-toolbar repository-meta-row">
-        <label for="repoTemplateNameInput">Title</label>
-        <input id="repoTemplateNameInput" type="text" placeholder="Template title">
-        <label for="repoTemplateAuthorInput">Author</label>
-        <input id="repoTemplateAuthorInput" type="text" placeholder="Template author">
-      </div>
-      <div id="repositoryTemplateMeta" class="meta">No repository template selected.</div>
-      <div class="inline-actions">
-        <button id="btnRepoSave" class="btn btn-secondary" type="button">Save</button>
-        <button id="btnRepoSaveAs" class="btn btn-ghost" type="button">Save As</button>
-        <button id="btnRepoDuplicate" class="btn btn-ghost" type="button">Duplicate</button>
-        <button id="btnRepoImport" class="btn btn-ghost" type="button">Import</button>
-        <button id="btnRepoExport" class="btn btn-ghost" type="button">Export</button>
-      </div>
-      <input id="importTemplateFile" type="file" accept="application/json,.json" hidden>
-    </section>
+      <section class="drawer-section" data-workspace-scope="template">
+        <div class="drawer-row">
+          <h3>Template History</h3>
+          <button id="btnRefreshHistory" class="btn btn-ghost" type="button">Refresh</button>
+        </div>
+        <p class="subtext">Browse previous versions and rollback safely.</p>
+        <div id="templateMeta" class="meta">No template metadata.</div>
+        <div id="versionList" class="catalog"></div>
+      </section>
 
-    <section class="drawer-section">
-      <div class="drawer-row">
-        <h3>Template History</h3>
-        <button id="btnRefreshHistory" class="btn btn-ghost" type="button">Refresh</button>
-      </div>
-      <p class="subtext">Browse previous versions and rollback safely.</p>
-      <div id="templateMeta" class="meta">No template metadata.</div>
-      <div id="versionList" class="catalog"></div>
-    </section>
-
-    <section class="drawer-section">
-      <h3>Reference Links</h3>
-      <p class="subtext">Source docs and Jinja references.</p>
-      <div class="help-links">
-        <a href="https://developers.strava.com/docs/reference/" target="_blank" rel="noopener noreferrer">Strava API Docs</a>
-        <a href="https://intervals.icu/api-docs.html" target="_blank" rel="noopener noreferrer">Intervals.icu API</a>
-        <a href="https://www.weatherapi.com/docs/" target="_blank" rel="noopener noreferrer">WeatherAPI Docs</a>
-        <a href="https://api.smashrun.com/v1/documentation" target="_blank" rel="noopener noreferrer">Smashrun API Docs</a>
-        <a href="https://jinja.palletsprojects.com/en/stable/templates/" target="_blank" rel="noopener noreferrer">Jinja Template Reference</a>
-      </div>
-    </section>
+      <section class="drawer-section" data-workspace-scope="template">
+        <h3>Reference Links</h3>
+        <p class="subtext">Source docs and Jinja references.</p>
+        <div class="help-links">
+          <a href="https://developers.strava.com/docs/reference/" target="_blank" rel="noopener noreferrer">Strava API Docs</a>
+          <a href="https://intervals.icu/api-docs.html" target="_blank" rel="noopener noreferrer">Intervals.icu API</a>
+          <a href="https://www.weatherapi.com/docs/" target="_blank" rel="noopener noreferrer">WeatherAPI Docs</a>
+          <a href="https://api.smashrun.com/v1/documentation" target="_blank" rel="noopener noreferrer">Smashrun API Docs</a>
+          <a href="https://jinja.palletsprojects.com/en/stable/templates/" target="_blank" rel="noopener noreferrer">Jinja Template Reference</a>
+        </div>
+      </section>
+    </div>
   </aside>
   <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
@@ -142,17 +143,17 @@
     <main class="main-layout">
       <section class="workspace-row">
         <section class="panel card editor-panel reveal" style="--delay:0.03s">
-          <button id="btnDrawerToggle" class="workspace-tab" type="button" aria-label="Open template workspace">Template Workspace</button>
-          <button id="btnProfileDrawerToggle" class="workspace-tab workspace-tab-profile" type="button" aria-label="Open profile workspace">Profile Workspace</button>
+          <button id="btnProfileDrawerToggle" class="workspace-tab workspace-tab-profile" type="button" aria-label="Open profile workspace">Profile Workshop</button>
+          <button id="btnDrawerToggle" class="workspace-tab workspace-tab-template" type="button" aria-label="Open template workspace">Template Workshop</button>
           <div class="template-current-line">
-            <div class="template-current-cell">
-              <span class="stack-label">Current Template</span>
-              <strong id="currentTemplateDisplay">Chronicle Template</strong>
-            </div>
-            <span class="template-current-divider">|</span>
             <div class="template-current-cell">
               <span class="stack-label">Current Profile</span>
               <strong id="currentProfileDisplay">Default</strong>
+            </div>
+            <span class="template-current-divider">|</span>
+            <div class="template-current-cell">
+              <span class="stack-label">Current Template</span>
+              <strong id="currentTemplateDisplay">Chronicle Template</strong>
             </div>
           </div>
           <div class="tabbar">

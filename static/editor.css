@@ -290,12 +290,12 @@ h3 {
 }
 
 .workspace-tab {
-  position: absolute;
-  left: -38px;
-  top: 70px;
+  position: fixed;
+  left: 0;
+  top: calc(var(--dg-shell-offset, 92px) + 286px);
   border: 1px solid var(--line);
-  border-right: 0;
-  border-radius: 12px 0 0 12px;
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
   background: color-mix(in srgb, var(--panel) 92%, var(--panel-soft));
   color: var(--secondary);
   padding: 10px 6px;
@@ -309,14 +309,22 @@ h3 {
   text-orientation: mixed;
   cursor: pointer;
   box-shadow: var(--shadow);
+  z-index: 58;
 }
 
 .workspace-tab.workspace-tab-profile {
-  top: 250px;
+  top: calc(var(--dg-shell-offset, 92px) + 108px);
 }
 
 .workspace-tab:hover {
   background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
+}
+
+.workspace-tab.is-active {
+  color: #ffd1b4;
+  border-color: color-mix(in srgb, var(--line) 55%, var(--secondary));
+  background: linear-gradient(180deg, rgba(252, 76, 2, 0.28), rgba(252, 76, 2, 0.14));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.48);
 }
 
 .preview-head {
@@ -972,6 +980,7 @@ label[for="templateEditor"] {
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: auto;
+  overflow-x: hidden;
   padding: 12px;
 }
 
@@ -993,6 +1002,19 @@ label[for="templateEditor"] {
   background: var(--panel-soft);
   padding: 10px;
   margin-bottom: 10px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.drawer-workspace {
+  min-width: 0;
+}
+
+.left-drawer .meta,
+.left-drawer .field-key,
+.left-drawer .field-type,
+.left-drawer .field-source {
+  overflow-wrap: anywhere;
 }
 
 .drawer-row {
@@ -1000,6 +1022,38 @@ label[for="templateEditor"] {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+
+.left-drawer .field {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.left-drawer .row-controls {
+  flex-wrap: wrap;
+}
+
+.left-drawer .row-controls > * {
+  min-width: 0;
+}
+
+.repository-select-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.repository-meta-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.repository-select-row select,
+.repository-meta-row input {
+  min-width: 0;
+  width: 100%;
 }
 
 .drawer-backdrop {
@@ -1304,14 +1358,19 @@ body[data-theme="dark"] .data-table thead th {
   }
 
   .workspace-tab {
-    left: -30px;
+    left: 0;
     width: 30px;
     min-height: 146px;
     font-size: 0.66rem;
-    top: 54px;
+    top: calc(var(--dg-shell-offset, 138px) + 232px);
   }
 
   .workspace-tab.workspace-tab-profile {
-    top: 210px;
+    top: calc(var(--dg-shell-offset, 138px) + 96px);
+  }
+
+  .repository-select-row,
+  .repository-meta-row {
+    grid-template-columns: 1fr;
   }
 }
