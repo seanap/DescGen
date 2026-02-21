@@ -696,6 +696,17 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
         "criteria": {"kind": "fallback", "description": "Fallback profile when no enabled rule matches."},
     },
     {
+        "profile_id": "incline_treadmill",
+        "label": "Incline Treadmill",
+        "enabled": True,
+        "locked": False,
+        "priority": 110,
+        "criteria": {
+            "kind": "activity",
+            "description": "Garmin treadmill sessions (trainer/no GPS, garmin_ping external_id, treadmill keyword).",
+        },
+    },
+    {
         "profile_id": "treadmill",
         "label": "Treadmill",
         "enabled": True,
@@ -718,6 +729,14 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
         "locked": False,
         "priority": 80,
         "criteria": {"kind": "activity", "description": "Strava commute flag."},
+    },
+    {
+        "profile_id": "walk",
+        "label": "Walk",
+        "enabled": True,
+        "locked": False,
+        "priority": 78,
+        "criteria": {"kind": "activity", "description": "Outdoor Strava Walk activities with GPS and trainer disabled."},
     },
     {
         "profile_id": "strength_training",
@@ -771,6 +790,13 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
 
 PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
     "default": DEFAULT_DESCRIPTION_TEMPLATE,
+    "incline_treadmill": """∠ Incline: 15%
+{% set distance_m = raw.activity.distance | default(0) | float %}
+{% set moving_s = raw.activity.moving_time | default(raw.activity.elapsed_time | default(0)) | float %}
+{% set mph = ((distance_m / 1609.34) / (moving_s / 3600.0)) if moving_s > 0 else 0.0 %}
+⏲ Avg Speed: {{ '%.1f' | format(mph) }}mph
+🗻 {{ activity.treadmill_elevation_feet_15pct | default('N/A') }}' Treadmill Elevation
+🍺 {{ activity.beers }}""",
     "treadmill": """🏠 Treadmill Session
 ∠ Incline {{ activity.treadmill_incline_percent | default(15) }}%
 ⏲ {{ activity.time }} | 🚄 {{ activity.average_speed_mph }} | 🗺️ {{ activity.distance_miles }} mi
@@ -781,43 +807,22 @@ PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
     "commute": """🚲 Commute Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }}
 🌤️ MI {{ misery.index }} {{ misery.index.emoji }}""",
+    "walk": """{% set garmin = raw.training.garmin_last_activity if raw is defined and raw.training is defined and raw.training.garmin_last_activity is defined and raw.training.garmin_last_activity else {} %}
+{% set garmin_steps = garmin.steps if garmin and garmin.steps is defined and garmin.steps != 'N/A' else none %}
+{% set est_steps = none %}
+{% if raw is defined and raw.activity is defined and activity.cadence_spm is number and raw.activity.moving_time is defined %}
+{% set est_steps = ((activity.cadence_spm | float) * ((raw.activity.moving_time | float) / 60.0)) | round | int %}
+{% endif %}
+{% set step_count = garmin_steps if garmin_steps is not none else est_steps %}
+🌤️🌡️ Misery Index: {{ misery.index }} {{ misery.index.emoji }}{% if misery.index.polarity in ['hot', 'cold'] %} ({{ misery.index.polarity }}){% endif %} | 🏭 AQI: {{ weather.aqi }}{{ weather.aqi_description }}
+🚶 {{ activity.distance_miles }} mi | 🕓 {{ activity.time }} | 🚄 {{ activity.average_speed_mph }} | 🌤️ {{ weather.condition }}
+👣 Steps: {{ step_count if step_count is not none else 'N/A' }}{% if garmin_steps is none and step_count is not none %} (est){% endif %} | 🍺 {{ activity.beers }}""",
     "strength_training": """{% set garmin = raw.training.garmin_last_activity if raw is defined and raw.training is defined and raw.training.garmin_last_activity is defined and raw.training.garmin_last_activity else {} %}
-🏋️ Strength Training
-📛 {{ garmin.activity_name | default(activity.name | default('N/A')) }} | 🏷 {{ garmin.activity_type | default(activity.sport_type | default('N/A')) }}
-🗓 {{ garmin.start_local | default(activity.start_local | default('N/A')) }}
 
 📦 Volume
 Sets: {{ garmin.total_sets | default(raw.activity.set_count | default(raw.activity.sets | default(raw.activity.setCount | default('N/A')))) }} (Active: {{ garmin.active_sets | default('N/A') }})
 Reps: {{ garmin.total_reps | default(raw.activity.rep_count | default(raw.activity.reps | default(raw.activity.repCount | default('N/A')))) }}
 Rep Weight (max): {{ garmin.max_weight | default(raw.activity.rep_weight | default(raw.activity.weight | default(raw.activity.weight_kg | default(raw.activity.weight_lbs | default(raw.activity.weight_lb | default('N/A')))))) }}
-
-⏱ Timing
-Duration: {{ garmin.duration | default(activity.time | default('N/A')) }} | Moving: {{ garmin.moving_time | default(activity.moving_time | default('N/A')) }} | Elapsed: {{ garmin.elapsed_time | default(activity.elapsed_time | default('N/A')) }}
-
-❤️ Effort
-Avg HR: {{ garmin.average_hr | default(activity.average_hr | default('N/A')) }} bpm | Max HR: {{ garmin.max_hr | default(activity.max_hr | default('N/A')) }} bpm
-Avg Resp: {{ garmin.avg_respiration_rate | default('N/A') }} | Max Resp: {{ garmin.max_respiration_rate | default('N/A') }}
-
-⚡ Power
-Avg: {{ garmin.avg_power_w | default('N/A') }} W | Norm: {{ garmin.norm_power_w | default('N/A') }} W | Max: {{ garmin.max_power_w | default('N/A') }} W
-
-🧭 Movement
-Distance: {{ garmin.distance_miles | default(activity.distance_miles | default('N/A')) }}
-Avg Pace: {{ garmin.average_pace | default(activity.average_pace | default('N/A')) }} | GAP Pace: {{ garmin.gap_pace | default(activity.gap_pace | default('N/A')) }}
-Avg/Max Speed: {{ garmin.average_speed_mph | default(activity.average_speed_mph | default('N/A')) }} / {{ garmin.max_speed_mph | default(activity.max_speed_mph | default('N/A')) }}
-Elev Gain/Loss: {{ garmin.elevation_gain_feet | default(activity.elevation_feet | default('N/A')) }} / {{ garmin.elevation_loss_feet | default('N/A') }} ft
-Elev Avg/Max/Min: {{ garmin.avg_elevation_feet | default('N/A') }} / {{ garmin.max_elevation_feet | default('N/A') }} / {{ garmin.min_elevation_feet | default('N/A') }} ft
-Steps: {{ garmin.steps | default('N/A') }} | Laps: {{ garmin.lap_count | default('N/A') }}
-
-🦿 Form
-Ground Contact: {{ garmin.avg_ground_contact_time_ms | default('N/A') }} ms
-Vertical Ratio: {{ garmin.avg_vertical_ratio_pct | default('N/A') }} | Vertical Oscillation: {{ garmin.avg_vertical_oscillation_mm | default('N/A') }} mm
-Stride Length: {{ garmin.avg_stride_length_m | default('N/A') }}
-
-🧪 Zones
-HR Zones: {{ garmin.hr_zone_summary | default('N/A') }}
-Power Zones: {{ garmin.power_zone_summary | default('N/A') }}
-PR Flag: {{ garmin.is_pr | default('N/A') }}
 
 {% set summary_sets = garmin.strength_summary_sets | default([]) %}
 {% if summary_sets %}
@@ -833,12 +838,7 @@ PR Flag: {{ garmin.is_pr | default('N/A') }}
 {% for row in exercise_sets -%}
 • {{ loop.index }}. {{ row.set_type | default('N/A') }}{% if row.exercise_names %} - {{ row.exercise_names | join(', ') | replace('_', ' ') | title }}{% endif %} | reps {{ row.reps | default('N/A') }} | weight {{ row.weight | default('N/A') }} | {{ row.duration_seconds | default('N/A') }}s
 {% endfor %}
-{% endif %}
-
-🧠 Readiness
-Readiness: {{ training.readiness_score | default('N/A') }} {{ training.readiness_emoji | default('') }} ({{ training.readiness_level | default('N/A') }})
-Recovery: {{ training.recovery_time_hours | default('N/A') }}h | Sleep: {{ training.sleep_score | default('N/A') }} | Resting HR: {{ training.resting_hr | default('N/A') }}
-Status: {{ training.status_emoji | default('') }} {{ training.status_key | default('N/A') }}""",
+{% endif %}""",
     "trail": """🌲 Trail Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }}
 🚄 {{ intervals.summary }}""",
