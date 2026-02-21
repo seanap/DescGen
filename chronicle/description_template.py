@@ -659,6 +659,166 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     humid_ctx["crono"]["protein_g"] = 132.0
     humid_ctx["crono"]["carbs_g"] = 301.0
 
+    strength_ctx = deepcopy(default_ctx)
+    strength_ctx["profile"] = {
+        "id": "strength_training",
+        "label": "Strength Training",
+        "reasons": ["garmin activity indicates strength"],
+    }
+    strength_ctx["activity"].update(
+        {
+            "name": "Strength Workout",
+            "type": "Workout",
+            "sport_type": "Workout",
+            "trainer": True,
+            "has_gps": False,
+            "start_latlng": [],
+            "distance_miles": "0.00",
+            "elevation_feet": 0,
+            "time": "45:12",
+            "moving_time": "43:08",
+            "elapsed_time": "45:12",
+            "beers": "2.2",
+            "average_speed_mph": "N/A",
+            "max_speed_mph": "N/A",
+            "cadence_spm": "N/A",
+            "work": "N/A",
+            "norm_power": "N/A",
+            "norm_power_source": "none",
+            "average_hr": "N/A",
+            "max_hr": "N/A",
+            "efficiency": "N/A",
+        }
+    )
+    strength_ctx["garmin"]["segment_notables"] = []
+    strength_ctx["segment_notables"] = []
+    strength_ctx["strava_segment_notables"] = []
+    strength_ctx["badges"] = []
+    strength_ctx["strava_badges"] = []
+    strength_ctx["garmin_badges"] = []
+    strength_ctx["smashrun_badges"] = []
+    strength_ctx["smashrun"]["badges"] = []
+    strength_ctx["smashrun"]["latest_activity"] = {}
+    strength_ctx["smashrun"]["stats"] = {}
+
+    strength_garmin_last = {
+        "activity_name": "Strength",
+        "activity_type": "strength_training",
+        "start_local": "2026-02-16 07:01:00",
+        "distance_miles": "0.00 mi",
+        "duration": "45:12",
+        "moving_time": "43:08",
+        "elapsed_time": "45:12",
+        "average_pace": "N/A",
+        "average_speed_mph": "N/A",
+        "max_speed_mph": "N/A",
+        "gap_pace": "N/A",
+        "elevation_gain_feet": 0,
+        "elevation_loss_feet": 0,
+        "avg_elevation_feet": 0,
+        "max_elevation_feet": 0,
+        "min_elevation_feet": 0,
+        "average_hr": "N/A",
+        "max_hr": "N/A",
+        "avg_power_w": "N/A",
+        "norm_power_w": "N/A",
+        "max_power_w": "N/A",
+        "avg_ground_contact_time_ms": "N/A",
+        "avg_vertical_ratio_pct": "N/A",
+        "avg_vertical_oscillation_mm": "N/A",
+        "avg_stride_length_m": "N/A",
+        "avg_respiration_rate": "N/A",
+        "max_respiration_rate": "N/A",
+        "steps": "N/A",
+        "lap_count": "N/A",
+        "total_sets": 18,
+        "active_sets": 16,
+        "total_reps": 142,
+        "max_weight": 205.0,
+        "strength_summary_sets": [
+            {
+                "category": "PRESS",
+                "sub_category": "BENCH_PRESS",
+                "sets": 5,
+                "reps": 35,
+                "max_weight": 205.0,
+                "duration_seconds": 686,
+            },
+            {
+                "category": "SQUAT",
+                "sub_category": "BACK_SQUAT",
+                "sets": 6,
+                "reps": 42,
+                "max_weight": 185.0,
+                "duration_seconds": 742,
+            },
+            {
+                "category": "ROW",
+                "sub_category": "SEATED_CABLE_ROW",
+                "sets": 5,
+                "reps": 45,
+                "max_weight": 130.0,
+                "duration_seconds": 521,
+            },
+        ],
+        "exercise_sets": [
+            {
+                "set_type": "ACTIVE",
+                "reps": 8,
+                "weight": 185.0,
+                "duration_seconds": 42,
+                "exercise_names": ["BACK_SQUAT"],
+            },
+            {
+                "set_type": "ACTIVE",
+                "reps": 8,
+                "weight": 195.0,
+                "duration_seconds": 43,
+                "exercise_names": ["BACK_SQUAT"],
+            },
+            {
+                "set_type": "ACTIVE",
+                "reps": 7,
+                "weight": 205.0,
+                "duration_seconds": 39,
+                "exercise_names": ["BENCH_PRESS"],
+            },
+            {
+                "set_type": "ACTIVE",
+                "reps": 10,
+                "weight": 130.0,
+                "duration_seconds": 46,
+                "exercise_names": ["SEATED_CABLE_ROW"],
+            },
+            {
+                "set_type": "REST",
+                "reps": "N/A",
+                "weight": "N/A",
+                "duration_seconds": 75,
+                "exercise_names": [],
+            },
+        ],
+        "hr_zone_summary": "N/A",
+        "power_zone_summary": "N/A",
+        "is_pr": False,
+    }
+    strength_ctx["garmin"]["last_activity"] = deepcopy(strength_garmin_last)
+    strength_ctx["raw"]["activity"] = {
+        "id": 9999990001,
+        "name": "Strength",
+        "type": "Workout",
+        "sport_type": "Workout",
+        "distance": 0.0,
+        "moving_time": 2588,
+        "elapsed_time": 2712,
+        "trainer": True,
+        "start_latlng": [],
+    }
+    strength_ctx["raw"]["training"] = {
+        "garmin_last_activity": deepcopy(strength_garmin_last),
+        "_garmin_activity_aligned": True,
+    }
+
     return {
         "default": {
             "name": "default",
@@ -677,6 +837,12 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
             "label": "Humid Hammer",
             "description": "Hot + humid profile for heat-stress rendering checks.",
             "context": humid_ctx,
+        },
+        "strength_training": {
+            "name": "strength_training",
+            "label": "Strength Training",
+            "description": "Strength workout payload with Garmin set/rep fields populated.",
+            "context": strength_ctx,
         },
     }
 

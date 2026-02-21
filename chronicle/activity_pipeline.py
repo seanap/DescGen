@@ -35,6 +35,7 @@ from .stat_modules.smashrun import (
 )
 from .stat_modules.garmin_metrics import default_metrics as default_garmin_metrics
 from .stat_modules.garmin_metrics import fetch_training_status_and_scores
+from .stat_modules.garmin_metrics import get_activity_context_for_strava_activity
 from .storage import (
     acquire_runtime_lock,
     delete_runtime_value,
@@ -929,10 +930,59 @@ def _is_strength_like(activity: dict[str, Any]) -> bool:
     return no_gps and trainer and distance <= 0.2 and moving_time_seconds <= 1800
 
 
-def _incline_treadmill_match_reasons(activity: dict[str, Any]) -> list[str]:
+def _normalize_activity_type_key(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    return "".join(ch for ch in raw if ch.isalnum())
+
+
+def _training_indicates_strength(training: dict[str, Any] | None) -> bool:
+    if not isinstance(training, dict):
+        return False
+    if not bool(training.get("_garmin_activity_aligned")):
+        return False
+
+    garmin_last = training.get("garmin_last_activity")
+    if not isinstance(garmin_last, dict):
+        return False
+
+    activity_type_key = _normalize_activity_type_key(garmin_last.get("activity_type"))
+    if activity_type_key in {
+        "strength",
+        "strengthtraining",
+        "weighttraining",
+        "weightlifting",
+        "strengthworkout",
+    }:
+        return True
+
+    total_sets = _to_int(garmin_last.get("total_sets"))
+    active_sets = _to_int(garmin_last.get("active_sets"))
+    total_reps = _to_int(garmin_last.get("total_reps"))
+    if any(value is not None and value > 0 for value in (total_sets, active_sets, total_reps)):
+        return True
+
+    summary_sets = garmin_last.get("strength_summary_sets")
+    if isinstance(summary_sets, list) and summary_sets:
+        return True
+
+    exercise_sets = garmin_last.get("exercise_sets")
+    if isinstance(exercise_sets, list):
+        for row in exercise_sets:
+            if not isinstance(row, dict):
+                continue
+            reps = _to_int(row.get("reps"))
+            if reps is not None and reps > 0:
+                return True
+    return False
+
+
+def _incline_treadmill_match_reasons(
+    activity: dict[str, Any],
+    training: dict[str, Any] | None = None,
+) -> list[str]:
     raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip()
     sport_type = raw_sport_type.lower()
-    if _is_strength_like(activity):
+    if _is_strength_like(activity) or _training_indicates_strength(training):
         return []
     text = _text_blob(activity)
     start = _start_latlng(activity)
@@ -1015,6 +1065,7 @@ def _profile_match_reasons(
     profile_id: str,
     activity: dict[str, Any],
     settings: Settings,
+    training: dict[str, Any] | None = None,
 ) -> list[str]:
     workout_type = _to_int(activity.get("workout_type"))
     raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip()
@@ -1028,15 +1079,17 @@ def _profile_match_reasons(
 
     reasons: list[str] = []
     if profile_id == "incline_treadmill":
-        return _incline_treadmill_match_reasons(activity)
+        return _incline_treadmill_match_reasons(activity, training)
 
     if profile_id == "walk":
+        if _training_indicates_strength(training):
+            return reasons
         if sport_type == "walk" and start is not None and not bool(activity.get("trainer")):
             reasons.append("sport_type=Walk + GPS + trainer=false")
         return reasons
 
     if profile_id == "treadmill":
-        if _is_strength_like(activity):
+        if _is_strength_like(activity) or _training_indicates_strength(training):
             return reasons
         if treadmill:
             moving_time_seconds = _as_float(activity.get("moving_time")) or 0.0
@@ -1063,6 +1116,9 @@ def _profile_match_reasons(
         return reasons
 
     if profile_id == "strength_training":
+        if _training_indicates_strength(training):
+            reasons.append("garmin activity indicates strength")
+            return reasons
         if sport_type in {"weighttraining", "weight training"}:
             reasons.append(f"sport_type={raw_sport_type or 'WeightTraining'}")
             return reasons
@@ -1110,7 +1166,11 @@ def _profile_match_reasons(
     return reasons
 
 
-def _select_activity_profile(settings: Settings, detailed_activity: dict[str, Any]) -> dict[str, Any]:
+def _select_activity_profile(
+    settings: Settings,
+    detailed_activity: dict[str, Any],
+    training: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     profiles = [
         profile
         for profile in list_template_profiles(settings)
@@ -1129,7 +1189,7 @@ def _select_activity_profile(settings: Settings, detailed_activity: dict[str, An
         profile_id = str(profile.get("profile_id") or "").strip().lower()
         if profile_id == "default":
             continue
-        reasons = _profile_match_reasons(profile_id, detailed_activity, settings)
+        reasons = _profile_match_reasons(profile_id, detailed_activity, settings, training=training)
         if reasons:
             return {
                 "profile_id": profile_id,
@@ -2109,6 +2169,21 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
 
         garmin_client = _get_garmin_client(settings)
         training = _get_garmin_metrics(garmin_client)
+        training["_garmin_activity_aligned"] = False
+        if garmin_client is not None:
+            matched_garmin_context = _run_service_call(
+                settings,
+                "garmin.activity_context",
+                get_activity_context_for_strava_activity,
+                garmin_client,
+                detailed_activity,
+                service_state=service_state,
+                cache_key=f"garmin.activity_context:{selected_activity_id}",
+                cache_ttl_seconds=settings.service_cache_ttl_seconds,
+            )
+            if isinstance(matched_garmin_context, dict) and matched_garmin_context:
+                training["garmin_last_activity"] = matched_garmin_context
+                training["_garmin_activity_aligned"] = True
         garmin_period_fallback = _run_service_call(
             settings,
             "garmin.period_fallback",
@@ -2185,7 +2260,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             garmin_period_fallback=garmin_period_fallback,
         )
 
-        selected_profile = _select_activity_profile(settings, detailed_activity)
+        selected_profile = _select_activity_profile(settings, detailed_activity, training=training)
         profile_id = str(selected_profile.get("profile_id") or "default")
         description_context["profile"] = {
             "id": profile_id,

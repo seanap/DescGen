@@ -1,6 +1,9 @@
 import unittest
 
-from chronicle.stat_modules.garmin_metrics import fetch_training_status_and_scores
+from chronicle.stat_modules.garmin_metrics import (
+    fetch_training_status_and_scores,
+    get_activity_context_for_strava_activity,
+)
 
 
 class _DummyGarminClient:
@@ -188,6 +191,54 @@ class _DummyGarminClient:
             {"badgeName": "Weekend Warrior", "badgeLevel": 2},
         ]
 
+    def get_activities_by_date(self, _start_date, _end_date):
+        return [
+            {
+                "activityId": 3001,
+                "startTimeGMT": "2026-02-16 11:01:14",
+                "duration": 2712,
+                "movingDuration": 2588,
+                "distance": 0.0,
+                "activityType": {"typeKey": "strength_training"},
+                "activityName": "Strength",
+            },
+            {
+                "activityId": 3002,
+                "startTimeGMT": "2026-02-16 12:40:00",
+                "duration": 2520,
+                "movingDuration": 2520,
+                "distance": 4412.0,
+                "activityType": {"typeKey": "running"},
+                "activityName": "Lunch Run",
+            },
+        ]
+
+    def get_activity_details(self, activity_id):
+        if int(activity_id) != 3001:
+            return {}
+        return {
+            "activityId": 3001,
+            "startTimeGMT": "2026-02-16 11:01:14",
+            "duration": 2712,
+            "movingDuration": 2588,
+            "distance": 0.0,
+            "activityType": {"typeKey": "strength_training"},
+            "activityName": "Strength",
+            "totalSets": 18,
+            "activeSets": 16,
+            "totalReps": 142,
+            "summarizedExerciseSets": [
+                {
+                    "category": "PRESS",
+                    "subCategory": "BENCH_PRESS",
+                    "sets": 5,
+                    "reps": 35,
+                    "maxWeight": 205,
+                    "duration": 686000,
+                }
+            ],
+        }
+
 
 class TestVo2MaxExpandedMetrics(unittest.TestCase):
     def test_fetch_training_status_returns_expanded_fields(self) -> None:
@@ -220,6 +271,23 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         details = metrics["fitness_age_details"]
         self.assertIsInstance(details, dict)
         self.assertEqual(details["chronological_age"], 40)
+
+    def test_get_activity_context_for_strava_activity_matches_strength_session(self) -> None:
+        strava_activity = {
+            "id": 17455368360,
+            "start_date": "2026-02-16T11:01:08Z",
+            "moving_time": 2588,
+            "elapsed_time": 2712,
+            "distance": 0.0,
+            "sport_type": "Run",
+            "type": "Run",
+        }
+        context = get_activity_context_for_strava_activity(_DummyGarminClient(), strava_activity)
+        self.assertIsInstance(context, dict)
+        assert context is not None
+        self.assertEqual(context["activity_type"], "strength_training")
+        self.assertEqual(context["total_sets"], 18)
+        self.assertEqual(context["total_reps"], 142)
 
 
 if __name__ == "__main__":

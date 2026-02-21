@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from ..numeric_utils import (
@@ -287,6 +287,148 @@ def _normalize_exercise_sets(payload: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _parse_garmin_start_utc(activity: dict[str, Any]) -> datetime | None:
+    raw_gmt = activity.get("startTimeGMT")
+    if isinstance(raw_gmt, str) and raw_gmt.strip():
+        try:
+            return datetime.strptime(raw_gmt.strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+    raw_local = activity.get("startTimeLocal")
+    if isinstance(raw_local, str) and raw_local.strip():
+        candidate = raw_local.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(candidate)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
+def _parse_strava_start_utc(activity: dict[str, Any]) -> datetime | None:
+    for key in ("start_date", "start_date_local"):
+        raw_value = activity.get(key)
+        if not isinstance(raw_value, str) or not raw_value.strip():
+            continue
+        candidate = raw_value.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(candidate)
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    return None
+
+
+def _fetch_activity_exercise_sets(client: Any | None, activity_id: int | None) -> Any | None:
+    if client is None or activity_id is None:
+        return None
+    get_exercise_sets = getattr(client, "get_activity_exercise_sets", None)
+    if not callable(get_exercise_sets):
+        return None
+    try:
+        return get_exercise_sets(activity_id)
+    except Exception as exc:
+        logger.debug("Garmin activity exercise sets unavailable for %s: %s", activity_id, exc)
+        return None
+
+
+def build_garmin_activity_context(client: Any | None, activity_payload: dict[str, Any]) -> dict[str, Any]:
+    activity_id = _as_int(activity_payload.get("activityId"))
+    exercise_sets_payload = _fetch_activity_exercise_sets(client, activity_id)
+    return _build_garmin_last_activity_context(
+        activity_payload,
+        exercise_sets_payload=exercise_sets_payload,
+    )
+
+
+def get_activity_context_for_strava_activity(
+    client: Any | None,
+    strava_activity: dict[str, Any],
+    *,
+    max_start_diff_seconds: int = 6 * 60 * 60,
+) -> dict[str, Any] | None:
+    if client is None or not isinstance(strava_activity, dict):
+        return None
+
+    strava_start_utc = _parse_strava_start_utc(strava_activity)
+    if strava_start_utc is None:
+        return None
+
+    get_activities_by_date = getattr(client, "get_activities_by_date", None)
+    if not callable(get_activities_by_date):
+        return None
+
+    window_start = (strava_start_utc - timedelta(days=1)).date().isoformat()
+    window_end = (strava_start_utc + timedelta(days=1)).date().isoformat()
+    try:
+        garmin_activities = get_activities_by_date(window_start, window_end)
+    except Exception as exc:
+        logger.debug("Garmin activity matching lookup failed: %s", exc)
+        return None
+    if not isinstance(garmin_activities, list):
+        return None
+
+    strava_distance = _as_float(strava_activity.get("distance"))
+    strava_duration = _as_float(strava_activity.get("moving_time")) or _as_float(strava_activity.get("elapsed_time"))
+    ranked: list[tuple[float, dict[str, Any]]] = []
+
+    for candidate in garmin_activities:
+        if not isinstance(candidate, dict):
+            continue
+        candidate_start = _parse_garmin_start_utc(candidate)
+        if candidate_start is None:
+            continue
+        start_diff = abs((candidate_start - strava_start_utc).total_seconds())
+        if start_diff > float(max_start_diff_seconds):
+            continue
+
+        score = float(start_diff)
+        candidate_distance = _as_float(candidate.get("distance"))
+        if (
+            candidate_distance is not None
+            and strava_distance is not None
+            and candidate_distance > 0
+            and strava_distance > 0
+        ):
+            distance_ratio = abs(candidate_distance - strava_distance) / max(candidate_distance, strava_distance)
+            score += distance_ratio * 1800.0
+
+        candidate_duration = _as_float(candidate.get("movingDuration")) or _as_float(candidate.get("duration"))
+        if (
+            candidate_duration is not None
+            and strava_duration is not None
+            and candidate_duration > 0
+            and strava_duration > 0
+        ):
+            duration_ratio = abs(candidate_duration - strava_duration) / max(candidate_duration, strava_duration)
+            score += duration_ratio * 1200.0
+
+        ranked.append((score, candidate))
+
+    if not ranked:
+        return None
+
+    ranked.sort(key=lambda item: item[0])
+    best_candidate = dict(ranked[0][1])
+    activity_id = _as_int(best_candidate.get("activityId"))
+
+    get_activity_details = getattr(client, "get_activity_details", None)
+    if activity_id is not None and callable(get_activity_details):
+        try:
+            details = get_activity_details(activity_id)
+            if isinstance(details, dict):
+                best_candidate.update(details)
+        except Exception as exc:
+            logger.debug("Garmin activity detail lookup unavailable for %s: %s", activity_id, exc)
+
+    return build_garmin_activity_context(client, best_candidate)
+
+
 def _build_garmin_last_activity_context(
     last_activity: dict[str, Any],
     *,
@@ -520,19 +662,7 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         if isinstance(last_activity.get("avgGradeAdjustedSpeed"), (int, float))
         else "N/A"
     )
-    exercise_sets_payload: Any | None = None
-    activity_id = _as_int(last_activity.get("activityId"))
-    get_exercise_sets = getattr(client, "get_activity_exercise_sets", None)
-    if activity_id is not None and callable(get_exercise_sets):
-        try:
-            exercise_sets_payload = get_exercise_sets(activity_id)
-        except Exception as exc:
-            logger.debug("Garmin activity exercise sets unavailable: %s", exc)
-
-    metrics["garmin_last_activity"] = _build_garmin_last_activity_context(
-        last_activity,
-        exercise_sets_payload=exercise_sets_payload,
-    )
+    metrics["garmin_last_activity"] = build_garmin_activity_context(client, last_activity)
     metrics["garmin_segment_notables"] = _normalize_garmin_segment_notables(last_activity)
 
     try:

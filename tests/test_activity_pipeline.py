@@ -133,6 +133,34 @@ class TestStrengthProfileBehavior(unittest.TestCase):
         reasons = _profile_match_reasons("strength_training", activity, settings)
         self.assertIn("strength keyword + indoor no-gps shape", reasons)
 
+    def test_strength_profile_matches_from_aligned_garmin_strength_context(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 137,
+            "name": "Morning",
+        }
+        training = {
+            "_garmin_activity_aligned": True,
+            "garmin_last_activity": {
+                "activity_type": "strength_training",
+                "total_sets": 12,
+                "total_reps": 96,
+            },
+        }
+        reasons = _profile_match_reasons("strength_training", activity, settings, training=training)
+        self.assertIn("garmin activity indicates strength", reasons)
+
 
 class TestInclineTreadmillProfileBehavior(unittest.TestCase):
     def test_incline_treadmill_profile_matches_garmin_indoor_signals(self) -> None:
@@ -178,6 +206,35 @@ class TestInclineTreadmillProfileBehavior(unittest.TestCase):
             "name": "Afternoon Strength Training",
         }
         reasons = _profile_match_reasons("incline_treadmill", activity, settings)
+        self.assertEqual(reasons, [])
+
+    def test_incline_treadmill_profile_skips_when_aligned_garmin_strength_context(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 137,
+            "external_id": "garmin_ping_537343661503",
+            "device_name": "Garmin Forerunner 955",
+            "name": "Morning Session",
+        }
+        training = {
+            "_garmin_activity_aligned": True,
+            "garmin_last_activity": {
+                "activity_type": "strength_training",
+                "total_sets": 10,
+            },
+        }
+        reasons = _profile_match_reasons("incline_treadmill", activity, settings, training=training)
         self.assertEqual(reasons, [])
 
     def test_incline_treadmill_profile_update_payload_sets_walk_title_and_trainer(self) -> None:

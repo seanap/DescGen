@@ -303,9 +303,15 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("weather", winter)
         self.assertIn("misery", winter)
         self.assertIn("misery_index", winter["weather"])
+        strength = get_sample_template_context("strength_training")
+        self.assertIn("raw", strength)
+        self.assertIn("training", strength["raw"])
+        self.assertIn("garmin_last_activity", strength["raw"]["training"])
+        self.assertEqual(strength["raw"]["training"]["garmin_last_activity"].get("activity_type"), "strength_training")
         fixtures = list_sample_template_fixtures()
         self.assertGreaterEqual(len(fixtures), 2)
         self.assertTrue(any(item["name"] == "winter_grind" for item in fixtures))
+        self.assertTrue(any(item["name"] == "strength_training" for item in fixtures))
 
     def test_misery_index_display_object_renders_value_and_emoji(self) -> None:
         context = get_sample_template_context()
