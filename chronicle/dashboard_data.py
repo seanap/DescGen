@@ -7,7 +7,7 @@ import re
 import threading
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,12 +26,15 @@ from .strava_client import MAX_ACTIVITY_PAGES, StravaClient
 logger = logging.getLogger(__name__)
 
 DEFAULT_DASHBOARD_DATA_FILE = "dashboard_data.json"
+DEFAULT_INTERVALS_METRICS_FILE = "intervals_dashboard_metrics.json"
 DEFAULT_CACHE_MAX_AGE_SECONDS = 900
 DEFAULT_WEEK_START = "sunday"
 DEFAULT_UNITS = {"distance": "mi", "elevation": "ft"}
 DEFAULT_OTHER_BUCKET = "OtherSports"
 DEFAULT_HISTORY_START = datetime(1970, 1, 1, tzinfo=timezone.utc)
 DEFAULT_REFRESH_LOCK_TTL_SECONDS = 300
+DEFAULT_INTERVALS_INCREMENTAL_OVERLAP_HOURS = 48
+INTERVALS_CACHE_SCHEMA_VERSION = 1
 REFRESH_LOCK_NAME = "dashboard.refresh"
 
 TYPE_LABEL_OVERRIDES = {
@@ -187,6 +190,36 @@ def dashboard_data_path(settings: Settings) -> Path:
     return settings.state_dir / filename
 
 
+def intervals_metrics_cache_path(settings: Settings) -> Path:
+    filename = (
+        str(os.getenv("DASHBOARD_INTERVALS_METRICS_FILE", DEFAULT_INTERVALS_METRICS_FILE)).strip()
+        or DEFAULT_INTERVALS_METRICS_FILE
+    )
+    return settings.state_dir / filename
+
+
+def _intervals_incremental_overlap_hours() -> int:
+    raw = str(
+        os.getenv("DASHBOARD_INTERVALS_INCREMENTAL_OVERLAP_HOURS", DEFAULT_INTERVALS_INCREMENTAL_OVERLAP_HOURS)
+    ).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = DEFAULT_INTERVALS_INCREMENTAL_OVERLAP_HOURS
+    return max(1, min(336, value))
+
+
+def _as_utc_datetime(value: datetime | str | None, *, fallback: datetime) -> datetime:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    parsed = _parse_iso_datetime(value) if isinstance(value, str) else None
+    if parsed is not None:
+        return parsed
+    return fallback.astimezone(timezone.utc)
+
+
 def _is_payload_fresh(payload: dict[str, Any], *, max_age_seconds: int) -> bool:
     if max_age_seconds <= 0:
         return False
@@ -265,17 +298,175 @@ def _index_intervals_metrics(
             continue
         activity_id = str(record.get("strava_activity_id") or "").strip()
         minute_key = _iso_minute_key(record.get("start_date"))
-        if activity_id and activity_id not in by_id:
+        if activity_id:
             by_id[activity_id] = record
-        if minute_key and minute_key not in by_minute:
+        if minute_key:
             by_minute[minute_key] = record
     return by_id, by_minute
 
 
+def _sanitize_intervals_record(record: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(record, dict):
+        return None
+    activity_id_text = str(record.get("strava_activity_id") or "").strip()
+    minute_key = _iso_minute_key(record.get("start_date"))
+    start_date_raw = str(record.get("start_date") or "").strip()
+    pace = _as_optional_float(record.get("avg_pace_mps"))
+    efficiency = _as_optional_float(record.get("avg_efficiency_factor"))
+    fitness = _as_optional_float(record.get("avg_fitness"))
+    fatigue = _as_optional_float(record.get("avg_fatigue"))
+    moving_time_seconds = _as_optional_float(record.get("moving_time_seconds"))
+    if (
+        pace is None
+        and efficiency is None
+        and fitness is None
+        and fatigue is None
+    ):
+        return None
+    if not activity_id_text and not minute_key:
+        return None
+    sanitized: dict[str, Any] = {
+        "strava_activity_id": activity_id_text or None,
+        "start_date": start_date_raw or (minute_key or ""),
+    }
+    if pace is not None and pace > 0:
+        sanitized["avg_pace_mps"] = pace
+    if efficiency is not None and efficiency > 0:
+        sanitized["avg_efficiency_factor"] = efficiency
+    if fitness is not None:
+        sanitized["avg_fitness"] = fitness
+    if fatigue is not None:
+        sanitized["avg_fatigue"] = fatigue
+    if moving_time_seconds is not None and moving_time_seconds > 0:
+        sanitized["moving_time_seconds"] = moving_time_seconds
+    return sanitized
+
+
+def _intervals_record_cache_key(record: dict[str, Any]) -> str | None:
+    activity_id = str(record.get("strava_activity_id") or "").strip()
+    if activity_id:
+        return f"id:{activity_id}"
+    minute_key = _iso_minute_key(record.get("start_date"))
+    if minute_key:
+        return f"minute:{minute_key}"
+    return None
+
+
+def _merge_intervals_records(
+    base_records: list[dict[str, Any]],
+    incoming_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for record in [*base_records, *incoming_records]:
+        sanitized = _sanitize_intervals_record(record)
+        if sanitized is None:
+            continue
+        key = _intervals_record_cache_key(sanitized)
+        if not key:
+            continue
+        merged[key] = sanitized
+    return list(merged.values())
+
+
+def _load_intervals_cache_records(
+    cache_payload: dict[str, Any] | None,
+    *,
+    history_start: datetime,
+) -> tuple[list[dict[str, Any]], datetime | None]:
+    if not isinstance(cache_payload, dict):
+        return ([], None)
+    schema_version = int(cache_payload.get("schema_version") or 0)
+    cached_history_start = _as_utc_datetime(
+        cache_payload.get("history_start"),
+        fallback=history_start,
+    )
+    if schema_version != INTERVALS_CACHE_SCHEMA_VERSION or cached_history_start != history_start:
+        return ([], None)
+    raw_records = cache_payload.get("records")
+    records = raw_records if isinstance(raw_records, list) else []
+    latest_sync_at = _parse_iso_datetime(cache_payload.get("latest_sync_at"))
+    return (_merge_intervals_records([], records), latest_sync_at)
+
+
+def _persist_intervals_cache_records(
+    path: Path,
+    *,
+    history_start: datetime,
+    latest_sync_at: datetime,
+    last_fetch_oldest: datetime,
+    mode: str,
+    records: list[dict[str, Any]],
+) -> None:
+    payload = {
+        "schema_version": INTERVALS_CACHE_SCHEMA_VERSION,
+        "history_start": history_start.isoformat(),
+        "latest_sync_at": latest_sync_at.isoformat(),
+        "last_fetch_oldest": last_fetch_oldest.isoformat(),
+        "last_fetch_mode": mode,
+        "records": records,
+    }
+    write_json(path, payload)
+
+
+def _get_intervals_records_incremental(
+    settings: Settings,
+    *,
+    oldest: datetime | str | None,
+    newest: datetime | str | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    now_utc = datetime.now(timezone.utc)
+    newest_dt = _as_utc_datetime(newest, fallback=now_utc)
+    oldest_dt = _as_utc_datetime(oldest, fallback=DEFAULT_HISTORY_START)
+    if oldest_dt > newest_dt:
+        oldest_dt = newest_dt
+
+    cache_path = intervals_metrics_cache_path(settings)
+    cached_payload = read_json(cache_path)
+    cached_records, last_sync_at = _load_intervals_cache_records(cached_payload, history_start=oldest_dt)
+    mode = "incremental" if cached_records else "seed"
+
+    current_year_start = datetime(newest_dt.year, 1, 1, tzinfo=timezone.utc)
+    overlap = timedelta(hours=_intervals_incremental_overlap_hours())
+    if mode == "seed":
+        fetch_oldest = oldest_dt
+    else:
+        fetch_oldest = current_year_start
+        if last_sync_at is not None:
+            overlap_start = last_sync_at - overlap
+            if overlap_start > fetch_oldest:
+                fetch_oldest = overlap_start
+        if fetch_oldest < oldest_dt:
+            fetch_oldest = oldest_dt
+
+    incoming = get_intervals_dashboard_metrics(
+        settings.intervals_user_id,
+        settings.intervals_api_key,
+        oldest=fetch_oldest,
+        newest=newest_dt,
+    )
+    merged_records = _merge_intervals_records(cached_records, incoming)
+    _persist_intervals_cache_records(
+        cache_path,
+        history_start=oldest_dt,
+        latest_sync_at=newest_dt,
+        last_fetch_oldest=fetch_oldest,
+        mode=mode,
+        records=merged_records,
+    )
+    return (
+        merged_records,
+        {
+            "mode": mode,
+            "fetched_records": int(len(incoming)),
+            "cached_records": int(len(merged_records)),
+            "fetch_oldest": fetch_oldest.isoformat(),
+            "latest_sync_at": newest_dt.isoformat(),
+        },
+    )
+
+
 def _new_intervals_rollup() -> dict[str, float]:
     return {
-        "_pace_weighted_sum": 0.0,
-        "_pace_weight_seconds": 0.0,
         "_eff_weighted_sum": 0.0,
         "_eff_weight_seconds": 0.0,
         "_fitness_sum": 0.0,
@@ -288,15 +479,11 @@ def _new_intervals_rollup() -> dict[str, float]:
 def _accumulate_intervals_rollup(
     rollup: dict[str, Any],
     *,
-    pace_mps: float | None,
     efficiency: float | None,
     fitness: float | None,
     fatigue: float | None,
     weight_seconds: float,
 ) -> None:
-    if pace_mps is not None and pace_mps > 0 and weight_seconds > 0:
-        rollup["_pace_weighted_sum"] += pace_mps * weight_seconds
-        rollup["_pace_weight_seconds"] += weight_seconds
     if efficiency is not None and efficiency > 0 and weight_seconds > 0:
         rollup["_eff_weighted_sum"] += efficiency * weight_seconds
         rollup["_eff_weight_seconds"] += weight_seconds
@@ -309,9 +496,6 @@ def _accumulate_intervals_rollup(
 
 
 def _finalize_intervals_rollup(rollup: dict[str, Any]) -> None:
-    pace_weight = _as_optional_float(rollup.get("_pace_weight_seconds")) or 0.0
-    if pace_weight > 0:
-        rollup["avg_pace_mps"] = (float(rollup.get("_pace_weighted_sum") or 0.0) / pace_weight)
     eff_weight = _as_optional_float(rollup.get("_eff_weight_seconds")) or 0.0
     if eff_weight > 0:
         rollup["avg_efficiency_factor"] = (float(rollup.get("_eff_weighted_sum") or 0.0) / eff_weight)
@@ -323,8 +507,6 @@ def _finalize_intervals_rollup(rollup: dict[str, Any]) -> None:
         rollup["avg_fatigue"] = float(rollup.get("_fatigue_sum") or 0.0) / fatigue_count
 
     for key in (
-        "_pace_weighted_sum",
-        "_pace_weight_seconds",
         "_eff_weighted_sum",
         "_eff_weight_seconds",
         "_fitness_sum",
@@ -409,6 +591,7 @@ def build_dashboard_payload(
     )
 
     intervals_records: list[dict[str, Any]] = []
+    intervals_sync: dict[str, Any] = {}
     intervals_matches = 0
     if (
         settings.enable_intervals
@@ -417,9 +600,8 @@ def build_dashboard_payload(
         and isinstance(settings.intervals_api_key, str)
         and settings.intervals_api_key.strip()
     ):
-        intervals_records = get_intervals_dashboard_metrics(
-            settings.intervals_user_id,
-            settings.intervals_api_key,
+        intervals_records, intervals_sync = _get_intervals_records_incremental(
+            settings,
             oldest=after_dt,
             newest=datetime.now(timezone.utc),
         )
@@ -431,21 +613,17 @@ def build_dashboard_payload(
             )
             if not isinstance(matched, dict):
                 continue
-            pace_mps = _as_optional_float(matched.get("avg_pace_mps"))
             efficiency = _as_optional_float(matched.get("avg_efficiency_factor"))
             fitness = _as_optional_float(matched.get("avg_fitness"))
             fatigue = _as_optional_float(matched.get("avg_fatigue"))
             moving_time_seconds = _as_optional_float(matched.get("moving_time_seconds"))
             if (
-                pace_mps is None
-                and efficiency is None
+                efficiency is None
                 and fitness is None
                 and fatigue is None
             ):
                 continue
             intervals_matches += 1
-            if pace_mps is not None and pace_mps > 0:
-                activity["avg_pace_mps"] = pace_mps
             if efficiency is not None and efficiency > 0:
                 activity["avg_efficiency_factor"] = efficiency
             if fitness is not None:
@@ -496,7 +674,6 @@ def build_dashboard_payload(
         )
         _accumulate_intervals_rollup(
             entry,
-            pace_mps=_as_optional_float(activity.get("avg_pace_mps")),
             efficiency=_as_optional_float(activity.get("avg_efficiency_factor")),
             fitness=_as_optional_float(activity.get("avg_fitness")),
             fatigue=_as_optional_float(activity.get("avg_fatigue")),
@@ -504,7 +681,6 @@ def build_dashboard_payload(
         )
         _accumulate_intervals_rollup(
             type_intervals_totals,
-            pace_mps=_as_optional_float(activity.get("avg_pace_mps")),
             efficiency=_as_optional_float(activity.get("avg_efficiency_factor")),
             fitness=_as_optional_float(activity.get("avg_fitness")),
             fatigue=_as_optional_float(activity.get("avg_fatigue")),
@@ -515,6 +691,10 @@ def build_dashboard_payload(
         for type_bucket in year_bucket.values():
             for entry in type_bucket.values():
                 entry["activity_ids"] = sorted(set(entry["activity_ids"]))
+                moving_time_total = float(entry.get("moving_time") or 0.0)
+                distance_total = float(entry.get("distance") or 0.0)
+                if moving_time_total > 0 and distance_total > 0:
+                    entry["avg_pace_mps"] = distance_total / moving_time_total
                 _finalize_intervals_rollup(entry)
 
     for year_bucket in intervals_year_type_metrics.values():
@@ -591,6 +771,19 @@ def build_dashboard_payload(
         "enabled": bool(settings.enable_intervals),
         "records": int(len(intervals_records)),
         "matched_activities": int(intervals_matches),
+        **({"sync_mode": intervals_sync.get("mode")} if intervals_sync.get("mode") else {}),
+        **(
+            {"fetched_records": int(intervals_sync.get("fetched_records") or 0)}
+            if "fetched_records" in intervals_sync
+            else {}
+        ),
+        **(
+            {"cached_records": int(intervals_sync.get("cached_records") or 0)}
+            if "cached_records" in intervals_sync
+            else {}
+        ),
+        **({"fetch_oldest": intervals_sync.get("fetch_oldest")} if intervals_sync.get("fetch_oldest") else {}),
+        **({"latest_sync_at": intervals_sync.get("latest_sync_at")} if intervals_sync.get("latest_sync_at") else {}),
     }
     payload["intervals_year_type_metrics"] = intervals_year_type_metrics
 
