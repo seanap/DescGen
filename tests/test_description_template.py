@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from chronicle.description_template import (
+    PROFILE_TEMPLATE_DEFAULTS,
     build_context_schema,
     create_template_repository_template,
     duplicate_template_repository_template,
@@ -312,6 +313,20 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertGreaterEqual(len(fixtures), 2)
         self.assertTrue(any(item["name"] == "winter_grind" for item in fixtures))
         self.assertTrue(any(item["name"] == "strength_training" for item in fixtures))
+
+    def test_strength_template_renders_clean_weight_and_labels(self) -> None:
+        context = get_sample_template_context("strength_training")
+        context["raw"]["training"]["garmin_last_activity"]["exercise_sets"][0]["weight"] = "Bodyweight"
+        context["raw"]["training"]["garmin_last_activity"]["exercise_sets"][0]["weight_display"] = "Bodyweight"
+        context["raw"]["training"]["garmin_last_activity"]["exercise_sets"][0]["weight_value"] = 0.0
+        context["raw"]["training"]["garmin_last_activity"]["strength_summary_sets"][0]["sub_category"] = "N/A"
+        context["raw"]["training"]["garmin_last_activity"]["strength_summary_sets"][0]["category"] = "PUSH_UP"
+        template = PROFILE_TEMPLATE_DEFAULTS["strength_training"]
+        result = render_template_text(template, context)
+        self.assertTrue(result["ok"])
+        rendered = str(result["description"])
+        self.assertIn("weight Bodyweight", rendered)
+        self.assertNotIn("N/a (", rendered)
 
     def test_misery_index_display_object_renders_value_and_emoji(self) -> None:
         context = get_sample_template_context()

@@ -1,6 +1,7 @@
 import unittest
 
 from chronicle.stat_modules.garmin_metrics import (
+    build_garmin_activity_context,
     fetch_training_status_and_scores,
     get_activity_context_for_strava_activity,
 )
@@ -240,6 +241,30 @@ class _DummyGarminClient:
         }
 
 
+class _ExerciseSetEdgeClient:
+    def get_activity_exercise_sets(self, _activity_id):
+        return {
+            "exerciseSets": [
+                {
+                    "setType": "ACTIVE",
+                    "repetitionCount": 20,
+                    "weight": 0.0,
+                    "duration": 53.096,
+                    "exercises": [
+                        {"category": "PUSH_UP", "name": None},
+                    ],
+                },
+                {
+                    "setType": "REST",
+                    "repetitionCount": None,
+                    "weight": -1.0,
+                    "duration": 23.207,
+                    "exercises": [],
+                },
+            ]
+        }
+
+
 class TestVo2MaxExpandedMetrics(unittest.TestCase):
     def test_fetch_training_status_returns_expanded_fields(self) -> None:
         metrics = fetch_training_status_and_scores(_DummyGarminClient())
@@ -288,6 +313,35 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         self.assertEqual(context["activity_type"], "strength_training")
         self.assertEqual(context["total_sets"], 18)
         self.assertEqual(context["total_reps"], 142)
+
+    def test_strength_set_normalization_handles_bodyweight_and_negative_sentinel(self) -> None:
+        context = build_garmin_activity_context(
+            _ExerciseSetEdgeClient(),
+            {
+                "activityId": 919191,
+                "activityType": {"typeKey": "strength_training"},
+                "summarizedExerciseSets": [
+                    {
+                        "category": "PUSH_UP",
+                        "subCategory": None,
+                        "reps": 20,
+                        "sets": 1,
+                        "maxWeight": 0,
+                        "duration": 53096,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(context["strength_summary_sets"][0]["sub_category"], "PUSH_UP")
+        active_set = context["exercise_sets"][0]
+        self.assertEqual(active_set["weight"], "Bodyweight")
+        self.assertEqual(active_set["weight_value"], 0.0)
+        self.assertEqual(active_set["weight_display"], "Bodyweight")
+        self.assertEqual(active_set["exercise_names"], ["PUSH_UP"])
+        rest_set = context["exercise_sets"][1]
+        self.assertEqual(rest_set["weight"], "N/A")
+        self.assertEqual(rest_set["weight_value"], "N/A")
+        self.assertEqual(rest_set["weight_display"], "N/A")
 
 
 if __name__ == "__main__":

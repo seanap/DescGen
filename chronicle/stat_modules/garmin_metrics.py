@@ -222,6 +222,14 @@ def _normalize_garmin_badges(payload: Any, max_items: int = 20) -> list[str]:
 
 
 def _normalize_strength_summary_sets(payload: Any) -> list[dict[str, Any]]:
+    def _clean_label(value: Any) -> str | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.lower() in {"n/a", "na", "none", "null", "unknown"}:
+            return None
+        return text
+
     if not isinstance(payload, list):
         return []
     rows: list[dict[str, Any]] = []
@@ -232,10 +240,16 @@ def _normalize_strength_summary_sets(payload: Any) -> list[dict[str, Any]]:
         reps = _as_int(item.get("reps"))
         max_weight = _as_float(item.get("maxWeight"))
         duration_ms = _as_float(item.get("duration"))
+        category = _clean_label(item.get("category"))
+        sub_category = _clean_label(item.get("subCategory"))
+        if sub_category is None and category is not None:
+            sub_category = category
+        if category is None and sub_category is not None:
+            category = sub_category
         rows.append(
             {
-                "category": str(item.get("category") or "N/A"),
-                "sub_category": str(item.get("subCategory") or "N/A"),
+                "category": category or "N/A",
+                "sub_category": sub_category or "N/A",
                 "sets": sets if sets is not None else "N/A",
                 "reps": reps if reps is not None else "N/A",
                 "max_weight": round(max_weight, 2) if max_weight is not None else "N/A",
@@ -248,6 +262,23 @@ def _normalize_strength_summary_sets(payload: Any) -> list[dict[str, Any]]:
 
 
 def _normalize_exercise_sets(payload: Any) -> list[dict[str, Any]]:
+    def _clean_label(value: Any) -> str | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.lower() in {"n/a", "na", "none", "null", "unknown"}:
+            return None
+        return text
+
+    def _weight_display(weight_value: float | None, set_type: str) -> str:
+        if weight_value is None:
+            return "N/A"
+        if set_type == "ACTIVE" and abs(weight_value) < 1e-9:
+            return "Bodyweight"
+        if float(weight_value).is_integer():
+            return str(int(round(weight_value)))
+        return f"{weight_value:.2f}".rstrip("0").rstrip(".")
+
     if not isinstance(payload, dict):
         return []
     rows = payload.get("exerciseSets")
@@ -258,8 +289,14 @@ def _normalize_exercise_sets(payload: Any) -> list[dict[str, Any]]:
     for item in rows:
         if not isinstance(item, dict):
             continue
+        set_type = str(item.get("setType") or "UNKNOWN").strip().upper()
         repetition_count = _as_int(item.get("repetitionCount"))
-        weight = _as_float(item.get("weight"))
+        raw_weight = _as_float(item.get("weight"))
+        weight: float | None
+        if raw_weight is None or raw_weight < 0:
+            weight = None
+        else:
+            weight = round(raw_weight, 2)
         duration_seconds = _as_float(item.get("duration"))
         exercise_names: list[str] = []
         exercises = item.get("exercises")
@@ -267,16 +304,20 @@ def _normalize_exercise_sets(payload: Any) -> list[dict[str, Any]]:
             for exercise in exercises:
                 if not isinstance(exercise, dict):
                     continue
-                name = str(exercise.get("name") or "").strip()
+                name = _clean_label(exercise.get("name")) or _clean_label(exercise.get("category"))
                 if not name or name in exercise_names:
                     continue
                 exercise_names.append(name)
 
         normalized.append(
             {
-                "set_type": str(item.get("setType") or "UNKNOWN").strip().upper(),
+                "set_type": set_type,
                 "reps": repetition_count if repetition_count is not None else "N/A",
-                "weight": round(weight, 2) if weight is not None else "N/A",
+                "weight": _weight_display(weight, set_type)
+                if (weight is None or (set_type == "ACTIVE" and abs(weight) < 1e-9))
+                else weight,
+                "weight_value": weight if weight is not None else "N/A",
+                "weight_display": _weight_display(weight, set_type),
                 "duration_seconds": int(round(duration_seconds))
                 if duration_seconds is not None and duration_seconds >= 0
                 else "N/A",

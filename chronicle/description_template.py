@@ -994,7 +994,15 @@ Rep Weight (max): {{ garmin.max_weight | default(raw.activity.rep_weight | defau
 {% if summary_sets %}
 📊 Exercise Summary
 {% for row in summary_sets -%}
-• {{ row.sub_category | default('Unknown') | replace('_', ' ') | title }} ({{ row.category | default('N/A') | replace('_', ' ') | title }}) - {{ row.sets | default('N/A') }} set(s), {{ row.reps | default('N/A') }} rep(s), max {{ row.max_weight | default('N/A') }}{% if row.duration_seconds is defined and row.duration_seconds != 'N/A' %}, {{ row.duration_seconds }}s{% endif %}
+{% set summary_name = row.sub_category | default('') %}
+{% set summary_group = row.category | default('') %}
+{% if not summary_name or (summary_name | lower) in ['n/a', 'na', 'none', 'unknown', 'null'] %}
+{% set summary_name = summary_group %}
+{% endif %}
+{% if not summary_name or (summary_name | lower) in ['n/a', 'na', 'none', 'unknown', 'null'] %}
+{% set summary_name = 'Unknown' %}
+{% endif %}
+• {{ summary_name | replace('_', ' ') | title }}{% if summary_group and (summary_group | lower) != (summary_name | lower) and (summary_group | lower) not in ['n/a', 'na', 'none', 'unknown', 'null'] %} ({{ summary_group | replace('_', ' ') | title }}){% endif %} - {{ row.sets | default('N/A') }} set(s), {{ row.reps | default('N/A') }} rep(s), max {{ row.max_weight | default('N/A') }}{% if row.duration_seconds is defined and row.duration_seconds != 'N/A' %}, {{ row.duration_seconds }}s{% endif %}
 {% endfor %}
 {% endif %}
 
@@ -1002,7 +1010,7 @@ Rep Weight (max): {{ garmin.max_weight | default(raw.activity.rep_weight | defau
 {% if exercise_sets %}
 📋 Set By Set
 {% for row in exercise_sets -%}
-• {{ loop.index }}. {{ row.set_type | default('N/A') }}{% if row.exercise_names %} - {{ row.exercise_names | join(', ') | replace('_', ' ') | title }}{% endif %} | reps {{ row.reps | default('N/A') }} | weight {{ row.weight | default('N/A') }} | {{ row.duration_seconds | default('N/A') }}s
+• {{ loop.index }}. {{ row.set_type | default('N/A') }}{% if row.exercise_names %} - {{ row.exercise_names | join(', ') | replace('_', ' ') | title }}{% endif %} | reps {{ row.reps | default('N/A') }} | weight {{ row.weight_display | default(row.weight | default('N/A')) }} | {{ row.duration_seconds | default('N/A') }}s
 {% endfor %}
 {% endif %}""",
     "trail": """🌲 Trail Run
