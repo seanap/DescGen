@@ -181,6 +181,10 @@ def _extract_strava_activity_id(activity: dict[str, Any]) -> str | None:
         activity.get("stravaActivityId"),
         activity.get("strava_id"),
         activity.get("stravaId"),
+        activity.get("source_id"),
+        activity.get("sourceId"),
+        activity.get("external_id"),
+        activity.get("externalId"),
     )
     for candidate in direct_candidates:
         text = str(candidate or "").strip()
@@ -205,14 +209,31 @@ def _extract_strava_activity_id(activity: dict[str, Any]) -> str | None:
         text = str(activity.get(key) or "").strip()
         if not text:
             continue
+        if key != "id" and text.isdigit():
+            return text
         match = re.search(r"(?:strava[^0-9]*)([0-9]{5,})", text, flags=re.IGNORECASE)
         if match:
             return match.group(1)
+        if key != "id":
+            digit_match = re.search(r"\b([0-9]{5,})\b", text)
+            if digit_match:
+                return digit_match.group(1)
     return None
 
 
 def _extract_start_date(activity: dict[str, Any]) -> str | None:
-    for key in ("start_date", "startDate", "start_date_local", "startDateLocal", "start_time", "startTime"):
+    for key in (
+        "start_date",
+        "startDate",
+        "start_date_local",
+        "startDateLocal",
+        "start_time",
+        "startTime",
+        "start_time_local",
+        "startTimeLocal",
+        "start_datetime",
+        "startDateTime",
+    ):
         raw = activity.get(key)
         text = str(raw or "").strip()
         if text:
@@ -252,9 +273,25 @@ def get_intervals_dashboard_metrics(
         if not isinstance(activity, dict):
             continue
 
-        moving_time = _first_numeric(activity.get("moving_time"), activity.get("movingTime"))
-        distance = _first_numeric(activity.get("distance"), activity.get("distance_m"))
-        avg_speed = _first_numeric(activity.get("average_speed"), activity.get("averageSpeed"))
+        moving_time = _first_numeric(
+            activity.get("moving_time"),
+            activity.get("movingTime"),
+            activity.get("elapsed_time"),
+            activity.get("elapsedTime"),
+        )
+        distance = _first_numeric(
+            activity.get("distance"),
+            activity.get("distance_m"),
+            activity.get("distanceM"),
+            activity.get("distanceMeters"),
+        )
+        avg_speed = _first_numeric(
+            activity.get("average_speed"),
+            activity.get("averageSpeed"),
+            activity.get("avg_speed"),
+            activity.get("avgSpeed"),
+            activity.get("speed"),
+        )
         pace_mps = avg_speed
         if (pace_mps is None or pace_mps <= 0) and distance and moving_time and moving_time > 0:
             pace_mps = distance / moving_time
@@ -263,18 +300,25 @@ def get_intervals_dashboard_metrics(
 
         efficiency = _first_numeric(
             activity.get("icu_efficiency_factor"),
+            activity.get("icuEfficiencyFactor"),
             activity.get("efficiency_factor"),
             activity.get("efficiencyFactor"),
             activity.get("efficiency"),
         )
         fitness = _first_numeric(
             activity.get("icu_ctl"),
+            activity.get("icuCtl"),
             activity.get("ctl"),
+            activity.get("fitness_score"),
+            activity.get("fitnessScore"),
             activity.get("fitness"),
         )
         fatigue = _first_numeric(
             activity.get("icu_atl"),
+            activity.get("icuAtl"),
             activity.get("atl"),
+            activity.get("fatigue_score"),
+            activity.get("fatigueScore"),
             activity.get("fatigue"),
         )
 

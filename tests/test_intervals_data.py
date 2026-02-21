@@ -190,6 +190,40 @@ class TestIntervalsData(unittest.TestCase):
         self.assertEqual(records[0]["avg_efficiency_factor"], 1.11)
 
     @patch("chronicle.stat_modules.intervals_data.requests.get")
+    def test_dashboard_metrics_supports_numeric_source_id_and_alt_metric_keys(self, mock_get) -> None:
+        mock_get.return_value = _response_with_json(
+            [
+                {
+                    "source_id": 19998887777,
+                    "startDateTime": "2026-02-23T12:08:00Z",
+                    "distanceM": 10000.0,
+                    "elapsedTime": 2000.0,
+                    "avgSpeed": 5.0,
+                    "icuEfficiencyFactor": 1.19,
+                    "icuCtl": 69.0,
+                    "icuAtl": 73.0,
+                }
+            ]
+        )
+
+        records = get_intervals_dashboard_metrics(
+            "athlete",
+            "apikey",
+            oldest="2026-01-01T00:00:00Z",
+            newest="2026-12-31T23:59:59Z",
+        )
+
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["strava_activity_id"], "19998887777")
+        self.assertEqual(record["start_date"], "2026-02-23T12:08:00Z")
+        self.assertEqual(record["avg_pace_mps"], 5.0)
+        self.assertEqual(record["avg_efficiency_factor"], 1.19)
+        self.assertEqual(record["avg_fitness"], 69.0)
+        self.assertEqual(record["avg_fatigue"], 73.0)
+        self.assertEqual(record["moving_time_seconds"], 2000.0)
+
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
     def test_dashboard_metrics_handles_request_failure(self, mock_get) -> None:
         mock_get.side_effect = requests.RequestException("boom")
         records = get_intervals_dashboard_metrics(

@@ -2309,18 +2309,13 @@ function formatEfficiency(value) {
 function buildYearMetricStatItems(totals, units, activeMetricKey) {
   const hasFitness = totals.avg_fitness > 0;
   const hasFatigue = totals.avg_fatigue > 0;
-  const fitFatHasData = hasFitness || hasFatigue;
-  const fitFatState = activeMetricKey === FATIGUE_METRIC_KEY && hasFatigue
+  const fitFatState = activeMetricKey === FATIGUE_METRIC_KEY
     ? FATIGUE_METRIC_KEY
-    : (hasFitness ? FITNESS_METRIC_KEY : (hasFatigue ? FATIGUE_METRIC_KEY : FITNESS_METRIC_KEY));
+    : FITNESS_METRIC_KEY;
+  const fitFatHasData = fitFatState === FATIGUE_METRIC_KEY ? hasFatigue : hasFitness;
   const fitFatValue = fitFatState === FATIGUE_METRIC_KEY ? totals.avg_fatigue : totals.avg_fitness;
-  const fitFatDisplay = fitFatHasData
-    ? (
-      fitFatState === FATIGUE_METRIC_KEY
-        ? `Fatigue ${formatNumber(fitFatValue, 0)}`
-        : `Fitness ${formatNumber(fitFatValue, 0)}`
-    )
-    : STAT_PLACEHOLDER;
+  const fitFatDisplay = fitFatHasData ? formatNumber(fitFatValue, 0) : STAT_PLACEHOLDER;
+  const fitFatLabel = fitFatState === FATIGUE_METRIC_KEY ? "Avg. Fatigue" : "Avg. Fitness";
   return [
     {
       key: "moving_time",
@@ -2346,23 +2341,23 @@ function buildYearMetricStatItems(totals, units, activeMetricKey) {
     },
     {
       key: FIT_FAT_CYCLE_KEY,
-      label: "Fit/Fat",
+      label: fitFatLabel,
       value: fitFatDisplay,
-      filterable: fitFatHasData,
+      filterable: true,
       filterableMetricKeys: [FITNESS_METRIC_KEY, FATIGUE_METRIC_KEY],
       isActive: (metricKey) => metricKey === FITNESS_METRIC_KEY || metricKey === FATIGUE_METRIC_KEY,
     },
     {
       key: PACE_METRIC_KEY,
-      label: "Pace",
+      label: "Avg. Pace",
       value: formatPaceFromMps(totals.avg_pace_mps, units || { distance: "mi" }),
-      filterable: totals.avg_pace_mps > 0,
+      filterable: true,
     },
     {
       key: EFFICIENCY_METRIC_KEY,
-      label: "Efficiency",
+      label: "Avg Efficency",
       value: formatEfficiency(totals.avg_efficiency_factor),
-      filterable: totals.avg_efficiency_factor > 0,
+      filterable: true,
     },
   ];
 }
@@ -2377,10 +2372,10 @@ const METRIC_LABEL_BY_KEY = Object.freeze({
   distance: "Distance",
   moving_time: "Time",
   elevation_gain: "Elevation",
-  [PACE_METRIC_KEY]: "Pace",
-  [EFFICIENCY_METRIC_KEY]: "Efficiency",
-  [FITNESS_METRIC_KEY]: "Fitness",
-  [FATIGUE_METRIC_KEY]: "Fatigue",
+  [PACE_METRIC_KEY]: "Avg. Pace",
+  [EFFICIENCY_METRIC_KEY]: "Avg Efficency",
+  [FITNESS_METRIC_KEY]: "Avg. Fitness",
+  [FATIGUE_METRIC_KEY]: "Avg. Fatigue",
 });
 
 const FREQUENCY_METRIC_UNAVAILABLE_REASON_BY_KEY = {
@@ -3022,7 +3017,7 @@ function buildHeatmapArea(aggregates, year, units, colors, type, layout, options
     : metricHeatmapKey
     ? Number(options.metricMaxByKey?.[metricHeatmapKey] || 0)
     : 0;
-  const metricHeatmapActive = Boolean(metricHeatmapKey) && metricHeatmapMax > 0;
+  const metricHeatmapActive = Boolean(metricHeatmapKey);
   const metricHeatmapColor = options.metricHeatmapColor || colors[4];
   const metricHeatmapEmptyColor = options.metricHeatmapEmptyColor || DEFAULT_COLORS[0];
 
@@ -3345,6 +3340,12 @@ function renderSingleSelectButtonState(items, buttonMap, activeKey) {
         valueNode.textContent = item.value;
       }
     }
+    if (typeof item.label === "string") {
+      const labelNode = button.querySelector(".card-stat-label");
+      if (labelNode) {
+        labelNode.textContent = item.label;
+      }
+    }
   });
 }
 
@@ -3555,14 +3556,12 @@ function buildCard(type, year, aggregates, units, options = {}) {
         metricButtons.set(item.key, statCard);
         if (item.key === FIT_FAT_CYCLE_KEY) {
           statCard.addEventListener("click", () => {
-            const hasFitness = totals.avg_fitness > 0;
-            const hasFatigue = totals.avg_fatigue > 0;
             if (activeMetricKey === FITNESS_METRIC_KEY) {
-              activeMetricKey = hasFatigue ? FATIGUE_METRIC_KEY : null;
+              activeMetricKey = FATIGUE_METRIC_KEY;
             } else if (activeMetricKey === FATIGUE_METRIC_KEY) {
               activeMetricKey = null;
             } else {
-              activeMetricKey = hasFitness ? FITNESS_METRIC_KEY : (hasFatigue ? FATIGUE_METRIC_KEY : null);
+              activeMetricKey = FITNESS_METRIC_KEY;
             }
             renderMetricButtonState();
             renderHeatmap();
