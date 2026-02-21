@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -151,6 +152,152 @@ def _first_numeric(*values: Any) -> float | None:
         if parsed is not None:
             return parsed
     return None
+
+
+def _iso_window_value(value: datetime | str | None, *, fallback: datetime) -> str:
+    if isinstance(value, datetime):
+        parsed = value.astimezone(timezone.utc)
+        return parsed.strftime("%Y-%m-%dT%H:%M:%S")
+    text = str(value or "").strip()
+    if not text:
+        return fallback.strftime("%Y-%m-%dT%H:%M:%S")
+    parsed = None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        parsed = None
+    if parsed is None:
+        return fallback.strftime("%Y-%m-%dT%H:%M:%S")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _extract_strava_activity_id(activity: dict[str, Any]) -> str | None:
+    direct_candidates = (
+        activity.get("strava_activity_id"),
+        activity.get("stravaActivityId"),
+        activity.get("strava_id"),
+        activity.get("stravaId"),
+    )
+    for candidate in direct_candidates:
+        text = str(candidate or "").strip()
+        if text and text.isdigit():
+            return text
+
+    nested = activity.get("source")
+    if isinstance(nested, dict):
+        source_candidates = (
+            nested.get("activity_id"),
+            nested.get("activityId"),
+            nested.get("strava_activity_id"),
+            nested.get("stravaActivityId"),
+            nested.get("id"),
+        )
+        for candidate in source_candidates:
+            text = str(candidate or "").strip()
+            if text and text.isdigit():
+                return text
+
+    for key in ("source_id", "sourceId", "external_id", "externalId", "id"):
+        text = str(activity.get(key) or "").strip()
+        if not text:
+            continue
+        match = re.search(r"(?:strava[^0-9]*)([0-9]{5,})", text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_start_date(activity: dict[str, Any]) -> str | None:
+    for key in ("start_date", "startDate", "start_date_local", "startDateLocal", "start_time", "startTime"):
+        raw = activity.get(key)
+        text = str(raw or "").strip()
+        if text:
+            return text
+    return None
+
+
+def get_intervals_dashboard_metrics(
+    user_id: str | None,
+    api_key: str | None,
+    *,
+    oldest: datetime | str | None,
+    newest: datetime | str | None,
+) -> list[dict[str, Any]]:
+    if not user_id or not api_key:
+        return []
+
+    now = datetime.now(timezone.utc)
+    oldest_text = _iso_window_value(oldest, fallback=now - timedelta(days=365))
+    newest_text = _iso_window_value(newest, fallback=now)
+    auth = ("API_KEY", api_key)
+    list_url = (
+        f"https://intervals.icu/api/v1/athlete/{user_id}/activities"
+        f"?oldest={oldest_text}&newest={newest_text}"
+    )
+
+    try:
+        response = requests.get(list_url, auth=auth, timeout=TIMEOUT_SECONDS)
+        response.raise_for_status()
+        activities = _normalize_activities_payload(response.json())
+    except requests.RequestException as exc:
+        logger.warning("Intervals.icu dashboard request failed: %s", exc)
+        return []
+
+    records: list[dict[str, Any]] = []
+    for activity in activities:
+        if not isinstance(activity, dict):
+            continue
+
+        moving_time = _first_numeric(activity.get("moving_time"), activity.get("movingTime"))
+        distance = _first_numeric(activity.get("distance"), activity.get("distance_m"))
+        avg_speed = _first_numeric(activity.get("average_speed"), activity.get("averageSpeed"))
+        pace_mps = avg_speed
+        if (pace_mps is None or pace_mps <= 0) and distance and moving_time and moving_time > 0:
+            pace_mps = distance / moving_time
+        if pace_mps is not None and pace_mps <= 0:
+            pace_mps = None
+
+        efficiency = _first_numeric(
+            activity.get("icu_efficiency_factor"),
+            activity.get("efficiency_factor"),
+            activity.get("efficiencyFactor"),
+            activity.get("efficiency"),
+        )
+        fitness = _first_numeric(
+            activity.get("icu_ctl"),
+            activity.get("ctl"),
+            activity.get("fitness"),
+        )
+        fatigue = _first_numeric(
+            activity.get("icu_atl"),
+            activity.get("atl"),
+            activity.get("fatigue"),
+        )
+
+        if (
+            pace_mps is None
+            and efficiency is None
+            and fitness is None
+            and fatigue is None
+        ):
+            continue
+
+        record: dict[str, Any] = {
+            "strava_activity_id": _extract_strava_activity_id(activity),
+            "start_date": _extract_start_date(activity),
+            "avg_pace_mps": pace_mps,
+            "avg_efficiency_factor": efficiency,
+            "avg_fitness": fitness,
+            "avg_fatigue": fatigue,
+            "moving_time_seconds": moving_time if moving_time and moving_time > 0 else None,
+        }
+        records.append(record)
+
+    return records
 
 
 def get_intervals_activity_data(

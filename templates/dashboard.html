@@ -55,7 +55,7 @@
         --label-gap: var(--space-2);
         --label-gap-rotated: 10px;
         --stats-column-gap: var(--space-5);
-        --side-stat-gap: var(--space-3);
+        --side-stat-gap: var(--space-2);
         --stack-overflow-tolerance-desktop: 24px;
         --frequency-graph-gap-base: clamp(10px, 1.4vw, 14px);
         --labeled-card-padding-top: 12px;
@@ -64,7 +64,7 @@
         --summary-card-max-width: 212px;
         --summary-grid-gap: 15px;
         --summary-desktop-columns: 5;
-        --side-stat-card-width-min: 124px;
+        --side-stat-card-width-min: 108px;
         --dashboard-content-rail-width: calc(
           (var(--summary-desktop-columns) * var(--summary-card-max-width)) +
           ((var(--summary-desktop-columns) - 1) * var(--summary-grid-gap))
@@ -699,6 +699,11 @@
 
       .year-card .card-stats.side-stats-column {
         justify-content: start;
+        --side-stat-pad-block: var(--space-2);
+        --side-stat-pad-inline: var(--space-3);
+        --side-stat-label-size: 9px;
+        --side-stat-value-size: 12px;
+        --side-stat-gap: var(--space-2);
       }
 
       .year-card .heatmap-area {
@@ -1994,7 +1999,7 @@
           --year-grid-pad-right: var(--space-7);
           --side-stat-label-size: clamp(8px, 2vw, 9px);
           --side-stat-value-size: clamp(10px, 2.8vw, 12px);
-          --side-stat-card-width-min: 112px;
+          --side-stat-card-width-min: 96px;
           --side-stat-pad-inline: var(--space-2);
         }
         .labeled-card-title {

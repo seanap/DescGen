@@ -1,7 +1,12 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from chronicle.stat_modules.intervals_data import get_intervals_activity_data
+import requests
+
+from chronicle.stat_modules.intervals_data import (
+    get_intervals_activity_data,
+    get_intervals_dashboard_metrics,
+)
 
 
 def _response_with_json(payload):
@@ -122,6 +127,78 @@ class TestIntervalsData(unittest.TestCase):
         self.assertEqual(result["elevation_gain_feet"], 625)
         self.assertEqual(result["average_temp_f"], "63.2F")
         self.assertIn("Z1", result["zone_summary"])
+
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
+    def test_dashboard_metrics_extracts_strava_match_and_fields(self, mock_get) -> None:
+        mock_get.return_value = _response_with_json(
+            [
+                {
+                    "strava_activity_id": 17455368360,
+                    "start_date": "2026-02-21T10:05:00Z",
+                    "average_speed": 3.2,
+                    "moving_time": 3600,
+                    "icu_efficiency_factor": 1.23,
+                    "icu_ctl": 71.0,
+                    "icu_atl": 76.0,
+                }
+            ]
+        )
+
+        records = get_intervals_dashboard_metrics(
+            "athlete",
+            "apikey",
+            oldest="2026-01-01T00:00:00Z",
+            newest="2026-12-31T23:59:59Z",
+        )
+
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record["strava_activity_id"], "17455368360")
+        self.assertEqual(record["start_date"], "2026-02-21T10:05:00Z")
+        self.assertEqual(record["avg_pace_mps"], 3.2)
+        self.assertEqual(record["avg_efficiency_factor"], 1.23)
+        self.assertEqual(record["avg_fitness"], 71.0)
+        self.assertEqual(record["avg_fatigue"], 76.0)
+        self.assertEqual(record["moving_time_seconds"], 3600.0)
+
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
+    def test_dashboard_metrics_derives_pace_from_distance_and_time(self, mock_get) -> None:
+        mock_get.return_value = _response_with_json(
+            [
+                {
+                    "source_id": "strava:18887776666",
+                    "start_date_local": "2026-02-22T11:07:00Z",
+                    "distance": 5000.0,
+                    "moving_time": 1000.0,
+                    "efficiency_factor": 1.11,
+                    "fitness": 65,
+                    "fatigue": 72,
+                }
+            ]
+        )
+
+        records = get_intervals_dashboard_metrics(
+            "athlete",
+            "apikey",
+            oldest="2026-01-01T00:00:00Z",
+            newest="2026-12-31T23:59:59Z",
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["strava_activity_id"], "18887776666")
+        self.assertEqual(records[0]["avg_pace_mps"], 5.0)
+        self.assertEqual(records[0]["avg_efficiency_factor"], 1.11)
+
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
+    def test_dashboard_metrics_handles_request_failure(self, mock_get) -> None:
+        mock_get.side_effect = requests.RequestException("boom")
+        records = get_intervals_dashboard_metrics(
+            "athlete",
+            "apikey",
+            oldest="2026-01-01T00:00:00Z",
+            newest="2026-12-31T23:59:59Z",
+        )
+        self.assertEqual(records, [])
 
 
 if __name__ == "__main__":

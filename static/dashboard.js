@@ -33,6 +33,11 @@ const WEEKDAY_LABELS_BY_WEEK_START = Object.freeze({
 });
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const ACTIVE_DAYS_METRIC_KEY = "active_days";
+const FIT_FAT_CYCLE_KEY = "fit_fat_cycle";
+const FITNESS_METRIC_KEY = "avg_fitness";
+const FATIGUE_METRIC_KEY = "avg_fatigue";
+const PACE_METRIC_KEY = "avg_pace_mps";
+const EFFICIENCY_METRIC_KEY = "avg_efficiency_factor";
 const DEFAULT_UNITS = Object.freeze({ distance: "mi", elevation: "ft" });
 const UNIT_SYSTEM_TO_UNITS = Object.freeze({
   imperial: Object.freeze({ distance: "mi", elevation: "ft" }),
@@ -2276,7 +2281,46 @@ function formatElevation(meters, units) {
   return `${formatNumber(Math.round(meters * 3.28084), 0)} ft`;
 }
 
-function buildYearMetricStatItems(totals, units) {
+function formatPaceFromMps(valueMps, units) {
+  const speed = Number(valueMps || 0);
+  if (!(speed > 0)) {
+    return STAT_PLACEHOLDER;
+  }
+  const metersPerUnit = units?.distance === "km" ? 1000 : 1609.344;
+  const secondsPerUnit = metersPerUnit / speed;
+  if (!(secondsPerUnit > 0) || !Number.isFinite(secondsPerUnit)) {
+    return STAT_PLACEHOLDER;
+  }
+  const totalSeconds = Math.round(secondsPerUnit);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const unitLabel = units?.distance === "km" ? "km" : "mi";
+  return `${minutes}:${String(seconds).padStart(2, "0")}/${unitLabel}`;
+}
+
+function formatEfficiency(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return STAT_PLACEHOLDER;
+  }
+  return formatNumber(numeric, 2);
+}
+
+function buildYearMetricStatItems(totals, units, activeMetricKey) {
+  const hasFitness = totals.avg_fitness > 0;
+  const hasFatigue = totals.avg_fatigue > 0;
+  const fitFatHasData = hasFitness || hasFatigue;
+  const fitFatState = activeMetricKey === FATIGUE_METRIC_KEY && hasFatigue
+    ? FATIGUE_METRIC_KEY
+    : (hasFitness ? FITNESS_METRIC_KEY : (hasFatigue ? FATIGUE_METRIC_KEY : FITNESS_METRIC_KEY));
+  const fitFatValue = fitFatState === FATIGUE_METRIC_KEY ? totals.avg_fatigue : totals.avg_fitness;
+  const fitFatDisplay = fitFatHasData
+    ? (
+      fitFatState === FATIGUE_METRIC_KEY
+        ? `Fatigue ${formatNumber(fitFatValue, 0)}`
+        : `Fitness ${formatNumber(fitFatValue, 0)}`
+    )
+    : STAT_PLACEHOLDER;
   return [
     {
       key: "distance",
@@ -2300,6 +2344,26 @@ function buildYearMetricStatItems(totals, units) {
         : STAT_PLACEHOLDER,
       filterable: totals.elevation > 0,
     },
+    {
+      key: FIT_FAT_CYCLE_KEY,
+      label: "Fit/Fat",
+      value: fitFatDisplay,
+      filterable: fitFatHasData,
+      filterableMetricKeys: [FITNESS_METRIC_KEY, FATIGUE_METRIC_KEY],
+      isActive: (metricKey) => metricKey === FITNESS_METRIC_KEY || metricKey === FATIGUE_METRIC_KEY,
+    },
+    {
+      key: PACE_METRIC_KEY,
+      label: "Pace",
+      value: formatPaceFromMps(totals.avg_pace_mps, units || { distance: "mi" }),
+      filterable: totals.avg_pace_mps > 0,
+    },
+    {
+      key: EFFICIENCY_METRIC_KEY,
+      label: "Efficiency",
+      value: formatEfficiency(totals.avg_efficiency_factor),
+      filterable: totals.avg_efficiency_factor > 0,
+    },
   ];
 }
 
@@ -2313,6 +2377,10 @@ const METRIC_LABEL_BY_KEY = Object.freeze({
   distance: "Distance",
   moving_time: "Time",
   elevation_gain: "Elevation",
+  [PACE_METRIC_KEY]: "Pace",
+  [EFFICIENCY_METRIC_KEY]: "Efficiency",
+  [FITNESS_METRIC_KEY]: "Fitness",
+  [FATIGUE_METRIC_KEY]: "Fatigue",
 });
 
 const FREQUENCY_METRIC_UNAVAILABLE_REASON_BY_KEY = {
@@ -2338,6 +2406,15 @@ function formatMetricTotal(metricKey, value, units) {
   }
   if (metricKey === "elevation_gain") {
     return formatElevation(value, units || { elevation: "ft" });
+  }
+  if (metricKey === PACE_METRIC_KEY) {
+    return formatPaceFromMps(value, units || { distance: "mi" });
+  }
+  if (metricKey === EFFICIENCY_METRIC_KEY) {
+    return formatEfficiency(value);
+  }
+  if (metricKey === FITNESS_METRIC_KEY || metricKey === FATIGUE_METRIC_KEY) {
+    return formatNumber(value, 0);
   }
   return formatNumber(value, 0);
 }
@@ -3244,16 +3321,30 @@ function normalizeSingleSelectKey(activeKey, filterableKeys) {
   return filterableKeys.includes(activeKey) ? activeKey : null;
 }
 
+function getMetricItemActive(item, activeKey) {
+  if (!item) return false;
+  if (typeof item.isActive === "function") {
+    return Boolean(item.isActive(activeKey));
+  }
+  return activeKey === item.key;
+}
+
 function renderSingleSelectButtonState(items, buttonMap, activeKey) {
   (Array.isArray(items) ? items : []).forEach((item) => {
     const button = buttonMap.get(item.key);
     if (!button) return;
-    const active = activeKey === item.key;
+    const active = getMetricItemActive(item, activeKey);
     button.classList.toggle("active", active);
     if (active) {
       button.classList.remove("fact-glow-cleared");
     }
     button.setAttribute("aria-pressed", active ? "true" : "false");
+    if (typeof item.value === "string") {
+      const valueNode = button.querySelector(".card-stat-value");
+      if (valueNode) {
+        valueNode.textContent = item.value;
+      }
+    }
   });
 }
 
@@ -3301,6 +3392,10 @@ function buildCard(type, year, aggregates, units, options = {}) {
     distance: 0,
     moving_time: 0,
     elevation_gain: 0,
+    [PACE_METRIC_KEY]: 0,
+    [EFFICIENCY_METRIC_KEY]: 0,
+    [FITNESS_METRIC_KEY]: 0,
+    [FATIGUE_METRIC_KEY]: 0,
   };
   const layout = getLayout();
   const heatmapOptions = {
@@ -3323,6 +3418,18 @@ function buildCard(type, year, aggregates, units, options = {}) {
     distance: 0,
     moving_time: 0,
     elevation: 0,
+    avg_pace_mps: 0,
+    avg_efficiency_factor: 0,
+    avg_fitness: 0,
+    avg_fatigue: 0,
+    _pace_weight_seconds: 0,
+    _pace_weighted_sum: 0,
+    _eff_weight_seconds: 0,
+    _eff_weighted_sum: 0,
+    _fitness_weight: 0,
+    _fitness_sum: 0,
+    _fatigue_weight: 0,
+    _fatigue_sum: 0,
   };
   Object.entries(aggregates || {}).forEach(([, entry]) => {
     totals.count += entry.count || 0;
@@ -3332,8 +3439,56 @@ function buildCard(type, year, aggregates, units, options = {}) {
     metricMaxByKey.distance = Math.max(metricMaxByKey.distance, Number(entry.distance || 0));
     metricMaxByKey.moving_time = Math.max(metricMaxByKey.moving_time, Number(entry.moving_time || 0));
     metricMaxByKey.elevation_gain = Math.max(metricMaxByKey.elevation_gain, Number(entry.elevation_gain || 0));
+    metricMaxByKey[PACE_METRIC_KEY] = Math.max(metricMaxByKey[PACE_METRIC_KEY], Number(entry[PACE_METRIC_KEY] || 0));
+    metricMaxByKey[EFFICIENCY_METRIC_KEY] = Math.max(
+      metricMaxByKey[EFFICIENCY_METRIC_KEY],
+      Number(entry[EFFICIENCY_METRIC_KEY] || 0),
+    );
+    metricMaxByKey[FITNESS_METRIC_KEY] = Math.max(
+      metricMaxByKey[FITNESS_METRIC_KEY],
+      Number(entry[FITNESS_METRIC_KEY] || 0),
+    );
+    metricMaxByKey[FATIGUE_METRIC_KEY] = Math.max(
+      metricMaxByKey[FATIGUE_METRIC_KEY],
+      Number(entry[FATIGUE_METRIC_KEY] || 0),
+    );
+
+    const dayWeightSeconds = Number(entry.moving_time || 0);
+    const dayCount = Number(entry.count || 0);
+    const dayPace = Number(entry[PACE_METRIC_KEY] || 0);
+    if (dayWeightSeconds > 0 && dayPace > 0) {
+      totals._pace_weighted_sum += dayPace * dayWeightSeconds;
+      totals._pace_weight_seconds += dayWeightSeconds;
+    }
+    const dayEfficiency = Number(entry[EFFICIENCY_METRIC_KEY] || 0);
+    if (dayWeightSeconds > 0 && dayEfficiency > 0) {
+      totals._eff_weighted_sum += dayEfficiency * dayWeightSeconds;
+      totals._eff_weight_seconds += dayWeightSeconds;
+    }
+    const dayFitness = Number(entry[FITNESS_METRIC_KEY] || 0);
+    if (dayCount > 0 && Number.isFinite(dayFitness) && dayFitness > 0) {
+      totals._fitness_sum += dayFitness * dayCount;
+      totals._fitness_weight += dayCount;
+    }
+    const dayFatigue = Number(entry[FATIGUE_METRIC_KEY] || 0);
+    if (dayCount > 0 && Number.isFinite(dayFatigue) && dayFatigue > 0) {
+      totals._fatigue_sum += dayFatigue * dayCount;
+      totals._fatigue_weight += dayCount;
+    }
   });
   metricMaxByKey[ACTIVE_DAYS_METRIC_KEY] = totals.count > 0 ? 1 : 0;
+  if (totals._pace_weight_seconds > 0) {
+    totals.avg_pace_mps = totals._pace_weighted_sum / totals._pace_weight_seconds;
+  }
+  if (totals._eff_weight_seconds > 0) {
+    totals.avg_efficiency_factor = totals._eff_weighted_sum / totals._eff_weight_seconds;
+  }
+  if (totals._fitness_weight > 0) {
+    totals.avg_fitness = totals._fitness_sum / totals._fitness_weight;
+  }
+  if (totals._fatigue_weight > 0) {
+    totals.avg_fatigue = totals._fatigue_sum / totals._fatigue_weight;
+  }
 
   const renderHeatmap = () => {
     const nextHeatmapArea = buildHeatmapArea(aggregates, year, units, colors, type, layout, {
@@ -3348,8 +3503,22 @@ function buildCard(type, year, aggregates, units, options = {}) {
     heatmapArea = nextHeatmapArea;
   };
 
-  const metricItems = buildYearMetricStatItems(totals, units);
-  const filterableMetricKeys = getFilterableKeys(metricItems);
+  const metricItems = buildYearMetricStatItems(totals, units, activeMetricKey);
+  const filterableMetricKeys = [];
+  metricItems.forEach((item) => {
+    if (!item || !item.filterable) return;
+    if (Array.isArray(item.filterableMetricKeys) && item.filterableMetricKeys.length) {
+      item.filterableMetricKeys.forEach((key) => {
+        if (typeof key === "string" && key && !filterableMetricKeys.includes(key)) {
+          filterableMetricKeys.push(key);
+        }
+      });
+      return;
+    }
+    if (typeof item.key === "string" && item.key && !filterableMetricKeys.includes(item.key)) {
+      filterableMetricKeys.push(item.key);
+    }
+  });
   if (totals.count > 0) {
     filterableMetricKeys.push(ACTIVE_DAYS_METRIC_KEY);
   }
@@ -3364,14 +3533,12 @@ function buildCard(type, year, aggregates, units, options = {}) {
       source,
     });
   };
-  const renderMetricButtonState = () => renderSingleSelectButtonState(
-    metricItems,
-    metricButtons,
-    activeMetricKey,
-  );
+  const renderMetricButtonState = () => {
+    const dynamicItems = buildYearMetricStatItems(totals, units, activeMetricKey);
+    renderSingleSelectButtonState(dynamicItems, metricButtons, activeMetricKey);
+  };
 
   const statItems = [
-    { label: "Total Activities", value: totals.count.toLocaleString() },
     ...metricItems.map((item) => ({
       label: item.label,
       value: item.value,
@@ -3386,6 +3553,24 @@ function buildCard(type, year, aggregates, units, options = {}) {
       enhance: (statCard) => {
         if (!item.filterable) return;
         metricButtons.set(item.key, statCard);
+        if (item.key === FIT_FAT_CYCLE_KEY) {
+          statCard.addEventListener("click", () => {
+            const hasFitness = totals.avg_fitness > 0;
+            const hasFatigue = totals.avg_fatigue > 0;
+            if (activeMetricKey === FITNESS_METRIC_KEY) {
+              activeMetricKey = hasFatigue ? FATIGUE_METRIC_KEY : null;
+            } else if (activeMetricKey === FATIGUE_METRIC_KEY) {
+              activeMetricKey = null;
+            } else {
+              activeMetricKey = hasFitness ? FITNESS_METRIC_KEY : (hasFatigue ? FATIGUE_METRIC_KEY : null);
+            }
+            renderMetricButtonState();
+            renderHeatmap();
+            reportYearMetricState("card");
+            schedulePostInteractionAlignment();
+          });
+          return;
+        }
         attachSingleSelectCardToggle(statCard, {
           itemKey: item.key,
           getActiveKey: () => activeMetricKey,
@@ -3403,6 +3588,7 @@ function buildCard(type, year, aggregates, units, options = {}) {
     })),
   ];
   const stats = buildSideStatColumn(statItems, { className: "card-stats side-stats-column" });
+  card.dataset.totalActivities = String(Math.max(0, Math.round(totals.count)));
   renderHeatmap();
   renderMetricButtonState();
   reportYearMetricState("init");
@@ -3437,7 +3623,15 @@ function buildLabeledCardRow(label, card, kind) {
 
   const title = document.createElement("div");
   title.className = "card-title labeled-card-title";
-  title.textContent = label;
+  if (kind === "year" && card?.dataset?.totalActivities) {
+    const totalActivitiesRaw = Number(card.dataset.totalActivities || 0);
+    const totalActivities = Number.isFinite(totalActivitiesRaw)
+      ? Math.max(0, Math.round(totalActivitiesRaw))
+      : 0;
+    title.textContent = `${label} - Total Activities ${totalActivities.toLocaleString()}`;
+  } else {
+    title.textContent = label;
+  }
 
   card.insertBefore(title, card.firstChild);
   row.appendChild(card);
@@ -3455,6 +3649,14 @@ function combineYearAggregates(yearData, types) {
           distance: 0,
           moving_time: 0,
           elevation_gain: 0,
+          _pace_weighted_sum: 0,
+          _pace_weight_seconds: 0,
+          _eff_weighted_sum: 0,
+          _eff_weight_seconds: 0,
+          _fitness_weighted_sum: 0,
+          _fitness_weight_count: 0,
+          _fatigue_weighted_sum: 0,
+          _fatigue_weight_count: 0,
           types: new Set(),
         };
       }
@@ -3462,6 +3664,28 @@ function combineYearAggregates(yearData, types) {
       combined[dateStr].distance += entry.distance || 0;
       combined[dateStr].moving_time += entry.moving_time || 0;
       combined[dateStr].elevation_gain += entry.elevation_gain || 0;
+      const entryMovingTime = Number(entry.moving_time || 0);
+      const entryCount = Number(entry.count || 0);
+      const entryPace = Number(entry[PACE_METRIC_KEY] || 0);
+      if (entryMovingTime > 0 && entryPace > 0) {
+        combined[dateStr]._pace_weighted_sum += entryPace * entryMovingTime;
+        combined[dateStr]._pace_weight_seconds += entryMovingTime;
+      }
+      const entryEfficiency = Number(entry[EFFICIENCY_METRIC_KEY] || 0);
+      if (entryMovingTime > 0 && entryEfficiency > 0) {
+        combined[dateStr]._eff_weighted_sum += entryEfficiency * entryMovingTime;
+        combined[dateStr]._eff_weight_seconds += entryMovingTime;
+      }
+      const entryFitness = Number(entry[FITNESS_METRIC_KEY] || 0);
+      if (entryCount > 0 && entryFitness > 0) {
+        combined[dateStr]._fitness_weighted_sum += entryFitness * entryCount;
+        combined[dateStr]._fitness_weight_count += entryCount;
+      }
+      const entryFatigue = Number(entry[FATIGUE_METRIC_KEY] || 0);
+      if (entryCount > 0 && entryFatigue > 0) {
+        combined[dateStr]._fatigue_weighted_sum += entryFatigue * entryCount;
+        combined[dateStr]._fatigue_weight_count += entryCount;
+      }
       if ((entry.count || 0) > 0) {
         combined[dateStr].types.add(type);
       }
@@ -3475,6 +3699,18 @@ function combineYearAggregates(yearData, types) {
       distance: entry.distance,
       moving_time: entry.moving_time,
       elevation_gain: entry.elevation_gain,
+      ...(entry._pace_weight_seconds > 0
+        ? { [PACE_METRIC_KEY]: entry._pace_weighted_sum / entry._pace_weight_seconds }
+        : {}),
+      ...(entry._eff_weight_seconds > 0
+        ? { [EFFICIENCY_METRIC_KEY]: entry._eff_weighted_sum / entry._eff_weight_seconds }
+        : {}),
+      ...(entry._fitness_weight_count > 0
+        ? { [FITNESS_METRIC_KEY]: entry._fitness_weighted_sum / entry._fitness_weight_count }
+        : {}),
+      ...(entry._fatigue_weight_count > 0
+        ? { [FATIGUE_METRIC_KEY]: entry._fatigue_weighted_sum / entry._fatigue_weight_count }
+        : {}),
       types: Array.from(entry.types),
     };
   });

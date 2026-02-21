@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .stat_modules.intervals_data import get_intervals_dashboard_metrics
 from .storage import (
     acquire_runtime_lock,
     read_json,
@@ -240,6 +241,100 @@ def _as_float(value: object) -> float:
         return 0.0
 
 
+def _as_optional_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _iso_minute_key(raw_value: object) -> str | None:
+    parsed = _parse_iso_datetime(raw_value)
+    if parsed is None:
+        return None
+    return parsed.replace(second=0, microsecond=0).isoformat()
+
+
+def _index_intervals_metrics(
+    records: list[dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    by_id: dict[str, dict[str, Any]] = {}
+    by_minute: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        activity_id = str(record.get("strava_activity_id") or "").strip()
+        minute_key = _iso_minute_key(record.get("start_date"))
+        if activity_id and activity_id not in by_id:
+            by_id[activity_id] = record
+        if minute_key and minute_key not in by_minute:
+            by_minute[minute_key] = record
+    return by_id, by_minute
+
+
+def _new_intervals_rollup() -> dict[str, float]:
+    return {
+        "_pace_weighted_sum": 0.0,
+        "_pace_weight_seconds": 0.0,
+        "_eff_weighted_sum": 0.0,
+        "_eff_weight_seconds": 0.0,
+        "_fitness_sum": 0.0,
+        "_fitness_count": 0.0,
+        "_fatigue_sum": 0.0,
+        "_fatigue_count": 0.0,
+    }
+
+
+def _accumulate_intervals_rollup(
+    rollup: dict[str, Any],
+    *,
+    pace_mps: float | None,
+    efficiency: float | None,
+    fitness: float | None,
+    fatigue: float | None,
+    weight_seconds: float,
+) -> None:
+    if pace_mps is not None and pace_mps > 0 and weight_seconds > 0:
+        rollup["_pace_weighted_sum"] += pace_mps * weight_seconds
+        rollup["_pace_weight_seconds"] += weight_seconds
+    if efficiency is not None and efficiency > 0 and weight_seconds > 0:
+        rollup["_eff_weighted_sum"] += efficiency * weight_seconds
+        rollup["_eff_weight_seconds"] += weight_seconds
+    if fitness is not None:
+        rollup["_fitness_sum"] += fitness
+        rollup["_fitness_count"] += 1
+    if fatigue is not None:
+        rollup["_fatigue_sum"] += fatigue
+        rollup["_fatigue_count"] += 1
+
+
+def _finalize_intervals_rollup(rollup: dict[str, Any]) -> None:
+    pace_weight = _as_optional_float(rollup.get("_pace_weight_seconds")) or 0.0
+    if pace_weight > 0:
+        rollup["avg_pace_mps"] = (float(rollup.get("_pace_weighted_sum") or 0.0) / pace_weight)
+    eff_weight = _as_optional_float(rollup.get("_eff_weight_seconds")) or 0.0
+    if eff_weight > 0:
+        rollup["avg_efficiency_factor"] = (float(rollup.get("_eff_weighted_sum") or 0.0) / eff_weight)
+    fitness_count = _as_optional_float(rollup.get("_fitness_count")) or 0.0
+    if fitness_count > 0:
+        rollup["avg_fitness"] = float(rollup.get("_fitness_sum") or 0.0) / fitness_count
+    fatigue_count = _as_optional_float(rollup.get("_fatigue_count")) or 0.0
+    if fatigue_count > 0:
+        rollup["avg_fatigue"] = float(rollup.get("_fatigue_sum") or 0.0) / fatigue_count
+
+    for key in (
+        "_pace_weighted_sum",
+        "_pace_weight_seconds",
+        "_eff_weighted_sum",
+        "_eff_weight_seconds",
+        "_fitness_sum",
+        "_fitness_count",
+        "_fatigue_sum",
+        "_fatigue_count",
+    ):
+        rollup.pop(key, None)
+
+
 def _normalize_activity(item: dict[str, Any]) -> dict[str, Any] | None:
     raw_id = item.get("id")
     if raw_id in {None, ""}:
@@ -263,6 +358,7 @@ def _normalize_activity(item: dict[str, Any]) -> dict[str, Any] | None:
         "type": type_name,
         "raw_type": raw_type,
         "start_date_local": str(item.get("start_date_local") or item.get("start_date") or ""),
+        "_start_minute_key": parsed_start.replace(second=0, microsecond=0).isoformat(),
         "hour": int(parsed_start.hour),
         "distance": _as_float(item.get("distance")),
         "moving_time": _as_float(item.get("moving_time")),
@@ -312,7 +408,55 @@ def build_dashboard_payload(
         key=lambda item: (str(item["date"]), str(item["id"])),
     )
 
+    intervals_records: list[dict[str, Any]] = []
+    intervals_matches = 0
+    if (
+        settings.enable_intervals
+        and isinstance(settings.intervals_user_id, str)
+        and settings.intervals_user_id.strip()
+        and isinstance(settings.intervals_api_key, str)
+        and settings.intervals_api_key.strip()
+    ):
+        intervals_records = get_intervals_dashboard_metrics(
+            settings.intervals_user_id,
+            settings.intervals_api_key,
+            oldest=after_dt,
+            newest=datetime.now(timezone.utc),
+        )
+    intervals_by_id, intervals_by_minute = _index_intervals_metrics(intervals_records)
+    if intervals_by_id or intervals_by_minute:
+        for activity in activities:
+            matched = intervals_by_id.get(str(activity["id"])) or intervals_by_minute.get(
+                str(activity.get("_start_minute_key") or "")
+            )
+            if not isinstance(matched, dict):
+                continue
+            pace_mps = _as_optional_float(matched.get("avg_pace_mps"))
+            efficiency = _as_optional_float(matched.get("avg_efficiency_factor"))
+            fitness = _as_optional_float(matched.get("avg_fitness"))
+            fatigue = _as_optional_float(matched.get("avg_fatigue"))
+            moving_time_seconds = _as_optional_float(matched.get("moving_time_seconds"))
+            if (
+                pace_mps is None
+                and efficiency is None
+                and fitness is None
+                and fatigue is None
+            ):
+                continue
+            intervals_matches += 1
+            if pace_mps is not None and pace_mps > 0:
+                activity["avg_pace_mps"] = pace_mps
+            if efficiency is not None and efficiency > 0:
+                activity["avg_efficiency_factor"] = efficiency
+            if fitness is not None:
+                activity["avg_fitness"] = fitness
+            if fatigue is not None:
+                activity["avg_fatigue"] = fatigue
+            if moving_time_seconds is not None and moving_time_seconds > 0:
+                activity["_intervals_moving_time_seconds"] = moving_time_seconds
+
     aggregates: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
+    intervals_year_type_metrics: dict[str, dict[str, dict[str, Any]]] = {}
     type_totals: dict[str, int] = defaultdict(int)
     years_seen: set[int] = set()
 
@@ -333,6 +477,7 @@ def build_dashboard_payload(
                 "moving_time": 0.0,
                 "elevation_gain": 0.0,
                 "activity_ids": [],
+                **_new_intervals_rollup(),
             },
         )
         entry["count"] += 1
@@ -342,10 +487,39 @@ def build_dashboard_payload(
         entry["activity_ids"].append(str(activity["id"]))
         type_totals[type_name] += 1
 
+        year_intervals_bucket = intervals_year_type_metrics.setdefault(year_key, {})
+        type_intervals_totals = year_intervals_bucket.setdefault(type_name, _new_intervals_rollup())
+        weight_seconds = (
+            _as_optional_float(activity.get("_intervals_moving_time_seconds"))
+            or _as_optional_float(activity.get("moving_time"))
+            or 0.0
+        )
+        _accumulate_intervals_rollup(
+            entry,
+            pace_mps=_as_optional_float(activity.get("avg_pace_mps")),
+            efficiency=_as_optional_float(activity.get("avg_efficiency_factor")),
+            fitness=_as_optional_float(activity.get("avg_fitness")),
+            fatigue=_as_optional_float(activity.get("avg_fatigue")),
+            weight_seconds=weight_seconds,
+        )
+        _accumulate_intervals_rollup(
+            type_intervals_totals,
+            pace_mps=_as_optional_float(activity.get("avg_pace_mps")),
+            efficiency=_as_optional_float(activity.get("avg_efficiency_factor")),
+            fitness=_as_optional_float(activity.get("avg_fitness")),
+            fatigue=_as_optional_float(activity.get("avg_fatigue")),
+            weight_seconds=weight_seconds,
+        )
+
     for year_bucket in aggregates.values():
         for type_bucket in year_bucket.values():
             for entry in type_bucket.values():
                 entry["activity_ids"] = sorted(set(entry["activity_ids"]))
+                _finalize_intervals_rollup(entry)
+
+    for year_bucket in intervals_year_type_metrics.values():
+        for totals_entry in year_bucket.values():
+            _finalize_intervals_rollup(totals_entry)
 
     types = sorted(type_totals.keys(), key=lambda name: (-type_totals[name], name))
 
@@ -381,6 +555,14 @@ def build_dashboard_payload(
                 "hour": item["hour"],
                 "url": item["url"],
                 **({"name": item["name"]} if "name" in item else {}),
+                **({"avg_pace_mps": item["avg_pace_mps"]} if "avg_pace_mps" in item else {}),
+                **(
+                    {"avg_efficiency_factor": item["avg_efficiency_factor"]}
+                    if "avg_efficiency_factor" in item
+                    else {}
+                ),
+                **({"avg_fitness": item["avg_fitness"]} if "avg_fitness" in item else {}),
+                **({"avg_fatigue": item["avg_fatigue"]} if "avg_fatigue" in item else {}),
             }
             for item in activities
         ],
@@ -404,6 +586,13 @@ def build_dashboard_payload(
     page_cap = MAX_ACTIVITY_PAGES * 200
     if len(raw_activities) >= page_cap:
         payload["history_truncated"] = True
+
+    payload["intervals"] = {
+        "enabled": bool(settings.enable_intervals),
+        "records": int(len(intervals_records)),
+        "matched_activities": int(intervals_matches),
+    }
+    payload["intervals_year_type_metrics"] = intervals_year_type_metrics
 
     return payload
 

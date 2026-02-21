@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -198,6 +199,77 @@ class TestDashboardData(unittest.TestCase):
             self.assertIsInstance(on_disk, dict)
             assert isinstance(on_disk, dict)
             self.assertEqual(on_disk.get("latest_activity_id"), "1002")
+
+    def test_enriches_aggregates_with_intervals_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base_settings = self._settings_for(td)
+            settings = replace(
+                base_settings,
+                enable_intervals=True,
+                intervals_user_id="athlete",
+                intervals_api_key="api-key",
+            )
+            fake_activities = [
+                {
+                    "id": 1001,
+                    "start_date_local": "2026-02-01T10:15:20+00:00",
+                    "sport_type": "Run",
+                    "distance": 5000.0,
+                    "moving_time": 1500,
+                    "total_elevation_gain": 42.0,
+                    "name": "Morning Run",
+                },
+                {
+                    "id": 1002,
+                    "start_date_local": "2026-02-01T18:30:44+00:00",
+                    "sport_type": "Run",
+                    "distance": 10000.0,
+                    "moving_time": 3000,
+                    "total_elevation_gain": 85.0,
+                },
+            ]
+            intervals_records = [
+                {
+                    "strava_activity_id": "1001",
+                    "start_date": "2026-02-01T10:15:00+00:00",
+                    "avg_pace_mps": 3.0,
+                    "avg_efficiency_factor": 1.2,
+                    "avg_fitness": 70.0,
+                    "avg_fatigue": 78.0,
+                    "moving_time_seconds": 1500.0,
+                },
+                {
+                    "strava_activity_id": None,
+                    "start_date": "2026-02-01T18:30:00+00:00",
+                    "avg_pace_mps": 4.0,
+                    "avg_efficiency_factor": 1.0,
+                    "avg_fitness": 74.0,
+                    "avg_fatigue": 82.0,
+                    "moving_time_seconds": 3000.0,
+                },
+            ]
+
+            with mock.patch("chronicle.dashboard_data.StravaClient") as mock_client_cls, mock.patch(
+                "chronicle.dashboard_data.get_intervals_dashboard_metrics",
+                return_value=intervals_records,
+            ):
+                mock_client = mock_client_cls.return_value
+                mock_client.get_activities_after.return_value = fake_activities
+                payload = get_dashboard_payload(settings, force_refresh=True)
+
+            self.assertEqual(payload["intervals"]["records"], 2)
+            self.assertEqual(payload["intervals"]["matched_activities"], 2)
+            entry = payload["aggregates"]["2026"]["Run"]["2026-02-01"]
+            self.assertAlmostEqual(entry["avg_pace_mps"], 3.6666666, places=4)
+            self.assertAlmostEqual(entry["avg_efficiency_factor"], 1.0666666, places=4)
+            self.assertAlmostEqual(entry["avg_fitness"], 72.0, places=4)
+            self.assertAlmostEqual(entry["avg_fatigue"], 80.0, places=4)
+
+            totals = payload["intervals_year_type_metrics"]["2026"]["Run"]
+            self.assertAlmostEqual(totals["avg_pace_mps"], 3.6666666, places=4)
+            self.assertAlmostEqual(totals["avg_efficiency_factor"], 1.0666666, places=4)
+            self.assertAlmostEqual(totals["avg_fitness"], 72.0, places=4)
+            self.assertAlmostEqual(totals["avg_fatigue"], 80.0, places=4)
 
 
 if __name__ == "__main__":
