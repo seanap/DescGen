@@ -10,7 +10,7 @@ from unittest import mock
 
 import chronicle.dashboard_data as dashboard_data
 from chronicle.config import Settings
-from chronicle.dashboard_data import dashboard_data_path, get_dashboard_payload
+from chronicle.dashboard_data import dashboard_data_path, get_dashboard_payload, intervals_metrics_cache_path
 from chronicle.storage import write_json
 
 
@@ -260,16 +260,76 @@ class TestDashboardData(unittest.TestCase):
             self.assertEqual(payload["intervals"]["records"], 2)
             self.assertEqual(payload["intervals"]["matched_activities"], 2)
             entry = payload["aggregates"]["2026"]["Run"]["2026-02-01"]
-            self.assertAlmostEqual(entry["avg_pace_mps"], 3.6666666, places=4)
+            self.assertAlmostEqual(entry["avg_pace_mps"], 3.3333333, places=4)
             self.assertAlmostEqual(entry["avg_efficiency_factor"], 1.0666666, places=4)
             self.assertAlmostEqual(entry["avg_fitness"], 72.0, places=4)
             self.assertAlmostEqual(entry["avg_fatigue"], 80.0, places=4)
 
             totals = payload["intervals_year_type_metrics"]["2026"]["Run"]
-            self.assertAlmostEqual(totals["avg_pace_mps"], 3.6666666, places=4)
             self.assertAlmostEqual(totals["avg_efficiency_factor"], 1.0666666, places=4)
             self.assertAlmostEqual(totals["avg_fitness"], 72.0, places=4)
             self.assertAlmostEqual(totals["avg_fatigue"], 80.0, places=4)
+
+    def test_intervals_sync_uses_seed_then_incremental_current_year_window(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base_settings = self._settings_for(td)
+            settings = replace(
+                base_settings,
+                enable_intervals=True,
+                intervals_user_id="athlete",
+                intervals_api_key="api-key",
+            )
+            fake_activities = [
+                {
+                    "id": 1001,
+                    "start_date_local": "2026-02-01T10:15:20+00:00",
+                    "sport_type": "Run",
+                    "distance": 5000.0,
+                    "moving_time": 1500,
+                    "total_elevation_gain": 42.0,
+                }
+            ]
+            seed_records = [
+                {
+                    "strava_activity_id": "1001",
+                    "start_date": "2026-02-01T10:15:00+00:00",
+                    "avg_efficiency_factor": 1.2,
+                    "avg_fitness": 70.0,
+                    "avg_fatigue": 78.0,
+                    "moving_time_seconds": 1500.0,
+                }
+            ]
+            incremental_records = [
+                {
+                    "strava_activity_id": "1001",
+                    "start_date": "2026-02-01T10:15:00+00:00",
+                    "avg_efficiency_factor": 1.22,
+                    "avg_fitness": 71.0,
+                    "avg_fatigue": 79.0,
+                    "moving_time_seconds": 1500.0,
+                }
+            ]
+
+            with mock.patch("chronicle.dashboard_data.StravaClient") as mock_client_cls, mock.patch(
+                "chronicle.dashboard_data.get_intervals_dashboard_metrics",
+                side_effect=[seed_records, incremental_records],
+            ) as mock_intervals:
+                mock_client = mock_client_cls.return_value
+                mock_client.get_activities_after.return_value = fake_activities
+                first_payload = get_dashboard_payload(settings, force_refresh=True)
+                second_payload = get_dashboard_payload(settings, force_refresh=True)
+
+            first_call = mock_intervals.call_args_list[0].kwargs
+            second_call = mock_intervals.call_args_list[1].kwargs
+            self.assertEqual(first_payload["intervals"].get("sync_mode"), "seed")
+            self.assertEqual(second_payload["intervals"].get("sync_mode"), "incremental")
+            self.assertEqual(first_call["oldest"], dashboard_data._dashboard_history_start())
+            current_year_start = datetime(datetime.now(timezone.utc).year, 1, 1, tzinfo=timezone.utc)
+            self.assertGreaterEqual(second_call["oldest"], current_year_start)
+            cache_payload = dashboard_data.read_json(intervals_metrics_cache_path(settings))
+            self.assertIsInstance(cache_payload, dict)
+            assert isinstance(cache_payload, dict)
+            self.assertEqual(cache_payload.get("last_fetch_mode"), "incremental")
 
 
 if __name__ == "__main__":

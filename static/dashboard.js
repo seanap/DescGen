@@ -2306,7 +2306,8 @@ function formatEfficiency(value) {
   return formatNumber(numeric, 2);
 }
 
-function buildYearMetricStatItems(totals, units, activeMetricKey) {
+function buildYearMetricStatItems(totals, units, activeMetricKey, options = {}) {
+  const intervalsEnabled = Boolean(options.intervalsEnabled);
   const hasFitness = totals.avg_fitness > 0;
   const hasFatigue = totals.avg_fatigue > 0;
   const fitFatState = activeMetricKey === FATIGUE_METRIC_KEY
@@ -2316,7 +2317,7 @@ function buildYearMetricStatItems(totals, units, activeMetricKey) {
   const fitFatValue = fitFatState === FATIGUE_METRIC_KEY ? totals.avg_fatigue : totals.avg_fitness;
   const fitFatDisplay = fitFatHasData ? formatNumber(fitFatValue, 0) : STAT_PLACEHOLDER;
   const fitFatLabel = fitFatState === FATIGUE_METRIC_KEY ? "Avg. Fatigue" : "Avg. Fitness";
-  return [
+  const items = [
     {
       key: "moving_time",
       label: "Total Time",
@@ -2340,26 +2341,29 @@ function buildYearMetricStatItems(totals, units, activeMetricKey) {
       filterable: totals.elevation > 0,
     },
     {
+      key: PACE_METRIC_KEY,
+      label: "Avg. Pace",
+      value: formatPaceFromMps(totals.avg_pace_mps, units || { distance: "mi" }),
+      filterable: true,
+    },
+  ];
+  if (intervalsEnabled) {
+    items.push({
       key: FIT_FAT_CYCLE_KEY,
       label: fitFatLabel,
       value: fitFatDisplay,
       filterable: true,
       filterableMetricKeys: [FITNESS_METRIC_KEY, FATIGUE_METRIC_KEY],
       isActive: (metricKey) => metricKey === FITNESS_METRIC_KEY || metricKey === FATIGUE_METRIC_KEY,
-    },
-    {
-      key: PACE_METRIC_KEY,
-      label: "Avg. Pace",
-      value: formatPaceFromMps(totals.avg_pace_mps, units || { distance: "mi" }),
-      filterable: true,
-    },
-    {
+    });
+    items.push({
       key: EFFICIENCY_METRIC_KEY,
       label: "Avg Efficency",
       value: formatEfficiency(totals.avg_efficiency_factor),
       filterable: true,
-    },
-  ];
+    });
+  }
+  return items;
 }
 
 const FREQUENCY_METRIC_ITEMS = [
@@ -3409,6 +3413,7 @@ function buildCard(type, year, aggregates, units, options = {}) {
   const onYearMetricStateChange = typeof options.onYearMetricStateChange === "function"
     ? options.onYearMetricStateChange
     : null;
+  const intervalsEnabled = Boolean(options.intervalsEnabled);
   let activeMetricKey = typeof options.initialMetricKey === "string"
     ? options.initialMetricKey
     : null;
@@ -3504,7 +3509,7 @@ function buildCard(type, year, aggregates, units, options = {}) {
     heatmapArea = nextHeatmapArea;
   };
 
-  const metricItems = buildYearMetricStatItems(totals, units, activeMetricKey);
+  const metricItems = buildYearMetricStatItems(totals, units, activeMetricKey, { intervalsEnabled });
   const filterableMetricKeys = [];
   metricItems.forEach((item) => {
     if (!item || !item.filterable) return;
@@ -3535,7 +3540,7 @@ function buildCard(type, year, aggregates, units, options = {}) {
     });
   };
   const renderMetricButtonState = () => {
-    const dynamicItems = buildYearMetricStatItems(totals, units, activeMetricKey);
+    const dynamicItems = buildYearMetricStatItems(totals, units, activeMetricKey, { intervalsEnabled });
     renderSingleSelectButtonState(dynamicItems, metricButtons, activeMetricKey);
   };
 
@@ -4393,6 +4398,7 @@ async function init() {
     { value: "all", label: "All Activities" },
     ...payload.types.map((type) => ({ value: type, label: displayType(type) })),
   ];
+  const dashboardIntervalsEnabled = Boolean(payload?.intervals?.enabled);
   const setupUnits = normalizeUnits(payload.units || DEFAULT_UNITS);
   const setupWeekStart = normalizeWeekStart(payload.week_start || payload.weekStart);
 
@@ -4858,6 +4864,7 @@ async function init() {
               cardMetricYear: year,
               initialMetricKey: getInitialYearMetricKey(year),
               onYearMetricStateChange,
+              intervalsEnabled: dashboardIntervalsEnabled,
               selectedTypes: types,
               typeBreakdownsByDate,
               typeLabelsByDate,
@@ -4905,6 +4912,7 @@ async function init() {
               cardMetricYear: year,
               initialMetricKey: getInitialYearMetricKey(year),
               onYearMetricStateChange,
+              intervalsEnabled: dashboardIntervalsEnabled,
               activityLinksByDateType,
             });
             setCardScrollKey(card, `${typeCardKey}:year:${year}`);
