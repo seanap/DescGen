@@ -161,6 +161,37 @@ class TestStrengthProfileBehavior(unittest.TestCase):
         reasons = _profile_match_reasons("strength_training", activity, settings, training=training)
         self.assertIn("garmin activity indicates strength", reasons)
 
+    def test_strength_profile_handles_na_strings_without_type_error(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 137,
+            "name": "Morning",
+        }
+        training = {
+            "_garmin_activity_aligned": True,
+            "garmin_last_activity": {
+                "activity_type": "running",
+                "total_sets": "N/A",
+                "active_sets": "N/A",
+                "total_reps": "N/A",
+                "strength_summary_sets": [],
+                "exercise_sets": [{"set_type": "REST", "reps": "N/A"}],
+            },
+        }
+        reasons = _profile_match_reasons("strength_training", activity, settings, training=training)
+        self.assertEqual(reasons, [])
+
 
 class TestInclineTreadmillProfileBehavior(unittest.TestCase):
     def test_incline_treadmill_profile_matches_garmin_indoor_signals(self) -> None:

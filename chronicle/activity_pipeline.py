@@ -936,6 +936,10 @@ def _normalize_activity_type_key(value: Any) -> str:
 
 
 def _training_indicates_strength(training: dict[str, Any] | None) -> bool:
+    def _is_positive_numeric(value: Any) -> bool:
+        parsed = _as_float(value)
+        return parsed is not None and parsed > 0
+
     if not isinstance(training, dict):
         return False
     if not bool(training.get("_garmin_activity_aligned")):
@@ -955,10 +959,10 @@ def _training_indicates_strength(training: dict[str, Any] | None) -> bool:
     }:
         return True
 
-    total_sets = _to_int(garmin_last.get("total_sets"))
-    active_sets = _to_int(garmin_last.get("active_sets"))
-    total_reps = _to_int(garmin_last.get("total_reps"))
-    if any(value is not None and value > 0 for value in (total_sets, active_sets, total_reps)):
+    total_sets = garmin_last.get("total_sets")
+    active_sets = garmin_last.get("active_sets")
+    total_reps = garmin_last.get("total_reps")
+    if any(_is_positive_numeric(value) for value in (total_sets, active_sets, total_reps)):
         return True
 
     summary_sets = garmin_last.get("strength_summary_sets")
@@ -970,8 +974,8 @@ def _training_indicates_strength(training: dict[str, Any] | None) -> bool:
         for row in exercise_sets:
             if not isinstance(row, dict):
                 continue
-            reps = _to_int(row.get("reps"))
-            if reps is not None and reps > 0:
+            reps = row.get("reps")
+            if _is_positive_numeric(reps):
                 return True
     return False
 
