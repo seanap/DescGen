@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -431,6 +432,25 @@ class TestDescriptionTemplate(unittest.TestCase):
             self.assertFalse(disabled_pet["enabled"])
             working = get_working_template_profile(settings)
             self.assertEqual(working["profile_id"], "default")
+
+    def test_profile_config_parses_string_false_as_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            payload = {
+                "version": 1,
+                "working_profile_id": "default",
+                "profiles": [
+                    {"profile_id": "default", "enabled": True},
+                    {"profile_id": "long_run", "enabled": "false"},
+                ],
+            }
+            (template_path.parent / "template_profiles.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+            profiles = list_template_profiles(settings)
+            long_run = next(item for item in profiles if str(item.get("profile_id")) == "long_run")
+            self.assertFalse(long_run["enabled"])
 
     def test_editor_snippets_shape(self) -> None:
         snippets = get_editor_snippets()

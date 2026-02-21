@@ -1302,6 +1302,22 @@ def _normalize_profile_id(raw_id: str | None) -> str:
     return _normalize_template_id(raw_id)
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off", ""}:
+            return False
+    return default
+
+
 def _template_profiles_path(settings: Settings) -> Path:
     return _template_path(settings).parent / "template_profiles.json"
 
@@ -1351,8 +1367,8 @@ def _profile_builtin_map() -> dict[str, dict[str, Any]]:
         record["profile_id"] = profile_id
         record["criteria"] = deepcopy(profile.get("criteria") if isinstance(profile.get("criteria"), dict) else {})
         record["label"] = str(profile.get("label") or profile_id.title())
-        record["enabled"] = bool(profile.get("enabled"))
-        record["locked"] = bool(profile.get("locked"))
+        record["enabled"] = _coerce_bool(profile.get("enabled"), default=True)
+        record["locked"] = _coerce_bool(profile.get("locked"), default=False)
         try:
             record["priority"] = int(profile.get("priority", 0))
         except (TypeError, ValueError):
@@ -1373,8 +1389,8 @@ def _profile_builtin_map() -> dict[str, dict[str, Any]]:
 def _profile_record_shape(record: dict[str, Any], builtin: dict[str, Any]) -> dict[str, Any]:
     shaped = deepcopy(builtin)
     shaped["label"] = str(record.get("label") or builtin.get("label") or shaped["profile_id"])
-    shaped["enabled"] = bool(record.get("enabled", builtin.get("enabled", True)))
-    shaped["locked"] = bool(builtin.get("locked", False))
+    shaped["enabled"] = _coerce_bool(record.get("enabled"), default=_coerce_bool(builtin.get("enabled"), default=True))
+    shaped["locked"] = _coerce_bool(builtin.get("locked"), default=False)
     try:
         shaped["priority"] = int(record.get("priority", builtin.get("priority", 0)))
     except (TypeError, ValueError):
@@ -1476,8 +1492,8 @@ def list_template_profiles(settings: Settings) -> list[dict[str, Any]]:
             {
                 "profile_id": profile_id,
                 "label": str(profile.get("label") or profile_id.title()),
-                "enabled": bool(profile.get("enabled")),
-                "locked": bool(profile.get("locked")),
+                "enabled": _coerce_bool(profile.get("enabled"), default=True),
+                "locked": _coerce_bool(profile.get("locked"), default=False),
                 "priority": int(profile.get("priority", 0)),
                 "criteria": deepcopy(profile.get("criteria") if isinstance(profile.get("criteria"), dict) else {}),
                 "template_name": str(meta.get("name") or f"{profile_id.title()} Template"),

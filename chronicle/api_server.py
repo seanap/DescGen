@@ -256,6 +256,21 @@ def _resolve_profile_id(raw_profile_id: str | None) -> str:
     return str(get_working_template_profile(settings).get("profile_id") or "default")
 
 
+def _parse_enabled_value(raw_value: object) -> bool:
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, (int, float)):
+        if int(raw_value) in {0, 1}:
+            return bool(int(raw_value))
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    raise ValueError("enabled must be a boolean (true/false).")
+
+
 @app.get("/health")
 def health() -> tuple[dict, int]:
     payload = _latest_payload()
@@ -585,14 +600,20 @@ def editor_profiles_get() -> tuple[dict, int]:
 def editor_profile_put(profile_id: str) -> tuple[dict, int]:
     body = request.get_json(silent=True) or {}
     enabled = body.get("enabled")
+    parsed_enabled: bool | None = None
+    if enabled is not None:
+        try:
+            parsed_enabled = _parse_enabled_value(enabled)
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 400
     priority = body.get("priority")
-    if enabled is None and priority is None:
+    if parsed_enabled is None and priority is None:
         return {"status": "error", "error": "Provide enabled and/or priority."}, 400
     try:
         updated = update_template_profile(
             settings,
             profile_id,
-            enabled=bool(enabled) if enabled is not None else None,
+            enabled=parsed_enabled,
             priority=int(priority) if priority is not None else None,
         )
     except ValueError as exc:

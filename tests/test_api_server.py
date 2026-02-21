@@ -313,6 +313,25 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(reset_response.status_code, 200)
         self.client.put("/editor/profiles/pet", json={"enabled": False})
 
+    def test_editor_profile_put_accepts_string_false(self) -> None:
+        response = self.client.put(
+            "/editor/profiles/long_run",
+            json={"enabled": "false"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "ok")
+        self.assertFalse(payload["profile"]["enabled"])
+
+    def test_editor_profile_put_rejects_invalid_enabled_value(self) -> None:
+        response = self.client.put(
+            "/editor/profiles/long_run",
+            json={"enabled": "not-a-bool"},
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertEqual(payload["status"], "error")
+
     def test_editor_repository_endpoints(self) -> None:
         list_response = self.client.get("/editor/repository/templates")
         self.assertEqual(list_response.status_code, 200)
