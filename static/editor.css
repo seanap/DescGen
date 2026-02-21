@@ -943,27 +943,31 @@ label[for="templateEditor"] {
   grid-template-rows: auto 1fr;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 12px 12px 56px;
+  padding: 12px 56px 12px 12px;
+  pointer-events: none;
 }
 
 .left-drawer.open {
   transform: translateX(0);
+  pointer-events: auto;
+}
+
+.left-drawer:not(.open) {
+  background: transparent;
+  border-right-color: transparent;
+  box-shadow: none;
 }
 
 .workspace-handles {
   position: absolute;
-  left: calc(100% - 44px);
+  right: 0;
   top: calc(var(--dg-shell-offset, 92px) + 8px);
   width: 44px;
   display: grid;
   gap: 8px;
   justify-items: stretch;
   z-index: 2;
-  transition: left 0.22s ease;
-}
-
-.left-drawer.open .workspace-handles {
-  left: 0;
+  pointer-events: auto;
 }
 
 .workspace-tab {
@@ -1382,11 +1386,11 @@ body[data-theme="dark"] .data-table thead th {
   .left-drawer {
     width: min(95vw, 95vw);
     transform: translateX(calc(-100% + 36px));
-    padding-left: 46px;
+    padding-right: 46px;
   }
 
   .workspace-handles {
-    left: calc(100% - 36px);
+    right: 0;
     top: calc(var(--dg-shell-offset, 138px) + 8px);
     width: 36px;
   }
