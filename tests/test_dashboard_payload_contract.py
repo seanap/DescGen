@@ -57,6 +57,7 @@ class TestDashboardPayloadContract(unittest.TestCase):
             required_root_keys = {
                 "source",
                 "generated_at",
+                "validated_at",
                 "years",
                 "types",
                 "type_meta",
@@ -65,6 +66,8 @@ class TestDashboardPayloadContract(unittest.TestCase):
                 "units",
                 "week_start",
                 "activities",
+                "intervals",
+                "intervals_year_type_metrics",
             }
             self.assertTrue(required_root_keys.issubset(payload.keys()))
 
@@ -90,6 +93,11 @@ class TestDashboardPayloadContract(unittest.TestCase):
 
             self.assertEqual(payload["units"], {"distance": "mi", "elevation": "ft"})
             self.assertIn(payload["week_start"], {"sunday", "monday"})
+            self.assertIsInstance(payload["intervals"], dict)
+            self.assertIn("enabled", payload["intervals"])
+            self.assertIn("records", payload["intervals"])
+            self.assertIn("matched_activities", payload["intervals"])
+            self.assertIsInstance(payload["intervals_year_type_metrics"], dict)
 
             self.assertIsInstance(payload["aggregates"], dict)
             for year_key, year_bucket in payload["aggregates"].items():
@@ -106,6 +114,15 @@ class TestDashboardPayloadContract(unittest.TestCase):
                         self.assertIsInstance(entry.get("elevation_gain"), float)
                         self.assertIsInstance(entry.get("activity_ids"), list)
                         self.assertTrue(all(isinstance(activity_id, str) for activity_id in entry["activity_ids"]))
+                        optional_metric_keys = (
+                            "avg_pace_mps",
+                            "avg_efficiency_factor",
+                            "avg_fitness",
+                            "avg_fatigue",
+                        )
+                        for metric_key in optional_metric_keys:
+                            if metric_key in entry:
+                                self.assertIsInstance(entry[metric_key], float)
 
             self.assertIsInstance(payload["activities"], list)
             self.assertEqual(len(payload["activities"]), 2)

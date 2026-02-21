@@ -64,4 +64,5 @@ http://localhost:1609
 
 ## Documentation
 - API docs: [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
+- Dashboard metrics reference: [`docs/DASHBOARD_METRICS.md`](docs/DASHBOARD_METRICS.md)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)

@@ -61,6 +61,18 @@ curl http://localhost:1609/service-metrics
 - Purpose: Dashboard JSON payload.
 - Query params:
   - `force=true` (optional) to force rebuild.
+- Response notes:
+  - Includes stale-while-revalidate hints when serving stale cache:
+    - `cache_state` (`stale` or `stale_revalidating`)
+    - `revalidating` (boolean)
+  - Includes Intervals metrics sections:
+    - `intervals` (enabled/records/matched_activities)
+    - `intervals_year_type_metrics` (year/type aggregate averages)
+  - Daily `aggregates` entries may include optional metric keys:
+    - `avg_pace_mps`
+    - `avg_efficiency_factor`
+    - `avg_fitness`
+    - `avg_fatigue`
 - Examples:
 ```bash
 curl http://localhost:1609/dashboard/data.json

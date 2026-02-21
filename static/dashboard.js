@@ -2323,18 +2323,18 @@ function buildYearMetricStatItems(totals, units, activeMetricKey) {
     : STAT_PLACEHOLDER;
   return [
     {
+      key: "moving_time",
+      label: "Total Time",
+      value: formatDuration(totals.moving_time),
+      filterable: totals.moving_time > 0,
+    },
+    {
       key: "distance",
       label: "Total Distance",
       value: totals.distance > 0
         ? formatDistance(totals.distance, units || { distance: "mi" })
         : STAT_PLACEHOLDER,
       filterable: totals.distance > 0,
-    },
-    {
-      key: "moving_time",
-      label: "Total Time",
-      value: formatDuration(totals.moving_time),
-      filterable: totals.moving_time > 0,
     },
     {
       key: "elevation_gain",
