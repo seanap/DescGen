@@ -2011,14 +2011,16 @@ function findRepositoryTemplateSummary(templateId) {
 }
 
 function setRepositoryFormValues(options = {}) {
-  const { name = "", author = "" } = options;
+  const { name = "", author = "", updateCurrent = false } = options;
   if (elements.repoTemplateNameInput) {
     elements.repoTemplateNameInput.value = String(name || "").trim();
   }
   if (elements.repoTemplateAuthorInput) {
     elements.repoTemplateAuthorInput.value = String(author || "").trim();
   }
-  updateCurrentTemplateDisplay(String(name || "").trim());
+  if (updateCurrent) {
+    updateCurrentTemplateDisplay(String(name || "").trim());
+  }
 }
 
 function renderRepositoryMeta(record = null) {
@@ -2137,7 +2139,7 @@ async function loadRepositoryTemplateIntoEditor(templateId, options = {}) {
   }
   setEditorText(record.template || "");
   setEditorDirty(false);
-  setRepositoryFormValues({ name: record.name, author: record.author });
+  setRepositoryFormValues({ name: record.name, author: record.author, updateCurrent: true });
   renderRepositoryMeta(record);
   switchTab("advanced");
   setStatus(`Loaded repository template: ${record.name || targetId}`, "ok");
@@ -3131,12 +3133,6 @@ function bindUI() {
       }
     });
   }
-  if (elements.repoTemplateNameInput) {
-    elements.repoTemplateNameInput.addEventListener("input", () => {
-      updateCurrentTemplateDisplay(elements.repoTemplateNameInput.value || "");
-    });
-  }
-
   document.getElementById("btnSimpleApply").addEventListener("click", () => {
     setEditorText(buildTemplateFromSimple());
     setEditorDirty(true);
