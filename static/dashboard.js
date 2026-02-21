@@ -1425,6 +1425,19 @@ function heatColor(hex, value, max) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+function updateMetricRange(metricRangeByKey, key, value) {
+  if (!metricRangeByKey || !key) return;
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return;
+  const current = metricRangeByKey[key];
+  if (!current) {
+    metricRangeByKey[key] = { min: numeric, max: numeric };
+    return;
+  }
+  if (numeric < current.min) current.min = numeric;
+  if (numeric > current.max) current.max = numeric;
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -3035,6 +3048,9 @@ function buildHeatmapArea(aggregates, year, units, colors, type, layout, options
     : metricHeatmapKey
     ? Number(options.metricMaxByKey?.[metricHeatmapKey] || 0)
     : 0;
+  const metricRange = metricHeatmapKey && options.metricRangeByKey
+    ? options.metricRangeByKey[metricHeatmapKey]
+    : null;
   const metricHeatmapActive = Boolean(metricHeatmapKey);
   const metricHeatmapColor = options.metricHeatmapColor || colors[4];
   const metricHeatmapEmptyColor = options.metricHeatmapEmptyColor || DEFAULT_COLORS[0];
@@ -3108,9 +3124,21 @@ function buildHeatmapArea(aggregates, year, units, colors, type, layout, options
         : metricHeatmapKey === PACE_METRIC_KEY
         ? derivePaceMpsFromEntry(entry)
         : Number(entry[metricHeatmapKey] || 0);
+      let scaledMetricValue = metricValue;
+      let scaledMetricMax = metricHeatmapMax;
+      if (
+        metricHeatmapKey !== ACTIVE_DAYS_METRIC_KEY
+        && metricRange
+        && Number.isFinite(Number(metricRange.min))
+        && Number.isFinite(Number(metricRange.max))
+        && Number(metricRange.max) > Number(metricRange.min)
+      ) {
+        scaledMetricValue = metricValue > 0 ? Math.max(0, metricValue - Number(metricRange.min)) : 0;
+        scaledMetricMax = Math.max(0, Number(metricRange.max) - Number(metricRange.min));
+      }
       cell.style.backgroundImage = "none";
       cell.style.background = metricValue > 0
-        ? heatColor(metricHeatmapColor, metricValue, metricHeatmapMax)
+        ? heatColor(metricHeatmapColor, scaledMetricValue, scaledMetricMax)
         : metricHeatmapEmptyColor;
     } else if (filled && typeof options.colorForEntry === "function") {
       const entryColor = options.colorForEntry(entry);
@@ -3418,10 +3446,12 @@ function buildCard(type, year, aggregates, units, options = {}) {
     [FITNESS_METRIC_KEY]: 0,
     [FATIGUE_METRIC_KEY]: 0,
   };
+  const metricRangeByKey = {};
   const layout = getLayout();
   const heatmapOptions = {
     ...options,
     metricMaxByKey,
+    metricRangeByKey,
     metricHeatmapColor,
     metricHeatmapEmptyColor: DEFAULT_COLORS[0],
   };
@@ -3461,20 +3491,27 @@ function buildCard(type, year, aggregates, units, options = {}) {
     metricMaxByKey.distance = Math.max(metricMaxByKey.distance, Number(entry.distance || 0));
     metricMaxByKey.moving_time = Math.max(metricMaxByKey.moving_time, Number(entry.moving_time || 0));
     metricMaxByKey.elevation_gain = Math.max(metricMaxByKey.elevation_gain, Number(entry.elevation_gain || 0));
+    updateMetricRange(metricRangeByKey, "distance", entry.distance);
+    updateMetricRange(metricRangeByKey, "moving_time", entry.moving_time);
+    updateMetricRange(metricRangeByKey, "elevation_gain", entry.elevation_gain);
     const entryPace = derivePaceMpsFromEntry(entry);
     metricMaxByKey[PACE_METRIC_KEY] = Math.max(metricMaxByKey[PACE_METRIC_KEY], entryPace);
+    updateMetricRange(metricRangeByKey, PACE_METRIC_KEY, entryPace);
     metricMaxByKey[EFFICIENCY_METRIC_KEY] = Math.max(
       metricMaxByKey[EFFICIENCY_METRIC_KEY],
       Number(entry[EFFICIENCY_METRIC_KEY] || 0),
     );
+    updateMetricRange(metricRangeByKey, EFFICIENCY_METRIC_KEY, entry[EFFICIENCY_METRIC_KEY]);
     metricMaxByKey[FITNESS_METRIC_KEY] = Math.max(
       metricMaxByKey[FITNESS_METRIC_KEY],
       Number(entry[FITNESS_METRIC_KEY] || 0),
     );
+    updateMetricRange(metricRangeByKey, FITNESS_METRIC_KEY, entry[FITNESS_METRIC_KEY]);
     metricMaxByKey[FATIGUE_METRIC_KEY] = Math.max(
       metricMaxByKey[FATIGUE_METRIC_KEY],
       Number(entry[FATIGUE_METRIC_KEY] || 0),
     );
+    updateMetricRange(metricRangeByKey, FATIGUE_METRIC_KEY, entry[FATIGUE_METRIC_KEY]);
 
     const dayWeightSeconds = Number(entry.moving_time || 0);
     const dayCount = Number(entry.count || 0);
