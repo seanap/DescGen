@@ -522,6 +522,9 @@ function closeDrawer() {
 function setWorkspaceMode(mode) {
   const nextMode = mode === "profile" ? "profile" : "template";
   state.workspaceMode = nextMode;
+  if (elements.leftDrawer) {
+    elements.leftDrawer.dataset.workspaceMode = nextMode;
+  }
 
   if (elements.drawerTitle) {
     elements.drawerTitle.textContent = nextMode === "profile" ? "Profile Workshop" : "Template Workshop";
@@ -550,14 +553,21 @@ function openDrawer(mode = state.workspaceMode) {
 }
 
 async function openProfileWorkspace() {
+  const isOpen = elements.leftDrawer?.classList.contains("open");
+  if (isOpen && state.workspaceMode === "profile") {
+    closeDrawer();
+    return;
+  }
   openDrawer("profile");
   await loadProfiles();
-  if (elements.profileWorkspaceSection) {
-    elements.profileWorkspaceSection.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 }
 
 function openTemplateWorkspace() {
+  const isOpen = elements.leftDrawer?.classList.contains("open");
+  if (isOpen && state.workspaceMode === "template") {
+    closeDrawer();
+    return;
+  }
   openDrawer("template");
 }
 

@@ -24,6 +24,10 @@
   <div class="bg-shape bg-shape-b"></div>
 
   <aside id="leftDrawer" class="left-drawer" aria-hidden="true">
+    <div class="workspace-handles">
+      <button id="btnProfileDrawerToggle" class="workspace-tab workspace-tab-profile" type="button" aria-label="Open profile workspace">Profile Workshop</button>
+      <button id="btnDrawerToggle" class="workspace-tab workspace-tab-template" type="button" aria-label="Open template workspace">Template Workshop</button>
+    </div>
     <div class="drawer-head">
       <h2 id="drawerTitle">Template Workshop</h2>
       <button id="btnDrawerClose" class="btn btn-ghost" type="button">Close</button>
@@ -143,8 +147,6 @@
     <main class="main-layout">
       <section class="workspace-row">
         <section class="panel card editor-panel reveal" style="--delay:0.03s">
-          <button id="btnProfileDrawerToggle" class="workspace-tab workspace-tab-profile" type="button" aria-label="Open profile workspace">Profile Workshop</button>
-          <button id="btnDrawerToggle" class="workspace-tab workspace-tab-template" type="button" aria-label="Open template workspace">Template Workshop</button>
           <div class="template-current-line">
             <div class="template-current-cell">
               <span class="stack-label">Current Profile</span>
