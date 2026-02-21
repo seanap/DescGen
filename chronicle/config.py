@@ -156,6 +156,8 @@ class Settings:
     api_timeout_seconds: int
     worker_health_max_age_seconds: int
     run_lock_ttl_seconds: int
+    job_max_attempts: int
+    job_retry_delay_seconds: int
     service_retry_count: int
     service_retry_backoff_seconds: int
     service_cooldown_base_seconds: int
@@ -260,6 +262,8 @@ class Settings:
             api_timeout_seconds=_int_env("API_TIMEOUT_SECONDS", 120, minimum=30, maximum=600),
             worker_health_max_age_seconds=_int_env("WORKER_HEALTH_MAX_AGE_SECONDS", 900, minimum=60, maximum=86400),
             run_lock_ttl_seconds=_int_env("RUN_LOCK_TTL_SECONDS", 900, minimum=30, maximum=7200),
+            job_max_attempts=_int_env("JOB_MAX_ATTEMPTS", 3, minimum=1, maximum=20),
+            job_retry_delay_seconds=_int_env("JOB_RETRY_DELAY_SECONDS", 300, minimum=30, maximum=86400),
             service_retry_count=_int_env("SERVICE_RETRY_COUNT", 2, minimum=0, maximum=5),
             service_retry_backoff_seconds=_int_env("SERVICE_RETRY_BACKOFF_SECONDS", 2, minimum=1, maximum=120),
             service_cooldown_base_seconds=_int_env("SERVICE_COOLDOWN_BASE_SECONDS", 60, minimum=5, maximum=3600),

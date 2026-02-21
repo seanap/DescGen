@@ -38,13 +38,20 @@ from .stat_modules.garmin_metrics import fetch_training_status_and_scores
 from .stat_modules.garmin_metrics import get_activity_context_for_strava_activity
 from .storage import (
     acquire_runtime_lock,
+    claim_activity_job,
+    complete_activity_job_run,
     delete_runtime_value,
+    enqueue_activity_job,
     get_runtime_lock_owner,
     get_runtime_value,
     is_activity_processed,
     mark_activity_processed,
+    record_activity_output,
+    register_activity_discovery,
     release_runtime_lock,
+    start_activity_job_run,
     set_runtime_value,
+    write_config_snapshot,
     write_json,
 )
 from .template_profiles import list_template_profiles
@@ -2065,6 +2072,31 @@ def _collect_crono_context(
     return crono_summary, format_crono_line(crono_summary)
 
 
+def _is_retryable_run_error(exc: Exception) -> bool:
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    text = str(exc).strip().lower()
+    if not text:
+        return False
+    retry_tokens = (
+        "timeout",
+        "timed out",
+        "temporarily unavailable",
+        "too many requests",
+        "connection reset",
+        "connection aborted",
+        "connection refused",
+        "dns",
+        "name resolution",
+        "http 429",
+        "http 500",
+        "http 502",
+        "http 503",
+        "http 504",
+    )
+    return any(token in text for token in retry_tokens)
+
+
 def run_once(force_update: bool = False, activity_id: int | None = None) -> dict[str, Any]:
     settings = Settings.from_env()
     settings.validate()
@@ -2074,6 +2106,8 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
     lock_owner = f"{uuid.uuid4()}:{int(time.time())}"
     lock_name = "run_once"
     selected_activity_id: int | None = None
+    job_id: str | None = None
+    run_id: str | None = None
     service_state = _new_cycle_service_state(settings)
 
     if not acquire_runtime_lock(
@@ -2096,6 +2130,18 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
 
     try:
         logger.info("Starting update cycle.")
+        write_config_snapshot(
+            settings.processed_log_file,
+            "run_once",
+            {
+                "force_update": bool(force_update),
+                "activity_id": int(activity_id) if activity_id is not None else None,
+                "timezone": settings.timezone,
+                "poll_interval_seconds": settings.poll_interval_seconds,
+                "job_max_attempts": settings.job_max_attempts,
+                "job_retry_delay_seconds": settings.job_retry_delay_seconds,
+            },
+        )
         strava_client = StravaClient(settings)
 
         activities = _run_required_call(
@@ -2110,6 +2156,19 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             result = {"status": "no_activities"}
             _record_cycle_status(settings, status=result["status"])
             return result
+
+        for item in activities:
+            if not isinstance(item, dict):
+                continue
+            activity_value = item.get("id")
+            if activity_value is None:
+                continue
+            register_activity_discovery(
+                settings.processed_log_file,
+                activity_value,
+                sport_type=item.get("sport_type") if isinstance(item.get("sport_type"), str) else None,
+                start_date_utc=item.get("start_date") if isinstance(item.get("start_date"), str) else None,
+            )
 
         latest, selected, selection_result = _select_strava_activity(
             settings,
@@ -2129,6 +2188,37 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             raise RuntimeError("Failed to resolve target activity.")
 
         selected_activity_id = int(selected["id"])
+        job_id = enqueue_activity_job(
+            settings.processed_log_file,
+            selected_activity_id,
+            request_kind=(
+                "manual_activity"
+                if activity_id is not None
+                else ("manual_latest" if force_update else "auto_poll")
+            ),
+            requested_by="manual" if (force_update or activity_id is not None) else "worker",
+            force_update=bool(force_update),
+            priority=10 if (force_update or activity_id is not None) else 100,
+            max_attempts=settings.job_max_attempts,
+        )
+        if not job_id:
+            raise RuntimeError(f"Failed to enqueue activity job for {selected_activity_id}")
+        if not claim_activity_job(
+            settings.processed_log_file,
+            job_id,
+            owner=lock_owner,
+            lease_seconds=settings.run_lock_ttl_seconds,
+        ):
+            raise RuntimeError(f"Failed to claim queued activity job {job_id}")
+        started = start_activity_job_run(
+            settings.processed_log_file,
+            job_id,
+            owner=lock_owner,
+        )
+        if not started:
+            raise RuntimeError(f"Failed to start activity job run for {job_id}")
+        run_id = str(started["run_id"])
+
         detailed_activity = _run_required_call(
             settings,
             "strava.get_activity_details",
@@ -2137,6 +2227,26 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             service_state=service_state,
         )
         selected.setdefault("start_date", detailed_activity.get("start_date"))
+        register_activity_discovery(
+            settings.processed_log_file,
+            selected_activity_id,
+            sport_type=(
+                detailed_activity.get("sport_type")
+                if isinstance(detailed_activity.get("sport_type"), str)
+                else (
+                    selected.get("sport_type")
+                    if isinstance(selected.get("sport_type"), str)
+                    else None
+                )
+            ),
+            start_date_utc=(
+                detailed_activity.get("start_date")
+                if isinstance(detailed_activity.get("start_date"), str)
+                else (
+                    selected.get("start_date") if isinstance(selected.get("start_date"), str) else None
+                )
+            ),
+        )
 
         if selected_activity_id != int(latest["id"]):
             logger.info(
@@ -2285,12 +2395,13 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             logger.error("Template render failed for profile %s: %s", profile_id, error_text)
             raise RuntimeError(f"Template render failed for profile '{profile_id}': {error_text}")
 
+        update_payload = _profile_activity_update_payload(profile_id, detailed_activity, description)
         _run_required_call(
             settings,
             "strava.update_activity",
             strava_client.update_activity,
             selected_activity_id,
-            _profile_activity_update_payload(profile_id, detailed_activity, description),
+            update_payload,
             service_state=service_state,
         )
 
@@ -2326,6 +2437,27 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
 
         logger.info("Activity %s updated successfully.", selected_activity_id)
         result = {"status": "updated", "activity_id": selected_activity_id}
+        if job_id and run_id:
+            complete_activity_job_run(
+                settings.processed_log_file,
+                job_id,
+                run_id,
+                owner=lock_owner,
+                outcome="succeeded",
+                result=result,
+            )
+        record_activity_output(
+            settings.processed_log_file,
+            selected_activity_id,
+            state="succeeded",
+            result_status=result["status"],
+            profile_id=profile_id,
+            title=str(update_payload.get("name") or "").strip() or None,
+            description=description,
+            job_id=job_id,
+            run_id=run_id,
+            error=None,
+        )
         _record_cycle_status(
             settings,
             status=result["status"],
@@ -2333,6 +2465,28 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         )
         return result
     except Exception as exc:
+        if selected_activity_id is not None:
+            outcome = "retry_wait" if _is_retryable_run_error(exc) else "failed_permanent"
+            if job_id and run_id:
+                complete_activity_job_run(
+                    settings.processed_log_file,
+                    job_id,
+                    run_id,
+                    owner=lock_owner,
+                    outcome=outcome,
+                    error=str(exc),
+                    result={"status": "error", "error": str(exc)},
+                    retry_delay_seconds=settings.job_retry_delay_seconds,
+                )
+            record_activity_output(
+                settings.processed_log_file,
+                selected_activity_id,
+                state=outcome,
+                result_status="error",
+                job_id=job_id,
+                run_id=run_id,
+                error=str(exc),
+            )
         _record_cycle_status(
             settings,
             status="error",

@@ -21,6 +21,7 @@ class TestDashboardData(unittest.TestCase):
                 "STRAVA_CLIENT_ID": "test-client-id",
                 "STRAVA_CLIENT_SECRET": "test-client-secret",
                 "STRAVA_REFRESH_TOKEN": "test-refresh-token",
+                "DASHBOARD_WEEK_START": "sunday",
             },
             clear=False,
         ):
@@ -54,7 +55,8 @@ class TestDashboardData(unittest.TestCase):
             with mock.patch("chronicle.dashboard_data.StravaClient") as mock_client_cls:
                 mock_client = mock_client_cls.return_value
                 mock_client.get_activities_after.return_value = fake_activities
-                payload = get_dashboard_payload(settings, force_refresh=True)
+                with mock.patch.dict(os.environ, {"DASHBOARD_WEEK_START": "sunday"}, clear=False):
+                    payload = get_dashboard_payload(settings, force_refresh=True)
 
             self.assertEqual(payload["source"], "strava")
             self.assertIn("generated_at", payload)

@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 try:
     import chronicle.api_server as api_server
@@ -232,8 +233,18 @@ class TestApiServer(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)
 
-            missing_response = self.client.post("/setup/api/strava/oauth/start", json={})
-            self.assertEqual(missing_response.status_code, 400)
+            with patch.dict(
+                os.environ,
+                {
+                    "STRAVA_CLIENT_ID": "",
+                    "STRAVA_CLIENT_SECRET": "",
+                    "CLIENT_ID": "",
+                    "CLIENT_SECRET": "",
+                },
+                clear=False,
+            ):
+                missing_response = self.client.post("/setup/api/strava/oauth/start", json={})
+                self.assertEqual(missing_response.status_code, 400)
 
             self.client.put(
                 "/setup/api/config",

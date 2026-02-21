@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .config import Settings
 from .activity_pipeline import run_once
 from .dashboard_data import get_dashboard_payload
-from .storage import set_runtime_value, set_worker_heartbeat
+from .storage import requeue_expired_jobs, set_runtime_value, set_worker_heartbeat
 
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,11 @@ def main() -> None:
     while True:
         now_utc = datetime.now(timezone.utc)
         set_worker_heartbeat(settings.processed_log_file, now_utc)
+        requeued_expired = requeue_expired_jobs(settings.processed_log_file, now_utc=now_utc)
+        if requeued_expired > 0:
+            logger.warning("Requeued %s expired job(s).", requeued_expired)
+            set_runtime_value(settings.processed_log_file, "worker.last_requeued_jobs", requeued_expired)
+            set_runtime_value(settings.processed_log_file, "worker.last_requeued_at_utc", now_utc.isoformat())
         now_local = datetime.now(local_tz)
         if settings.enable_quiet_hours and _in_quiet_hours(
             now_local.hour,
