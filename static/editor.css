@@ -1240,6 +1240,11 @@ label[for="templateEditor"] {
     transition-duration: 0s !important;
     scroll-behavior: auto !important;
   }
+
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 body[data-theme="dark"] .data-table thead th {

@@ -49,6 +49,11 @@ cp .env.example .env
 docker compose up -d
 ```
 
+If you are upgrading from older `DescGen` / `Auto-Stat-Description` setups, verify your `.env` contains:
+```bash
+DOCKER_IMAGE=seanap/chronicle:latest
+```
+
 ### Step 4: Open the app
 ```bash
 http://localhost:1609
@@ -65,4 +70,3 @@ http://localhost:1609
 
 ## Documentation
 - API docs: [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
-
