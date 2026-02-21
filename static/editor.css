@@ -289,44 +289,6 @@ h3 {
   position: relative;
 }
 
-.workspace-tab {
-  position: fixed;
-  left: 0;
-  top: calc(var(--dg-shell-offset, 92px) + 286px);
-  border: 1px solid var(--line);
-  border-left: 0;
-  border-radius: 0 12px 12px 0;
-  background: color-mix(in srgb, var(--panel) 92%, var(--panel-soft));
-  color: var(--secondary);
-  padding: 10px 6px;
-  min-height: 170px;
-  width: 38px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  cursor: pointer;
-  box-shadow: var(--shadow);
-  z-index: 58;
-}
-
-.workspace-tab.workspace-tab-profile {
-  top: calc(var(--dg-shell-offset, 92px) + 108px);
-}
-
-.workspace-tab:hover {
-  background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
-}
-
-.workspace-tab.is-active {
-  color: #ffd1b4;
-  border-color: color-mix(in srgb, var(--line) 55%, var(--secondary));
-  background: linear-gradient(180deg, rgba(252, 76, 2, 0.28), rgba(252, 76, 2, 0.14));
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.48);
-}
-
 .preview-head {
   display: flex;
   justify-content: space-between;
@@ -969,23 +931,69 @@ label[for="templateEditor"] {
   position: fixed;
   top: 0;
   left: 0;
-  width: min(420px, 92vw);
+  width: min(460px, 94vw);
   height: 100vh;
   background: color-mix(in srgb, var(--panel) 94%, #080808);
   border-right: 1px solid var(--line);
   box-shadow: var(--shadow);
-  transform: translateX(-102%);
+  transform: translateX(calc(-100% + 44px));
   transition: transform 0.22s ease;
-  z-index: 60;
+  z-index: 120;
   display: grid;
   grid-template-rows: auto 1fr;
-  overflow: auto;
+  overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  padding: 12px 12px 12px 56px;
 }
 
 .left-drawer.open {
   transform: translateX(0);
+}
+
+.workspace-handles {
+  position: absolute;
+  left: calc(100% - 44px);
+  top: calc(var(--dg-shell-offset, 92px) + 8px);
+  width: 44px;
+  display: grid;
+  gap: 8px;
+  justify-items: stretch;
+  z-index: 2;
+  transition: left 0.22s ease;
+}
+
+.left-drawer.open .workspace-handles {
+  left: 0;
+}
+
+.workspace-tab {
+  border: 1px solid rgba(252, 76, 2, 0.68);
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in srgb, var(--panel) 90%, #0f0f0f);
+  color: #ffc29a;
+  padding: 10px 7px;
+  min-height: 170px;
+  width: 44px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.workspace-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(252, 76, 2, 0.75);
+}
+
+.workspace-tab.is-active {
+  border-color: rgba(252, 76, 2, 0.68);
+  background: color-mix(in srgb, var(--panel) 90%, #0f0f0f);
+  color: #ffc29a;
 }
 
 .drawer-head {
@@ -1008,6 +1016,20 @@ label[for="templateEditor"] {
 
 .drawer-workspace {
   min-width: 0;
+}
+
+.left-drawer[data-workspace-mode="profile"] .drawer-section[data-workspace-scope="profile"] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.left-drawer[data-workspace-mode="profile"] #profileList.catalog {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .left-drawer .meta,
@@ -1063,7 +1085,7 @@ label[for="templateEditor"] {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
-  z-index: 55;
+  z-index: 110;
 }
 
 .drawer-backdrop.open {
@@ -1357,16 +1379,23 @@ body[data-theme="dark"] .data-table thead th {
     grid-template-columns: 1fr;
   }
 
-  .workspace-tab {
-    left: 0;
-    width: 30px;
-    min-height: 146px;
-    font-size: 0.66rem;
-    top: calc(var(--dg-shell-offset, 138px) + 232px);
+  .left-drawer {
+    width: min(95vw, 95vw);
+    transform: translateX(calc(-100% + 36px));
+    padding-left: 46px;
   }
 
-  .workspace-tab.workspace-tab-profile {
-    top: calc(var(--dg-shell-offset, 138px) + 96px);
+  .workspace-handles {
+    left: calc(100% - 36px);
+    top: calc(var(--dg-shell-offset, 138px) + 8px);
+    width: 36px;
+  }
+
+  .workspace-tab {
+    width: 36px;
+    min-height: 146px;
+    font-size: 0.66rem;
+    padding: 9px 5px;
   }
 
   .repository-select-row,
