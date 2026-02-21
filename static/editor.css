@@ -941,8 +941,7 @@ label[for="templateEditor"] {
   z-index: 120;
   display: grid;
   grid-template-rows: auto 1fr;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   padding: 12px 56px 12px 12px;
   pointer-events: none;
 }
@@ -950,12 +949,24 @@ label[for="templateEditor"] {
 .left-drawer.open {
   transform: translateX(0);
   pointer-events: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .left-drawer:not(.open) {
   background: transparent;
   border-right-color: transparent;
   box-shadow: none;
+  scrollbar-width: none;
+}
+
+.left-drawer:not(.open) .drawer-head,
+.left-drawer:not(.open) .drawer-workspace {
+  visibility: hidden;
+}
+
+.left-drawer:not(.open)::-webkit-scrollbar {
+  display: none;
 }
 
 .workspace-handles {
