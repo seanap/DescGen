@@ -4135,6 +4135,7 @@ async function init() {
   if (!payload || typeof payload !== "object") {
     throw new Error("Invalid dashboard data format.");
   }
+  const payloadRevalidating = Boolean(payload.revalidating);
   const repoCandidate = payloadRepoCandidate(payload);
   const profileUrl = payloadProfileUrl(payload);
   const sourceValue = payloadSource(payload);
@@ -4893,7 +4894,11 @@ async function init() {
   syncUnitToggleState();
   update();
   const activityCount = Array.isArray(payload.activities) ? payload.activities.length : 0;
-  setDashboardTopStatus(`Ready (${activityCount} activities)`, "ok");
+  if (payloadRevalidating) {
+    setDashboardTopStatus(`Ready (${activityCount} activities) • Refreshing in background`, "ok");
+  } else {
+    setDashboardTopStatus(`Ready (${activityCount} activities)`, "ok");
+  }
 
   if (!useTouchInteractions && typeof window.ResizeObserver === "function" && !tooltipResizeObserver) {
     tooltipResizeObserver = new window.ResizeObserver(() => {

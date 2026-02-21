@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Settings
 from .activity_pipeline import run_once
-from .dashboard_data import get_dashboard_payload
+from .dashboard_data import ensure_dashboard_cache_warm, get_dashboard_payload
 from .storage import requeue_expired_jobs, set_runtime_value, set_worker_heartbeat
 
 
@@ -70,6 +70,15 @@ def main() -> None:
 
     logger.info("Worker started with poll interval: %ss", interval)
     set_runtime_value(settings.processed_log_file, "worker.started_at_utc", datetime.now(timezone.utc).isoformat())
+    try:
+        warm_payload = ensure_dashboard_cache_warm(settings)
+        warm_count = len(warm_payload.get("activities", [])) if isinstance(warm_payload, dict) else 0
+        set_runtime_value(settings.processed_log_file, "worker.dashboard_warm_status", "ok")
+        set_runtime_value(settings.processed_log_file, "worker.dashboard_warm_activity_count", warm_count)
+        set_runtime_value(settings.processed_log_file, "worker.dashboard_warm_at_utc", datetime.now(timezone.utc).isoformat())
+    except Exception as exc:
+        set_runtime_value(settings.processed_log_file, "worker.dashboard_warm_status", f"error:{exc}")
+        logger.warning("Dashboard warmup failed: %s", exc)
     if settings.enable_quiet_hours:
         logger.info(
             "Quiet hours enabled: %02d:00-%02d:00 (%s)",

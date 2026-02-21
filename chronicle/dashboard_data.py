@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 import re
+import threading
+import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .config import Settings
-from .storage import read_json, write_json
+from .storage import (
+    acquire_runtime_lock,
+    read_json,
+    release_runtime_lock,
+    set_runtime_value,
+    write_json,
+)
 from .strava_client import MAX_ACTIVITY_PAGES, StravaClient
 
 
@@ -21,6 +30,8 @@ DEFAULT_WEEK_START = "sunday"
 DEFAULT_UNITS = {"distance": "mi", "elevation": "ft"}
 DEFAULT_OTHER_BUCKET = "OtherSports"
 DEFAULT_HISTORY_START = datetime(1970, 1, 1, tzinfo=timezone.utc)
+DEFAULT_REFRESH_LOCK_TTL_SECONDS = 300
+REFRESH_LOCK_NAME = "dashboard.refresh"
 
 TYPE_LABEL_OVERRIDES = {
     "HighIntensityIntervalTraining": "HITT",
@@ -47,6 +58,10 @@ FALLBACK_ACCENTS = [
     "#cdb4db",
 ]
 
+_REFRESH_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="dashboard-refresh")
+_REFRESH_FUTURE: concurrent.futures.Future | None = None
+_REFRESH_GUARD = threading.Lock()
+
 
 def _to_bool(value: object) -> bool:
     normalized = str(value or "").strip().lower()
@@ -66,6 +81,53 @@ def _parse_iso_datetime(raw_value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _payload_latest_marker(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    latest_id_raw = payload.get("latest_activity_id")
+    latest_date_raw = payload.get("latest_activity_start_date")
+    latest_id = str(latest_id_raw).strip() if latest_id_raw is not None else ""
+    latest_date = str(latest_date_raw).strip() if latest_date_raw is not None else ""
+    return (latest_id or None, latest_date or None)
+
+
+def _fetch_latest_activity_marker(settings: Settings) -> tuple[str | None, str | None]:
+    client = StravaClient(settings)
+    activities = client.get_recent_activities(per_page=1)
+    if not activities:
+        return (None, None)
+    first = activities[0] if isinstance(activities[0], dict) else {}
+    latest_id_raw = first.get("id")
+    latest_id = str(latest_id_raw).strip() if latest_id_raw is not None else ""
+    latest_start_raw = first.get("start_date") or first.get("start_date_local")
+    latest_start = str(latest_start_raw).strip() if latest_start_raw is not None else ""
+    return (latest_id or None, latest_start or None)
+
+
+def _cache_is_current_for_latest_activity(cached_payload: dict[str, Any], marker: tuple[str | None, str | None]) -> bool:
+    cached_marker = _payload_latest_marker(cached_payload)
+    marker_id, _marker_start = marker
+    cached_id, _cached_start = cached_marker
+    return bool(marker_id and cached_id and marker_id == cached_id)
+
+
+def _touch_cached_payload_validation(
+    cached_payload: dict[str, Any],
+    marker: tuple[str | None, str | None] | None = None,
+) -> dict[str, Any]:
+    payload = dict(cached_payload)
+    payload["validated_at"] = _now_iso()
+    marker_value = marker if marker is not None else _payload_latest_marker(payload)
+    latest_id, latest_start = marker_value
+    if latest_id:
+        payload["latest_activity_id"] = latest_id
+    if latest_start:
+        payload["latest_activity_start_date"] = latest_start
+    return payload
 
 
 def _normalize_week_start(value: object) -> str:
@@ -127,10 +189,12 @@ def dashboard_data_path(settings: Settings) -> Path:
 def _is_payload_fresh(payload: dict[str, Any], *, max_age_seconds: int) -> bool:
     if max_age_seconds <= 0:
         return False
-    generated_at = _parse_iso_datetime(payload.get("generated_at"))
-    if generated_at is None:
+    freshness_anchor = _parse_iso_datetime(payload.get("validated_at")) or _parse_iso_datetime(
+        payload.get("generated_at")
+    )
+    if freshness_anchor is None:
         return False
-    age_seconds = (datetime.now(timezone.utc) - generated_at).total_seconds()
+    age_seconds = (datetime.now(timezone.utc) - freshness_anchor).total_seconds()
     return age_seconds <= max_age_seconds
 
 
@@ -212,10 +276,27 @@ def _normalize_activity(item: dict[str, Any]) -> dict[str, Any] | None:
     return normalized
 
 
-def build_dashboard_payload(settings: Settings) -> dict[str, Any]:
+def build_dashboard_payload(
+    settings: Settings,
+    *,
+    latest_marker: tuple[str | None, str | None] | None = None,
+) -> dict[str, Any]:
     client = StravaClient(settings)
     after_dt = _dashboard_history_start()
     raw_activities = client.get_activities_after(after_dt, per_page=200)
+    marker = latest_marker
+    if marker is None:
+        derived_id: str | None = None
+        derived_start: str | None = None
+        if raw_activities and isinstance(raw_activities[0], dict):
+            first = raw_activities[0]
+            raw_id = first.get("id")
+            derived_id = str(raw_id).strip() if raw_id is not None else None
+            raw_start = first.get("start_date") or first.get("start_date_local")
+            derived_start = str(raw_start).strip() if raw_start is not None else None
+        marker = (derived_id or None, derived_start or None)
+        if marker == (None, None):
+            marker = _fetch_latest_activity_marker(settings)
 
     deduped_by_id: dict[str, dict[str, Any]] = {}
     for raw in raw_activities:
@@ -278,9 +359,11 @@ def build_dashboard_payload(settings: Settings) -> dict[str, Any]:
         "elevation": _normalize_elevation_unit(os.getenv("DASHBOARD_ELEVATION_UNIT", DEFAULT_UNITS["elevation"])),
     }
 
+    generated_at_iso = _now_iso()
     payload: dict[str, Any] = {
         "source": "strava",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": generated_at_iso,
+        "validated_at": generated_at_iso,
         "years": years,
         "types": types,
         "other_bucket": DEFAULT_OTHER_BUCKET,
@@ -303,6 +386,12 @@ def build_dashboard_payload(settings: Settings) -> dict[str, Any]:
         ],
     }
 
+    latest_activity_id, latest_activity_start_date = marker
+    if latest_activity_id:
+        payload["latest_activity_id"] = latest_activity_id
+    if latest_activity_start_date:
+        payload["latest_activity_start_date"] = latest_activity_start_date
+
     profile_url = str(os.getenv("DASHBOARD_STRAVA_PROFILE_URL", "")).strip()
     if profile_url:
         payload["profile_url"] = profile_url
@@ -321,9 +410,11 @@ def build_dashboard_payload(settings: Settings) -> dict[str, Any]:
 
 def _empty_payload(*, error: str | None = None) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     payload: dict[str, Any] = {
         "source": "strava",
-        "generated_at": now.isoformat(),
+        "generated_at": now_iso,
+        "validated_at": now_iso,
         "years": [now.year],
         "types": [],
         "other_bucket": DEFAULT_OTHER_BUCKET,
@@ -338,27 +429,137 @@ def _empty_payload(*, error: str | None = None) -> dict[str, Any]:
     return payload
 
 
+def _refresh_lock_ttl_seconds() -> int:
+    raw = str(os.getenv("DASHBOARD_REFRESH_LOCK_TTL_SECONDS", DEFAULT_REFRESH_LOCK_TTL_SECONDS)).strip()
+    try:
+        ttl = int(raw)
+    except ValueError:
+        ttl = DEFAULT_REFRESH_LOCK_TTL_SECONDS
+    return max(30, ttl)
+
+
+def _build_and_persist_payload(
+    settings: Settings,
+    data_path: Path,
+    *,
+    latest_marker: tuple[str | None, str | None] | None = None,
+) -> dict[str, Any]:
+    payload = build_dashboard_payload(settings, latest_marker=latest_marker)
+    write_json(data_path, payload)
+    return payload
+
+
+def _smart_revalidate_payload(settings: Settings, data_path: Path, cached_payload: dict[str, Any]) -> dict[str, Any]:
+    latest_marker = _fetch_latest_activity_marker(settings)
+    if _cache_is_current_for_latest_activity(cached_payload, latest_marker):
+        touched = _touch_cached_payload_validation(cached_payload, latest_marker)
+        write_json(data_path, touched)
+        return touched
+    return _build_and_persist_payload(settings, data_path, latest_marker=latest_marker)
+
+
+def _run_background_refresh(settings: Settings, *, reason: str) -> None:
+    owner = f"dashboard-refresh:{uuid.uuid4().hex}"
+    lock_ttl = _refresh_lock_ttl_seconds()
+    lock_acquired = acquire_runtime_lock(
+        settings.processed_log_file,
+        lock_name=REFRESH_LOCK_NAME,
+        owner=owner,
+        ttl_seconds=lock_ttl,
+    )
+    if not lock_acquired:
+        return
+
+    try:
+        data_path = dashboard_data_path(settings)
+        cached = read_json(data_path)
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.state", "running")
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.reason", reason)
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.started_at_utc", _now_iso())
+
+        if isinstance(cached, dict):
+            refreshed = _smart_revalidate_payload(settings, data_path, cached)
+            latest_id, _latest_start = _payload_latest_marker(refreshed)
+            set_runtime_value(
+                settings.processed_log_file,
+                "dashboard.refresh.result",
+                "validated_unchanged" if latest_id and latest_id == _payload_latest_marker(cached)[0] else "rebuilt",
+            )
+        else:
+            _build_and_persist_payload(settings, data_path)
+            set_runtime_value(settings.processed_log_file, "dashboard.refresh.result", "rebuilt")
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.last_success_at_utc", _now_iso())
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.last_error", "")
+    except Exception as exc:
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.last_error", str(exc))
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.last_error_at_utc", _now_iso())
+        logger.warning("Background dashboard refresh failed (%s): %s", reason, exc)
+    finally:
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.state", "idle")
+        set_runtime_value(settings.processed_log_file, "dashboard.refresh.finished_at_utc", _now_iso())
+        release_runtime_lock(
+            settings.processed_log_file,
+            lock_name=REFRESH_LOCK_NAME,
+            owner=owner,
+        )
+
+
+def _schedule_background_refresh(settings: Settings, *, reason: str) -> bool:
+    global _REFRESH_FUTURE
+    with _REFRESH_GUARD:
+        if _REFRESH_FUTURE is not None and not _REFRESH_FUTURE.done():
+            return False
+        _REFRESH_FUTURE = _REFRESH_EXECUTOR.submit(_run_background_refresh, settings, reason=reason)
+    return True
+
+
+def ensure_dashboard_cache_warm(settings: Settings) -> dict[str, Any]:
+    data_path = dashboard_data_path(settings)
+    cached = read_json(data_path)
+    if isinstance(cached, dict):
+        return cached
+    try:
+        return _build_and_persist_payload(settings, data_path)
+    except Exception:
+        logger.exception("Dashboard warmup failed; serving empty payload.")
+        return _empty_payload(error="dashboard_warmup_failed")
+
+
 def get_dashboard_payload(
     settings: Settings,
     *,
     force_refresh: bool = False,
     max_age_seconds: int | None = None,
+    allow_async_refresh: bool = True,
 ) -> dict[str, Any]:
     data_path = dashboard_data_path(settings)
     age_limit = _cache_max_age_seconds() if max_age_seconds is None else max(0, int(max_age_seconds))
 
     cached = read_json(data_path)
-    if isinstance(cached, dict) and not force_refresh and _is_payload_fresh(cached, max_age_seconds=age_limit):
-        return cached
+    if force_refresh:
+        try:
+            return _build_and_persist_payload(settings, data_path)
+        except Exception:
+            if isinstance(cached, dict):
+                logger.exception("Forced dashboard rebuild failed; serving stale cached payload.")
+                return cached
+            logger.exception("Forced dashboard rebuild failed with no cache; serving empty payload.")
+            return _empty_payload(error="dashboard_build_failed")
+
+    if isinstance(cached, dict):
+        if _is_payload_fresh(cached, max_age_seconds=age_limit):
+            return cached
+        revalidating = _schedule_background_refresh(settings, reason="stale_cached_request") if allow_async_refresh else False
+        stale_response = dict(cached)
+        stale_response["cache_state"] = "stale_revalidating" if revalidating else "stale"
+        stale_response["revalidating"] = revalidating
+        return stale_response
 
     try:
-        payload = build_dashboard_payload(settings)
+        return _build_and_persist_payload(settings, data_path)
     except Exception:
         if isinstance(cached, dict):
             logger.exception("Dashboard rebuild failed; serving stale cached payload.")
             return cached
         logger.exception("Dashboard rebuild failed with no cache; serving empty payload.")
         return _empty_payload(error="dashboard_build_failed")
-
-    write_json(data_path, payload)
-    return payload

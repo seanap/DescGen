@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
+import chronicle.dashboard_data as dashboard_data
 from chronicle.config import Settings
 from chronicle.dashboard_data import dashboard_data_path, get_dashboard_payload
 from chronicle.storage import write_json
@@ -134,6 +135,69 @@ class TestDashboardData(unittest.TestCase):
             self.assertIn("types", payload)
             self.assertIn("activities", payload)
             self.assertEqual(payload.get("error"), "dashboard_build_failed")
+
+    def test_stale_cache_served_and_background_refresh_scheduled(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            stale_iso = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+            stale_payload = {
+                "generated_at": stale_iso,
+                "validated_at": stale_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+                "latest_activity_id": "42",
+            }
+            write_json(dashboard_data_path(settings), stale_payload)
+
+            with mock.patch("chronicle.dashboard_data._schedule_background_refresh", return_value=True) as schedule:
+                payload = get_dashboard_payload(settings, force_refresh=False, max_age_seconds=60)
+
+            self.assertEqual(payload["latest_activity_id"], "42")
+            self.assertEqual(payload.get("cache_state"), "stale_revalidating")
+            self.assertTrue(payload.get("revalidating"))
+            schedule.assert_called_once()
+
+    def test_smart_revalidate_touches_payload_when_latest_activity_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            data_path = dashboard_data_path(settings)
+            stale_iso = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+            stale_payload = {
+                "generated_at": stale_iso,
+                "validated_at": stale_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+                "latest_activity_id": "1002",
+                "latest_activity_start_date": "2026-02-20T10:00:00Z",
+            }
+            write_json(data_path, stale_payload)
+
+            with mock.patch(
+                "chronicle.dashboard_data._fetch_latest_activity_marker",
+                return_value=("1002", "2026-02-20T10:00:00Z"),
+            ), mock.patch("chronicle.dashboard_data.build_dashboard_payload") as build_payload:
+                refreshed = dashboard_data._smart_revalidate_payload(settings, data_path, stale_payload)
+
+            build_payload.assert_not_called()
+            self.assertEqual(refreshed["latest_activity_id"], "1002")
+            self.assertIn("validated_at", refreshed)
+            self.assertNotEqual(refreshed["validated_at"], stale_iso)
+            on_disk = dashboard_data.read_json(data_path)
+            self.assertIsInstance(on_disk, dict)
+            assert isinstance(on_disk, dict)
+            self.assertEqual(on_disk.get("latest_activity_id"), "1002")
 
 
 if __name__ == "__main__":
