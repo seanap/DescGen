@@ -909,6 +909,65 @@ def _is_treadmill(activity: dict[str, Any]) -> bool:
     return bool(activity.get("trainer")) and not activity.get("start_latlng")
 
 
+def _is_strength_like(activity: dict[str, Any]) -> bool:
+    raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip().lower()
+    if raw_sport_type in {"weighttraining", "weight training", "workout"}:
+        return True
+
+    text = _text_blob(activity)
+    has_strength_keyword = any(
+        keyword in text for keyword in ("strength", "weight training", "workout", "lifting")
+    )
+    if not has_strength_keyword:
+        return False
+
+    distance = _distance_miles(activity)
+    start = _start_latlng(activity)
+    no_gps = start is None
+    trainer = bool(activity.get("trainer"))
+    moving_time_seconds = _as_float(activity.get("moving_time")) or 0.0
+    return no_gps and trainer and distance <= 0.2 and moving_time_seconds <= 1800
+
+
+def _incline_treadmill_match_reasons(activity: dict[str, Any]) -> list[str]:
+    raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip()
+    sport_type = raw_sport_type.lower()
+    if _is_strength_like(activity):
+        return []
+    text = _text_blob(activity)
+    start = _start_latlng(activity)
+    no_gps = start is None
+    trainer = bool(activity.get("trainer"))
+    external_id = str(activity.get("external_id") or "").strip().lower()
+    device_name = str(activity.get("device_name") or "").strip().lower()
+    distance = _distance_miles(activity)
+    moving_time = _to_int(activity.get("moving_time")) or 0
+
+    # Keep this matcher specific enough to avoid reclassifying short non-treadmill trainer sessions.
+    meets_indoor_shape = (
+        no_gps
+        and trainer
+        and sport_type in {"run", "walk", "virtualrun"}
+        and distance >= 0.25
+        and moving_time >= 300
+    )
+    has_treadmill_hint = "treadmill" in text
+    has_device_hint = external_id.startswith("garmin_ping_") or "garmin" in device_name
+
+    reasons: list[str] = []
+    if has_treadmill_hint:
+        reasons.append("treadmill keyword")
+    if sport_type == "virtualrun" and no_gps:
+        reasons.append("sport_type=VirtualRun + no GPS")
+    if meets_indoor_shape and has_device_hint:
+        reasons.append("garmin indoor run/walk + no GPS")
+    if meets_indoor_shape and external_id.startswith("garmin_ping_"):
+        reasons.append("garmin_ping external_id + no GPS")
+    if meets_indoor_shape and _is_treadmill(activity):
+        reasons.append("trainer/no-gps treadmill shape")
+    return reasons
+
+
 def _distance_miles(activity: dict[str, Any]) -> float:
     return float(activity.get("distance", 0.0) or 0.0) / 1609.34
 
@@ -968,9 +1027,27 @@ def _profile_match_reasons(
     start = _start_latlng(activity)
 
     reasons: list[str] = []
+    if profile_id == "incline_treadmill":
+        return _incline_treadmill_match_reasons(activity)
+
+    if profile_id == "walk":
+        if sport_type == "walk" and start is not None and not bool(activity.get("trainer")):
+            reasons.append("sport_type=Walk + GPS + trainer=false")
+        return reasons
+
     if profile_id == "treadmill":
+        if _is_strength_like(activity):
+            return reasons
         if treadmill:
-            reasons.append("trainer/no-gps or VirtualRun")
+            moving_time_seconds = _as_float(activity.get("moving_time")) or 0.0
+            likely_treadmill = (
+                sport_type == "virtualrun"
+                or "treadmill" in text
+                or distance >= 0.25
+                or moving_time_seconds >= 600
+            )
+            if likely_treadmill:
+                reasons.append("trainer/no-gps or VirtualRun")
         return reasons
 
     if profile_id == "race":
@@ -988,6 +1065,12 @@ def _profile_match_reasons(
     if profile_id == "strength_training":
         if sport_type in {"weighttraining", "weight training"}:
             reasons.append(f"sport_type={raw_sport_type or 'WeightTraining'}")
+            return reasons
+        if sport_type == "workout":
+            reasons.append("sport_type=Workout")
+            return reasons
+        if _is_strength_like(activity):
+            reasons.append("strength keyword + indoor no-gps shape")
         return reasons
 
     if profile_id == "trail":
@@ -1068,7 +1151,13 @@ def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[st
     payload: dict[str, Any] = {"description": description}
     if profile_id == "strength_training":
         payload["private"] = True
-        payload["name"] = "Strength Training"
+        payload["name"] = "Strength Workout"
+        payload["type"] = "Workout"
+        return payload
+    if profile_id == "incline_treadmill":
+        payload["type"] = "Walk"
+        payload["name"] = "Max Incline Treadmill Walk"
+        payload["trainer"] = True
         return payload
     if profile_id == "treadmill":
         speed_mps = _as_float(detailed_activity.get("average_speed")) or 0.0
@@ -1076,6 +1165,7 @@ def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[st
         is_walk = speed_mph < 4.0
         payload["type"] = "Walk" if is_walk else "Run"
         payload["name"] = "Max Incline Treadmill Walk" if is_walk else "Max Incline Treadmill Run"
+        payload["trainer"] = True
     return payload
 
 

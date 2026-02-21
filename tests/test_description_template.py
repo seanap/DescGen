@@ -349,6 +349,16 @@ class TestDescriptionTemplate(unittest.TestCase):
             self.assertEqual(strength["label"], "Strength Training")
             self.assertTrue(strength["enabled"])
             self.assertFalse(strength["locked"])
+            self.assertTrue(any(str(item.get("profile_id")) == "incline_treadmill" for item in profiles))
+            incline = next(item for item in profiles if str(item.get("profile_id")) == "incline_treadmill")
+            self.assertEqual(incline["label"], "Incline Treadmill")
+            self.assertTrue(incline["enabled"])
+            self.assertFalse(incline["locked"])
+            self.assertTrue(any(str(item.get("profile_id")) == "walk" for item in profiles))
+            walk = next(item for item in profiles if str(item.get("profile_id")) == "walk")
+            self.assertEqual(walk["label"], "Walk")
+            self.assertTrue(walk["enabled"])
+            self.assertFalse(walk["locked"])
 
             working = get_working_template_profile(settings)
             self.assertEqual(working["profile_id"], "default")
@@ -356,6 +366,12 @@ class TestDescriptionTemplate(unittest.TestCase):
             strength_template = get_active_template(settings, profile_id="strength_training")
             self.assertIn("Sets:", strength_template["template"])
             self.assertIn("Reps:", strength_template["template"])
+            incline_template = get_active_template(settings, profile_id="incline_treadmill")
+            self.assertIn("∠ Incline: 15%", incline_template["template"])
+            self.assertIn("Treadmill Elevation", incline_template["template"])
+            walk_template = get_active_template(settings, profile_id="walk")
+            self.assertIn("Misery Index", walk_template["template"])
+            self.assertIn("Steps:", walk_template["template"])
 
     def test_profile_template_save_and_version_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -89,7 +89,163 @@ class TestStrengthProfileBehavior(unittest.TestCase):
         )
         self.assertEqual(payload.get("description"), "Sets: 5 | Reps: 5")
         self.assertTrue(payload.get("private"))
-        self.assertEqual(payload.get("name"), "Strength Training")
+        self.assertEqual(payload.get("name"), "Strength Workout")
+        self.assertEqual(payload.get("type"), "Workout")
+
+    def test_strength_profile_matches_workout_sport_type(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Workout",
+            "type": "Workout",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 900,
+        }
+        reasons = _profile_match_reasons("strength_training", activity, settings)
+        self.assertIn("sport_type=Workout", reasons)
+
+    def test_strength_profile_matches_strength_like_walk_session(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Walk",
+            "type": "Walk",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 137,
+            "name": "Afternoon Strength Training",
+            "external_id": "garmin_ping_537343661503",
+            "device_name": "Garmin Forerunner 955",
+        }
+        reasons = _profile_match_reasons("strength_training", activity, settings)
+        self.assertIn("strength keyword + indoor no-gps shape", reasons)
+
+
+class TestInclineTreadmillProfileBehavior(unittest.TestCase):
+    def test_incline_treadmill_profile_matches_garmin_indoor_signals(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 2575.0,
+            "moving_time": 2402,
+            "external_id": "garmin_ping_476817910857",
+            "device_name": "Garmin Forerunner 955",
+            "name": "Low Aerobic 140-150 HR",
+        }
+        reasons = _profile_match_reasons("incline_treadmill", activity, settings)
+        self.assertTrue(reasons)
+        self.assertIn("garmin_ping external_id + no GPS", reasons)
+
+    def test_incline_treadmill_profile_skips_short_non_treadmill_trainer_walk(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Walk",
+            "type": "Walk",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 137,
+            "external_id": "garmin_ping_537343661503",
+            "device_name": "Garmin Forerunner 955",
+            "name": "Afternoon Strength Training",
+        }
+        reasons = _profile_match_reasons("incline_treadmill", activity, settings)
+        self.assertEqual(reasons, [])
+
+    def test_incline_treadmill_profile_update_payload_sets_walk_title_and_trainer(self) -> None:
+        payload = _profile_activity_update_payload(
+            "incline_treadmill",
+            {"id": 123, "sport_type": "Run", "type": "Run", "average_speed": 1.07},
+            "∠ Incline: 15%",
+        )
+        self.assertEqual(payload.get("description"), "∠ Incline: 15%")
+        self.assertEqual(payload.get("type"), "Walk")
+        self.assertEqual(payload.get("name"), "Max Incline Treadmill Walk")
+        self.assertTrue(payload.get("trainer"))
+
+
+class TestWalkProfileBehavior(unittest.TestCase):
+    def test_walk_profile_matches_outdoor_walk_with_gps(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Walk",
+            "type": "Walk",
+            "trainer": False,
+            "start_latlng": [34.241946, -83.964154],
+        }
+        reasons = _profile_match_reasons("walk", activity, settings)
+        self.assertEqual(reasons, ["sport_type=Walk + GPS + trainer=false"])
+
+    def test_walk_profile_does_not_match_treadmill_walk(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Walk",
+            "type": "Walk",
+            "trainer": True,
+            "start_latlng": [],
+        }
+        reasons = _profile_match_reasons("walk", activity, settings)
+        self.assertEqual(reasons, [])
+
+    def test_treadmill_profile_does_not_match_short_stationary_strength_like_session(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        activity = {
+            "sport_type": "Walk",
+            "type": "Walk",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 137,
+            "name": "Afternoon Strength Training",
+        }
+        reasons = _profile_match_reasons("treadmill", activity, settings)
+        self.assertEqual(reasons, [])
 
 
 if __name__ == "__main__":
