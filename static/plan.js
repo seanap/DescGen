@@ -27,7 +27,6 @@
     "2": "LT2",
   };
 
-  const WORKOUT_PRESET_LIST_ID = "planWorkoutPresetList";
   const workoutPresetOptions = [
     "2E + 3x2T w/2:00 jog + 2E (Hansons strength)",
     "2E + 6x800m @5k w/400m jog + 2E (Hansons speed)",
@@ -39,6 +38,11 @@
     "15WU + 5x4min @LT2 w/2min easy + 10CD (Norwegian variant)",
     "15WU + 3x8min @LT1 w/2min easy + 10CD (Norwegian threshold)",
   ];
+  const workoutPresetMenuWidthCh = Math.max(
+    44,
+    workoutPresetOptions.reduce((max, item) => Math.max(max, String(item || "").length), 0) + 3,
+  );
+  let workoutMenuHandlersBound = false;
 
   function normalizeRunType(value) {
     return String(value || "").trim().toLowerCase();
@@ -48,16 +52,26 @@
     return normalizeRunType(value) === "sos";
   }
 
-  function ensureWorkoutPresetList() {
-    if (!document || document.getElementById(WORKOUT_PRESET_LIST_ID)) return;
-    const list = document.createElement("datalist");
-    list.id = WORKOUT_PRESET_LIST_ID;
-    for (const optionValue of workoutPresetOptions) {
-      const option = document.createElement("option");
-      option.value = optionValue;
-      list.appendChild(option);
-    }
-    document.body.appendChild(list);
+  function bindWorkoutMenuHandlers() {
+    if (workoutMenuHandlersBound) return;
+    workoutMenuHandlersBound = true;
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".plan-workout-field")) return;
+      for (const field of document.querySelectorAll(".plan-workout-field")) {
+        field.dataset.open = "0";
+      }
+      for (const menu of document.querySelectorAll(".plan-workout-menu")) {
+        if (!(menu instanceof HTMLElement)) continue;
+        menu.hidden = true;
+      }
+    });
+  }
+
+  function setWorkoutMenuOpen(field, menu, nextOpen) {
+    if (!(field instanceof HTMLElement) || !(menu instanceof HTMLElement)) return;
+    field.dataset.open = nextOpen ? "1" : "0";
+    menu.hidden = !nextOpen;
   }
 
   function asNumber(value) {
@@ -113,6 +127,16 @@
     if (parsed < 0) return "metric-easy";
     if (parsed <= 0.08) return "metric-good";
     if (parsed <= 0.12) return "metric-caution";
+    return "metric-hard";
+  }
+
+  function miT30BandFromValue(value) {
+    const parsed = asNumber(value);
+    if (parsed === null) return "metric-neutral";
+    const rounded = Number(parsed.toFixed(1));
+    if (rounded < 0.8) return "metric-easy";
+    if (rounded <= 1.4) return "metric-good";
+    if (rounded <= 1.8) return "metric-caution";
     return "metric-hard";
   }
 
@@ -442,16 +466,62 @@
   }
 
   function buildSessionWorkoutInput(row, index, rows, session, sessionIndex, runTypeSelect) {
+    const field = document.createElement("div");
+    field.className = "plan-workout-field";
+    field.dataset.open = "0";
+
     const input = document.createElement("input");
     input.type = "text";
     input.className = "plan-workout-input plan-session-workout";
     input.dataset.date = row.date;
     input.dataset.sessionIndex = String(sessionIndex);
-    input.setAttribute("list", WORKOUT_PRESET_LIST_ID);
     input.placeholder = "Workout shorthand";
     input.title = "Workout shorthand for SOS session. Press Enter to save.";
     input.value = String((session && (session.planned_workout || session.workout_code)) || runTypeSelect.dataset.plannedWorkout || "");
     runTypeSelect.dataset.plannedWorkout = input.value;
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "plan-workout-toggle";
+    toggle.setAttribute("aria-label", "Show workout presets");
+    toggle.title = "Show workout presets";
+    toggle.textContent = "▾";
+
+    const menu = document.createElement("div");
+    menu.className = "plan-workout-menu";
+    menu.hidden = true;
+    menu.style.setProperty("--plan-workout-menu-width-ch", String(workoutPresetMenuWidthCh));
+
+    for (const optionValue of workoutPresetOptions) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "plan-workout-menu-item";
+      option.textContent = optionValue;
+      option.title = optionValue;
+      option.addEventListener("click", () => {
+        input.value = optionValue;
+        runTypeSelect.dataset.plannedWorkout = String(optionValue || "");
+        setWorkoutMenuOpen(field, menu, false);
+        saveSessionPayload(row, index, rows, row.date, "distance");
+      });
+      menu.appendChild(option);
+    }
+
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextOpen = field.dataset.open !== "1";
+      for (const openField of document.querySelectorAll(".plan-workout-field")) {
+        if (openField instanceof HTMLElement && openField !== field) {
+          openField.dataset.open = "0";
+        }
+      }
+      for (const openMenu of document.querySelectorAll(".plan-workout-menu")) {
+        if (!(openMenu instanceof HTMLElement) || openMenu === menu) continue;
+        openMenu.hidden = true;
+      }
+      setWorkoutMenuOpen(field, menu, nextOpen);
+    });
 
     input.addEventListener("input", () => {
       runTypeSelect.dataset.plannedWorkout = String(input.value || "");
@@ -462,6 +532,11 @@
     });
     input.addEventListener("keydown", (event) => {
       if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
+        if (event.altKey && event.key === "ArrowDown") {
+          event.preventDefault();
+          setWorkoutMenuOpen(field, menu, true);
+          return;
+        }
         if (event.key === "Enter") {
           event.preventDefault();
           runTypeSelect.dataset.plannedWorkout = String(input.value || "");
@@ -472,7 +547,10 @@
       event.preventDefault();
       focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
     });
-    return input;
+    field.appendChild(input);
+    field.appendChild(toggle);
+    field.appendChild(menu);
+    return field;
   }
 
   function buildSessionDistanceEditor(row, index, rows) {
@@ -669,37 +747,53 @@
       tr.appendChild(runTypeTd);
 
       const showWeekMetrics = !!(row && row.show_week_metrics);
-      const weekTd = makeCell(showWeekMetrics ? formatMiles(row.weekly_total, 1) : "", "metric-week metric-week-block");
-      weekTd.classList.add(showWeekMetrics ? "metric-block-start" : "metric-block-cont");
-      tr.appendChild(weekTd);
+      const weekRowSpan = Math.max(1, Number(row && row.week_row_span) || 1);
+      if (showWeekMetrics) {
+        const weekTd = makeCell(formatMiles(row && row.weekly_total, 1), "metric-week metric-week-block metric-block-center metric-week-joined");
+        weekTd.classList.add("metric-block-start");
+        weekTd.rowSpan = weekRowSpan;
+        tr.appendChild(weekTd);
 
-      const wowTd = makeCell(
-        showWeekMetrics ? formatPct(row && row.wow_change) : "",
-        `${wowBandFromValue(row && row.wow_change)} metric-wow-block`,
-      );
-      wowTd.classList.add(showWeekMetrics ? "metric-block-start" : "metric-block-cont");
-      tr.appendChild(wowTd);
+        const wowTd = makeCell(
+          formatPct(row && row.wow_change),
+          `${wowBandFromValue(row && row.wow_change)} metric-wow-block metric-block-center metric-week-joined`,
+        );
+        wowTd.classList.add("metric-block-start");
+        wowTd.rowSpan = weekRowSpan;
+        tr.appendChild(wowTd);
 
-      tr.appendChild(makeCell(formatPct(row && row.long_pct), metricBandClass(row && row.bands && row.bands.long_pct)));
+        const longTd = makeCell(
+          formatPct(row && row.long_pct),
+          `${metricBandClass(row && row.bands && row.bands.long_pct)} metric-long-block metric-block-center metric-week-joined`,
+        );
+        longTd.classList.add("metric-block-start");
+        longTd.rowSpan = weekRowSpan;
+        tr.appendChild(longTd);
+      }
 
       const showMonthMetrics = !!(row && row.show_month_metrics);
-      const monthTd = makeCell(showMonthMetrics ? formatMiles(row.monthly_total, 1) : "", "metric-month metric-month-block");
-      monthTd.classList.add(showMonthMetrics ? "metric-block-start" : "metric-block-cont");
-      tr.appendChild(monthTd);
+      const monthRowSpan = Math.max(1, Number(row && row.month_row_span) || 1);
+      if (showMonthMetrics) {
+        const monthTd = makeCell(formatMiles(row && row.monthly_total, 1), "metric-month metric-month-block metric-block-bottom");
+        monthTd.classList.add("metric-block-start");
+        monthTd.rowSpan = monthRowSpan;
+        tr.appendChild(monthTd);
 
-      const momTd = makeCell(
-        showMonthMetrics ? formatPct(row && row.mom_change) : "",
-        `${wowBandFromValue(row && row.mom_change)} metric-mom-block`,
-      );
-      momTd.classList.add(showMonthMetrics ? "metric-block-start" : "metric-block-cont");
-      tr.appendChild(momTd);
+        const momTd = makeCell(
+          formatPct(row && row.mom_change),
+          `${wowBandFromValue(row && row.mom_change)} metric-mom-block metric-block-bottom`,
+        );
+        momTd.classList.add("metric-block-start");
+        momTd.rowSpan = monthRowSpan;
+        tr.appendChild(momTd);
+      }
 
       tr.appendChild(makeCell(formatMiles(row && row.t7_miles, 1), "metric-neutral"));
       tr.appendChild(makeCell(formatRatio(row && row.t7_p7_ratio, 1), metricBandClass(row && row.bands && row.bands.t7_p7_ratio)));
       tr.appendChild(makeCell(formatMiles(row && row.t30_miles, 1), "metric-neutral"));
       tr.appendChild(makeCell(formatRatio(row && row.t30_p30_ratio, 1), metricBandClass(row && row.bands && row.bands.t30_p30_ratio)));
       tr.appendChild(makeCell(formatRatio(row && row.avg30_miles_per_day, 2), "metric-neutral"));
-      tr.appendChild(makeCell(formatRatio(row && row.mi_t30_ratio, 1), metricBandClass(row && row.bands && row.bands.mi_t30_ratio)));
+      tr.appendChild(makeCell(formatRatio(row && row.mi_t30_ratio, 1), miT30BandFromValue(row && row.mi_t30_ratio)));
 
       bodyEl.appendChild(tr);
     }
@@ -889,6 +983,6 @@
     });
   }
 
-  ensureWorkoutPresetList();
+  bindWorkoutMenuHandlers();
   loadPlan(centerDateEl.value);
 })();
