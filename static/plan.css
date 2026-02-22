@@ -511,16 +511,28 @@ body.plan-page {
   letter-spacing: -0.01em;
 }
 
-.date-detail {
-  color: #aeb7c0;
-  display: block;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 0.66rem;
-  margin-top: 2px;
-}
-
 .distance-cell {
   min-width: var(--plan-col-distance);
+}
+
+.plan-aed-summary {
+  align-items: center;
+  color: #c2cfe0;
+  display: flex;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.76rem;
+  min-height: 24px;
+  white-space: nowrap;
+}
+
+.plan-aed-part {
+  display: inline-flex;
+  align-items: center;
+}
+
+.plan-aed-symbol {
+  color: #eaf4ff;
+  font-weight: 800;
 }
 
 .run-type-cell {
