@@ -519,21 +519,6 @@ body.plan-page {
   margin-top: 2px;
 }
 
-.week-badge {
-  display: inline-block;
-  margin-top: 2px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--plan-neon-blue) 60%, transparent);
-  background: color-mix(in srgb, var(--plan-neon-blue) 16%, transparent);
-  color: #dff5ff;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 2px 6px;
-  text-transform: uppercase;
-  box-shadow: 0 0 12px -11px var(--plan-neon-blue);
-}
-
 .distance-cell {
   min-width: var(--plan-col-distance);
 }
@@ -549,11 +534,6 @@ body.plan-page {
 
 .plan-session-row {
   min-height: 24px;
-}
-
-.plan-session-row-sos {
-  display: grid;
-  gap: 4px;
 }
 
 .session-distance-wrap {
@@ -622,11 +602,16 @@ body.plan-page {
 }
 
 .session-type-editor .plan-session-row {
-  align-items: center;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  white-space: normal;
 }
 
-.session-type-editor .plan-run-type {
+.session-type-editor .plan-run-type,
+.session-type-editor .plan-workout-input {
+  display: block;
   width: 100%;
 }
 

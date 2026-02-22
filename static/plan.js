@@ -163,17 +163,13 @@
     if (!date) {
       return {
         weekKey: "",
-        weekEndKey: "",
       };
     }
     const mondayOffset = (date.getUTCDay() + 6) % 7;
     const weekStart = new Date(date.getTime());
     weekStart.setUTCDate(weekStart.getUTCDate() - mondayOffset);
-    const weekEnd = new Date(weekStart.getTime());
-    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
     return {
       weekKey: formatIsoDate(weekStart),
-      weekEndKey: formatIsoDate(weekEnd),
     };
   }
 
@@ -527,7 +523,6 @@
       rowEl.appendChild(runTypeSelect);
       const runTypeValue = String(session && session.run_type ? session.run_type : runTypeSelect.value || "");
       if (isSosRunType(runTypeValue)) {
-        rowEl.classList.add("plan-session-row-sos");
         rowEl.appendChild(buildSessionWorkoutInput(row, index, rows, session, sessionIndex, runTypeSelect));
       }
       editor.appendChild(rowEl);
@@ -597,13 +592,6 @@
       dateDetail.className = "date-detail";
       dateDetail.textContent = `A ${formatMiles(row && row.actual_miles, 1)} | E ${formatMiles(row && row.effective_miles, 1)} | Δ ${formatSigned(row && row.day_delta, 1)}`;
       dateTd.appendChild(dateDetail);
-      if (isWeekStart && weekInfo.weekKey) {
-        const badge = document.createElement("span");
-        badge.className = "week-badge";
-        badge.textContent = `Week of ${weekInfo.weekKey}`;
-        badge.title = `${weekInfo.weekKey} to ${weekInfo.weekEndKey}`;
-        dateTd.appendChild(badge);
-      }
       tr.appendChild(dateTd);
 
       const distanceTd = document.createElement("td");
