@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from chronicle.activity_pipeline import (
+    _build_description_context,
     _extract_strava_badges,
+    _extract_activity_garmin_badges,
     _extract_strava_segment_notables,
     _profile_activity_update_payload,
     _profile_match_reasons,
@@ -64,6 +66,91 @@ class TestStravaSegmentNotables(unittest.TestCase):
         badges = _extract_strava_badges(activity, segment_notables=segment_notables)
         self.assertIn("Strava: Segment Effort Pr PR - Bridge Sprint", badges)
         self.assertIn("Strava PR: Bridge Sprint (1:15)", badges)
+
+
+class TestActivityGarminBadges(unittest.TestCase):
+    def test_extract_activity_garmin_badges_filters_by_activity_id_and_dedupes(self) -> None:
+        rows = [
+            {
+                "badgeName": "February Weekend 10K",
+                "badgeAssocType": "activityId",
+                "badgeAssocDataId": "21939412525",
+            },
+            {
+                "badgeName": "February Weekend 10K",
+                "badgeAssocType": "activityId",
+                "badgeAssocDataId": "18340434430",
+            },
+            {
+                "badgeName": "February Weekend 10K",
+                "badgeAssocType": "activityId",
+                "badgeAssocDataId": "21939412525",
+            },
+            {
+                "badgeName": "Run Streak 400",
+                "badgeAssocType": "daily",
+                "badgeAssocDataId": "2026-02-22",
+            },
+        ]
+        badges = _extract_activity_garmin_badges(rows, garmin_activity_id=21939412525)
+        self.assertEqual(badges, ["February Weekend 10K"])
+
+    def test_extract_activity_garmin_badges_supports_normalized_keys(self) -> None:
+        rows = [
+            {
+                "badge_name": "March Weekend 5K",
+                "badge_assoc_type": "activityId",
+                "badge_assoc_data_id": "21939412525",
+            },
+        ]
+        badges = _extract_activity_garmin_badges(rows, garmin_activity_id="21939412525")
+        self.assertEqual(badges, ["March Weekend 5K"])
+
+    def test_description_context_exposes_activity_badges(self) -> None:
+        context = _build_description_context(
+            detailed_activity={
+                "id": 777,
+                "name": "Treadmill",
+                "type": "Run",
+                "sport_type": "Run",
+                "distance": 3218.68,
+                "moving_time": 1500,
+                "elapsed_time": 1500,
+                "average_speed": 2.145,
+                "trainer": True,
+                "start_latlng": [],
+            },
+            training={
+                "garmin_badges": ["Garmin: February Weekend 10K"],
+                "garmin_badges_raw": [
+                    {
+                        "badgeName": "February Weekend 10K",
+                        "badgeAssocType": "activityId",
+                        "badgeAssocDataId": "21939412525",
+                    },
+                    {
+                        "badgeName": "March Weekend 5K",
+                        "badgeAssocType": "activityId",
+                        "badgeAssocDataId": "19999999999",
+                    },
+                ],
+                "garmin_last_activity": {"activity_id": 21939412525},
+                "garmin_segment_notables": [],
+            },
+            intervals_payload={},
+            week={"gap": "8:00/mi", "distance": 10.0, "elevation": 100.0, "duration": "1:20:00", "beers_earned": 6.0, "calories": 1000, "run_count": 2},
+            month={"gap": "8:10/mi", "distance": 40.0, "elevation": 400.0, "duration": "5:20:00", "beers_earned": 25.0, "calories": 4000, "run_count": 8},
+            year={"gap": "8:20/mi", "distance": 80.0, "elevation": 800.0, "duration": "10:40:00", "beers_earned": 50.0, "calories": 8000, "run_count": 16},
+            longest_streak=None,
+            notables=[],
+            latest_elevation_feet=None,
+            misery_index=None,
+            misery_index_description=None,
+            air_quality_index=None,
+            aqi_description=None,
+        )
+        self.assertEqual(context.get("activity_badges"), ["February Weekend 10K"])
+        self.assertEqual(context.get("garmin", {}).get("activity_badges"), ["February Weekend 10K"])
 
 
 class TestStrengthProfileBehavior(unittest.TestCase):
