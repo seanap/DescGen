@@ -87,6 +87,15 @@ def _resolve_center_date(center_date: Any, *, default_date: date) -> date:
     return parsed
 
 
+def _resolve_optional_date(value: Any, *, field_name: str) -> date | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    parsed = _parse_date(value)
+    if parsed is None:
+        raise ValueError(f"{field_name} must be YYYY-MM-DD.")
+    return parsed
+
+
 def _dashboard_config_min_date(today: date) -> date:
     start_date_raw = str(os.getenv("DASHBOARD_START_DATE", "")).strip()
     if start_date_raw:
@@ -288,6 +297,8 @@ def get_plan_payload(
     *,
     center_date: str | None = None,
     window_days: int | str = DEFAULT_WINDOW_DAYS,
+    start_date: str | None = None,
+    end_date: str | None = None,
     today_local: date | None = None,
     dashboard_payload: dict[str, Any] | None = None,
     plan_day_rows: list[dict[str, Any]] | None = None,
@@ -299,15 +310,33 @@ def get_plan_payload(
         local_tz = timezone.utc
 
     today = today_local or datetime.now(local_tz).date()
-    window = _coerce_window_days(window_days)
-    center = _resolve_center_date(center_date, default_date=today)
     min_center, max_center = _plan_center_bounds(today)
-    if center < min_center:
-        center = min_center
-    elif center > max_center:
-        center = max_center
-    display_start = center - timedelta(days=window)
-    display_end = center + timedelta(days=window)
+    window = _coerce_window_days(window_days)
+    range_start = _resolve_optional_date(start_date, field_name="start_date")
+    range_end = _resolve_optional_date(end_date, field_name="end_date")
+
+    if range_start is not None or range_end is not None:
+        display_start = range_start if range_start is not None else min_center
+        display_end = range_end if range_end is not None else (today + timedelta(days=365))
+        if display_start < min_center:
+            display_start = min_center
+        if display_end > max_center:
+            display_end = max_center
+        if display_end < display_start:
+            raise ValueError("end_date must be on or after start_date.")
+        center = _resolve_center_date(center_date, default_date=today)
+        if center < display_start:
+            center = display_start
+        elif center > display_end:
+            center = display_end
+    else:
+        center = _resolve_center_date(center_date, default_date=today)
+        if center < min_center:
+            center = min_center
+        elif center > max_center:
+            center = max_center
+        display_start = center - timedelta(days=window)
+        display_end = center + timedelta(days=window)
 
     first_month_start = _month_start(display_start)
     calc_start = min(display_start - timedelta(days=90), first_month_start - timedelta(days=35))
