@@ -869,7 +869,7 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
         "priority": 110,
         "criteria": {
             "kind": "activity",
-            "description": "Garmin treadmill sessions (trainer/no GPS, garmin_ping external_id, treadmill keyword).",
+            "description": "Custom Garmin treadmill sessions named as incline treadmill activities.",
         },
     },
     {
@@ -878,7 +878,7 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
         "enabled": True,
         "locked": False,
         "priority": 100,
-        "criteria": {"kind": "activity", "description": "Trainer/VirtualRun conditions with missing GPS."},
+        "criteria": {"kind": "activity", "description": "Standard treadmill sessions (trainer/VirtualRun with missing GPS)."},
     },
     {
         "profile_id": "race",
@@ -964,9 +964,9 @@ PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
 🗻 {{ activity.treadmill_elevation_feet_15pct | default('N/A') }}' Treadmill Elevation
 🍺 {{ activity.beers }}""",
     "treadmill": """🏠 Treadmill Session
-∠ Incline {{ activity.treadmill_incline_percent | default(15) }}%
-⏲ {{ activity.time }} | 🚄 {{ activity.average_speed_mph }} | 🗺️ {{ activity.distance_miles }} mi
-🗻 {{ activity.treadmill_elevation_feet_15pct }}' (15% equivalent) | 🍺 {{ activity.beers }}""",
+🕓 {{ activity.time }} | 🗺️ {{ activity.distance_miles }} mi
+🏃 {{ activity.gap_pace }} | 🚄 {{ activity.average_speed_mph }} | 💓 {{ activity.average_hr }}
+🍺 {{ activity.beers }}""",
     "race": """🏁 Race Day
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }} | 💓 {{ activity.average_hr }}
 🚄 {{ intervals.summary }}""",
