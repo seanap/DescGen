@@ -5,6 +5,10 @@
   const centerDateEl = document.getElementById("planCenterDate");
   const reloadBtn = document.getElementById("planReloadBtn");
   const todayBtn = document.getElementById("planTodayBtn");
+  const settingsBtn = document.getElementById("planSettingsBtn");
+  const settingsPanel = document.getElementById("planSettingsPanel");
+  const seedBtn = document.getElementById("planSeedBtn");
+  const settingsStatusEl = document.getElementById("planSettingsStatus");
 
   let runTypeOptions = [""];
   let pendingFocus = { date: "", field: "distance" };
@@ -113,6 +117,12 @@
     const month = String(date.getUTCMonth() + 1).padStart(2, "0");
     const day = String(date.getUTCDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+  }
+
+  function formatDisplayDate(value) {
+    const parsed = parseIsoDate(value);
+    if (!parsed) return String(value || "--");
+    return `${parsed.getUTCMonth() + 1}-${parsed.getUTCDate()}`;
   }
 
   function weekInfoForDate(value) {
@@ -488,7 +498,8 @@
       dateTd.className = "date-cell";
       const dateMain = document.createElement("span");
       dateMain.className = "plan-date-main";
-      dateMain.textContent = String((row && row.date) || "--");
+      dateMain.textContent = formatDisplayDate(row && row.date);
+      dateMain.title = String((row && row.date) || "--");
       dateTd.appendChild(dateMain);
       const dateDetail = document.createElement("span");
       dateDetail.className = "date-detail";
@@ -517,23 +528,26 @@
         const weekTd = makeCell(formatMiles(row.weekly_total, 1), "metric-week");
         weekTd.rowSpan = Math.max(1, Number(row.week_row_span) || 1);
         tr.appendChild(weekTd);
+        const wowTd = makeCell(formatPct(row && row.wow_change), wowBandFromValue(row && row.wow_change));
+        wowTd.rowSpan = Math.max(1, Number(row.week_row_span) || 1);
+        tr.appendChild(wowTd);
       }
-      tr.appendChild(makeCell(formatPct(row && row.wow_change), wowBandFromValue(row && row.wow_change)));
       tr.appendChild(makeCell(formatPct(row && row.long_pct), metricBandClass(row && row.bands && row.bands.long_pct)));
 
       if (row && row.show_month_metrics) {
         const monthTd = makeCell(formatMiles(row.monthly_total, 1), "metric-month");
         monthTd.rowSpan = Math.max(1, Number(row.month_row_span) || 1);
         tr.appendChild(monthTd);
+        const momTd = makeCell(formatPct(row && row.mom_change), wowBandFromValue(row && row.mom_change));
+        momTd.rowSpan = Math.max(1, Number(row.month_row_span) || 1);
+        tr.appendChild(momTd);
       }
-      tr.appendChild(makeCell(formatPct(row && row.mom_change), wowBandFromValue(row && row.mom_change)));
-
-      tr.appendChild(makeCell(formatRatio(row && row.mi_t30_ratio, 1), metricBandClass(row && row.bands && row.bands.mi_t30_ratio)));
       tr.appendChild(makeCell(formatMiles(row && row.t7_miles, 1), "metric-neutral"));
       tr.appendChild(makeCell(formatRatio(row && row.t7_p7_ratio, 1), metricBandClass(row && row.bands && row.bands.t7_p7_ratio)));
       tr.appendChild(makeCell(formatMiles(row && row.t30_miles, 1), "metric-neutral"));
       tr.appendChild(makeCell(formatRatio(row && row.t30_p30_ratio, 1), metricBandClass(row && row.bands && row.bands.t30_p30_ratio)));
       tr.appendChild(makeCell(formatRatio(row && row.avg30_miles_per_day, 2), "metric-neutral"));
+      tr.appendChild(makeCell(formatRatio(row && row.mi_t30_ratio, 1), metricBandClass(row && row.bands && row.bands.mi_t30_ratio)));
 
       bodyEl.appendChild(tr);
     }
@@ -546,6 +560,45 @@
       return;
     }
     metaEl.textContent = `${payload.start_date} to ${payload.end_date} | Center ${payload.center_date} | ${payload.timezone}`;
+  }
+
+  function setSettingsStatus(message, tone) {
+    if (!settingsStatusEl) return;
+    settingsStatusEl.textContent = String(message || "");
+    settingsStatusEl.dataset.tone = tone === "error" ? "error" : (tone === "ok" ? "ok" : "neutral");
+  }
+
+  function setSettingsOpen(nextOpen) {
+    if (!settingsPanel) return;
+    settingsPanel.hidden = !nextOpen;
+    if (!nextOpen) {
+      setSettingsStatus("", "neutral");
+    }
+  }
+
+  async function seedPlanFromActuals() {
+    if (!seedBtn) return;
+    seedBtn.disabled = true;
+    setSettingsStatus("Seeding expected mileage from actuals...", "neutral");
+    try {
+      const response = await fetch("/plan/seed/from-actuals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.status !== "ok") {
+        throw new Error(String((payload && payload.error) || "Seed failed"));
+      }
+      const seededDays = Number(payload.seeded_days || 0);
+      const seededMiles = Number(payload.seeded_total_miles || 0);
+      setSettingsStatus(`Seed complete: ${seededDays} day(s), ${seededMiles.toFixed(1)} mi`, "ok");
+      await loadPlan(centerDateEl.value);
+    } catch (err) {
+      setSettingsStatus(String(err && err.message ? err.message : "Seed failed"), "error");
+    } finally {
+      seedBtn.disabled = false;
+    }
   }
 
   function setSummary(payload) {
@@ -635,6 +688,12 @@
       if (typeof payload.center_date === "string" && payload.center_date) {
         centerDateEl.value = payload.center_date;
       }
+      if (typeof payload.min_center_date === "string" && payload.min_center_date) {
+        centerDateEl.min = payload.min_center_date;
+      }
+      if (typeof payload.max_center_date === "string" && payload.max_center_date) {
+        centerDateEl.max = payload.max_center_date;
+      }
       runTypeOptions = Array.isArray(payload.run_type_options) ? payload.run_type_options : [""];
       setMeta(payload);
       setSummary(payload);
@@ -656,6 +715,27 @@
     loadPlan(isoDate);
   });
   centerDateEl.addEventListener("change", () => loadPlan(centerDateEl.value));
+
+  if (settingsBtn && settingsPanel) {
+    settingsBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      const nextOpen = Boolean(settingsPanel.hidden);
+      setSettingsOpen(nextOpen);
+    });
+
+    document.addEventListener("click", (event) => {
+      if (settingsPanel.hidden) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (settingsPanel.contains(target) || settingsBtn.contains(target)) return;
+      setSettingsOpen(false);
+    });
+  }
+  if (seedBtn) {
+    seedBtn.addEventListener("click", () => {
+      void seedPlanFromActuals();
+    });
+  }
 
   loadPlan(centerDateEl.value);
 })();

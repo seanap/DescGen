@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from chronicle.plan_data import METERS_PER_MILE, get_plan_payload
 
@@ -141,6 +143,19 @@ class TestPlanData(unittest.TestCase):
         )
         self.assertEqual(payload["window_days"], 7)
         self.assertEqual(len(payload["rows"]), 15)
+
+    def test_center_date_is_clamped_to_dashboard_bounds(self) -> None:
+        with patch.dict(os.environ, {"DASHBOARD_LOOKBACK_YEARS": "2"}, clear=False):
+            payload = get_plan_payload(
+                _settings(),
+                center_date="2010-01-01",
+                window_days=7,
+                today_local=date(2026, 2, 22),
+                dashboard_payload={"activities": []},
+                plan_day_rows=[],
+            )
+        self.assertEqual(payload["min_center_date"], "2025-01-01")
+        self.assertEqual(payload["center_date"], "2025-01-01")
 
 
 if __name__ == "__main__":

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
 from flask import Flask, redirect, render_template, request
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .activity_pipeline import run_once
 from .config import Settings
@@ -82,6 +83,7 @@ STRAVA_OAUTH_SCOPE = "read,activity:read_all,activity:write"
 STRAVA_OAUTH_RUNTIME_KEY = "setup.strava.oauth"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_AUTHORIZE_URL = "https://www.strava.com/oauth/authorize"
+METERS_PER_MILE = 1609.34
 
 
 def _effective_settings() -> Settings:
@@ -358,6 +360,73 @@ def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object
     return sessions, total
 
 
+def _dashboard_min_plan_date(today: date) -> date:
+    start_date_raw = str(os.getenv("DASHBOARD_START_DATE", "")).strip()
+    if start_date_raw:
+        try:
+            parsed = date.fromisoformat(start_date_raw)
+            return parsed
+        except ValueError:
+            pass
+
+    lookback_raw = str(os.getenv("DASHBOARD_LOOKBACK_YEARS", "")).strip()
+    if lookback_raw:
+        try:
+            lookback_years = max(1, int(lookback_raw))
+            target_year = max(1970, today.year - lookback_years + 1)
+            return date(target_year, 1, 1)
+        except ValueError:
+            pass
+
+    return today - timedelta(days=365)
+
+
+def _parse_activity_local_date(activity: dict[str, object], *, local_tz: ZoneInfo | timezone) -> date | None:
+    if not isinstance(activity, dict):
+        return None
+
+    start_local = activity.get("start_date_local")
+    if isinstance(start_local, str) and start_local.strip():
+        try:
+            return date.fromisoformat(start_local.strip()[:10])
+        except ValueError:
+            pass
+
+    start_utc = activity.get("start_date")
+    if isinstance(start_utc, str) and start_utc.strip():
+        try:
+            parsed = datetime.fromisoformat(start_utc.strip().replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(local_tz).date()
+        except ValueError:
+            return None
+    return None
+
+
+def _actual_miles_from_activities(
+    activities: list[dict[str, object]],
+    *,
+    local_tz: ZoneInfo | timezone,
+) -> dict[str, float]:
+    payload: dict[str, float] = {}
+    for activity in activities:
+        if not isinstance(activity, dict):
+            continue
+        local_day = _parse_activity_local_date(activity, local_tz=local_tz)
+        if local_day is None:
+            continue
+        raw_distance = activity.get("distance")
+        try:
+            meters = float(raw_distance)
+        except (TypeError, ValueError):
+            continue
+        if meters <= 0:
+            continue
+        payload[local_day.isoformat()] = payload.get(local_day.isoformat(), 0.0) + (meters / METERS_PER_MILE)
+    return payload
+
+
 @app.get("/health")
 def health() -> tuple[dict, int]:
     payload = _latest_payload()
@@ -606,6 +675,83 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
         "run_type": run_type or "",
         "notes": notes or "",
         "is_complete": is_complete,
+    }, 200
+
+
+@app.post("/plan/seed/from-actuals")
+def plan_seed_from_actuals_post() -> tuple[dict, int]:
+    current = _effective_settings()
+    try:
+        local_tz: ZoneInfo | timezone = ZoneInfo(current.timezone)
+    except ZoneInfoNotFoundError:
+        local_tz = timezone.utc
+    today = datetime.now(local_tz).date()
+    seed_start = _dashboard_min_plan_date(today)
+    if seed_start > today:
+        seed_start = today
+
+    try:
+        dashboard_payload = get_dashboard_payload(
+            current,
+            force_refresh=False,
+            response_mode="full",
+        )
+    except Exception as exc:
+        return {"status": "error", "error": f"Failed to load dashboard activities: {exc}"}, 500
+
+    activities_raw = dashboard_payload.get("activities") if isinstance(dashboard_payload, dict) else []
+    activities = [item for item in activities_raw if isinstance(item, dict)] if isinstance(activities_raw, list) else []
+    actual_by_day = _actual_miles_from_activities(activities, local_tz=local_tz)
+
+    scanned_days = 0
+    seeded_days = 0
+    days_with_actual = 0
+    seeded_total_miles = 0.0
+    cursor = seed_start
+    while cursor <= today:
+        scanned_days += 1
+        day_key = cursor.isoformat()
+        planned = float(actual_by_day.get(day_key, 0.0))
+        if planned > 0:
+            days_with_actual += 1
+
+        existing = get_plan_day(current.processed_log_file, date_local=day_key) or {}
+        run_type = str(existing.get("run_type") or "").strip() or None
+        notes = str(existing.get("notes") or "").strip() or None
+        saved = upsert_plan_day(
+            current.processed_log_file,
+            date_local=day_key,
+            timezone_name=current.timezone,
+            run_type=run_type,
+            planned_total_miles=planned,
+            actual_total_miles=existing.get("actual_total_miles"),
+            is_complete=None,
+            notes=notes,
+        )
+        if not saved:
+            cursor += timedelta(days=1)
+            continue
+
+        sessions_payload: list[dict[str, object]] = []
+        if planned > 0:
+            sessions_payload.append({"ordinal": 1, "planned_miles": planned, "run_type": run_type or ""})
+        replace_plan_sessions_for_day(
+            current.processed_log_file,
+            date_local=day_key,
+            sessions=sessions_payload,
+        )
+        seeded_days += 1
+        seeded_total_miles += planned
+        cursor += timedelta(days=1)
+
+    return {
+        "status": "ok",
+        "seed_start_date": seed_start.isoformat(),
+        "seed_end_date": today.isoformat(),
+        "scanned_days": scanned_days,
+        "seeded_days": seeded_days,
+        "days_with_actual": days_with_actual,
+        "seeded_total_miles": round(seeded_total_miles, 3),
     }, 200
 
 

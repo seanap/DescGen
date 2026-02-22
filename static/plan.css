@@ -49,12 +49,101 @@ body.plan-page {
 
 .plan-heading {
   padding: 2px 4px 0;
+  position: relative;
+}
+
+.plan-heading-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
 }
 
 .plan-heading h1 {
   margin: 0 0 4px;
   font-size: clamp(1.34rem, 1.8vw, 1.8rem);
   letter-spacing: 0.01em;
+}
+
+.plan-meta {
+  color: var(--dg-muted);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  margin-top: 4px;
+}
+
+.plan-settings-btn {
+  align-items: center;
+  background: rgba(8, 8, 8, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  color: #e9edf2;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1rem;
+  justify-content: center;
+  line-height: 1;
+  min-height: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.plan-settings-btn:hover,
+.plan-settings-btn:focus-visible {
+  border-color: color-mix(in srgb, var(--plan-neon-blue) 64%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--plan-neon-blue) 24%, transparent);
+  outline: none;
+}
+
+.plan-settings-panel {
+  position: absolute;
+  right: 0;
+  top: 40px;
+  width: min(360px, calc(100vw - 28px));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(9, 9, 9, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.55);
+  padding: 12px;
+  z-index: 12;
+}
+
+.plan-settings-panel h2 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.plan-seed-btn {
+  margin-top: 8px;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--plan-neon-blue) 62%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--plan-neon-blue) 18%, transparent);
+  color: #e6f6ff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 10px;
+}
+
+.plan-seed-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.plan-settings-status {
+  margin: 8px 0 0;
+  min-height: 1.1em;
+  font-size: 0.78rem;
+}
+
+.plan-settings-status[data-tone="ok"] {
+  color: #d5ffe8;
+}
+
+.plan-settings-status[data-tone="error"] {
+  color: #ffd3e9;
 }
 
 .plan-summary {
@@ -256,24 +345,28 @@ body.plan-page {
 .plan-table tbody td:nth-child(1) {
   min-width: var(--plan-col-done);
   width: var(--plan-col-done);
+  border-right: 0;
 }
 
 .plan-table thead th:nth-child(2),
 .plan-table tbody td:nth-child(2) {
   min-width: var(--plan-col-date);
   width: var(--plan-col-date);
+  border-right: 0;
 }
 
 .plan-table thead th:nth-child(3),
 .plan-table tbody td:nth-child(3) {
   min-width: var(--plan-col-distance);
   width: var(--plan-col-distance);
+  border-right: 0;
 }
 
 .plan-table thead th:nth-child(4),
 .plan-table tbody td:nth-child(4) {
   min-width: var(--plan-col-run-type);
   width: var(--plan-col-run-type);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .plan-table tbody tr:nth-child(odd) td {
@@ -404,6 +497,10 @@ body.plan-page {
   min-width: var(--plan-col-distance);
 }
 
+.run-type-cell {
+  min-width: var(--plan-col-run-type);
+}
+
 .session-editor {
   display: grid;
   gap: 4px;
@@ -469,7 +566,16 @@ body.plan-page {
 }
 
 .plan-session-type {
-  min-width: var(--plan-col-run-type);
+  min-width: min(164px, 100%);
+}
+
+.session-type-editor .plan-session-row {
+  align-items: center;
+  display: block;
+}
+
+.session-type-editor .plan-run-type {
+  width: 100%;
 }
 
 .plan-distance-input:focus,
@@ -537,6 +643,10 @@ body.plan-page {
 @media (max-width: 1080px) {
   .plan-shell {
     width: calc(100% - 20px);
+  }
+
+  .plan-heading-row {
+    align-items: center;
   }
 
   .plan-grid-tools {

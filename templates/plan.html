@@ -23,8 +23,20 @@
 
   <div class="plan-shell">
     <section class="plan-heading">
-      <h1>Plan</h1>
-      <p class="muted">Trailing two weeks and next two weeks centered on today with derived load and adherence metrics.</p>
+      <div class="plan-heading-row">
+        <div>
+          <h1>Plan</h1>
+          <p class="muted">Trailing two weeks and next two weeks centered on today with derived load and adherence metrics.</p>
+        </div>
+        <button id="planSettingsBtn" class="plan-settings-btn" type="button" title="Plan settings" aria-label="Plan settings">⚙</button>
+      </div>
+      <div id="planTopMeta" class="plan-meta">Loading...</div>
+      <div id="planSettingsPanel" class="plan-settings-panel" hidden>
+        <h2>Plan Settings</h2>
+        <p class="muted">Seed past expected mileage by copying actual mileage into expected for each past day.</p>
+        <button id="planSeedBtn" class="plan-seed-btn" type="button">Seed Expected From Actual</button>
+        <p id="planSettingsStatus" class="plan-settings-status" aria-live="polite"></p>
+      </div>
     </section>
     <section id="planSummary" class="plan-summary card"></section>
 
@@ -48,19 +60,19 @@
             <tr>
               <th>Done</th>
               <th>Date</th>
-              <th>Distance (mi)</th>
+              <th>Distance (MI)</th>
               <th>Run Type</th>
               <th title="Total Weekly Mileage">Week Mi</th>
               <th title="Week over Week Change">WoW</th>
               <th>Long%</th>
               <th title="Total Monthly Mileage">Month Mi</th>
               <th title="Month over Month Change">MoM</th>
-              <th title="Miles / Trailing 30 Day Average">Mi/T30</th>
               <th title="Cumulative Mileage (Trailing 7 Day)">T7 Mi</th>
               <th>T7D / P7D</th>
               <th title="Cumulative Mileage (Trailing 30 Day)">T30 Mi</th>
               <th>T30D / P30D</th>
               <th title="Average Miles per Day (Trailing 30 Day)">Avg Mi/day</th>
+              <th title="Miles / Trailing 30 Day Average">Mi/T30</th>
             </tr>
           </thead>
           <tbody id="planTableBody"></tbody>

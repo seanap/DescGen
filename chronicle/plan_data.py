@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -84,6 +85,33 @@ def _resolve_center_date(center_date: Any, *, default_date: date) -> date:
     if parsed is None:
         raise ValueError("center_date must be YYYY-MM-DD.")
     return parsed
+
+
+def _dashboard_config_min_date(today: date) -> date:
+    start_date_raw = str(os.getenv("DASHBOARD_START_DATE", "")).strip()
+    if start_date_raw:
+        parsed = _parse_date(start_date_raw)
+        if parsed is not None:
+            return parsed
+
+    lookback_raw = str(os.getenv("DASHBOARD_LOOKBACK_YEARS", "")).strip()
+    if lookback_raw:
+        try:
+            lookback_years = max(1, int(lookback_raw))
+            target_year = max(1970, today.year - lookback_years + 1)
+            return date(target_year, 1, 1)
+        except ValueError:
+            pass
+
+    return today - timedelta(days=365)
+
+
+def _plan_center_bounds(today: date) -> tuple[date, date]:
+    min_center = _dashboard_config_min_date(today)
+    max_center = today + timedelta(days=3650)
+    if min_center > max_center:
+        min_center = max_center
+    return min_center, max_center
 
 
 def _date_range(start_date: date, end_date: date) -> list[date]:
@@ -273,6 +301,11 @@ def get_plan_payload(
     today = today_local or datetime.now(local_tz).date()
     window = _coerce_window_days(window_days)
     center = _resolve_center_date(center_date, default_date=today)
+    min_center, max_center = _plan_center_bounds(today)
+    if center < min_center:
+        center = min_center
+    elif center > max_center:
+        center = max_center
     display_start = center - timedelta(days=window)
     display_end = center + timedelta(days=window)
 
@@ -568,6 +601,8 @@ def get_plan_payload(
         "timezone": settings.timezone,
         "today": today.isoformat(),
         "center_date": center.isoformat(),
+        "min_center_date": min_center.isoformat(),
+        "max_center_date": max_center.isoformat(),
         "window_days": window,
         "start_date": display_start.isoformat(),
         "end_date": display_end.isoformat(),

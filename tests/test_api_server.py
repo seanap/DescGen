@@ -365,6 +365,31 @@ class TestApiServer(unittest.TestCase):
             self.assertEqual(payload.get("status"), "error")
             self.assertIn("sessions", str(payload.get("error")))
 
+    def test_plan_seed_from_actuals_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            api_server.get_dashboard_payload = lambda *_args, **_kwargs: {
+                "activities": [
+                    {"start_date_local": "2026-02-20T06:30:00Z", "distance": 1609.34 * 5.0},
+                    {"start_date_local": "2026-02-21T06:30:00Z", "distance": 1609.34 * 7.0},
+                ]
+            }
+            response = self.client.post("/plan/seed/from-actuals", json={})
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertGreaterEqual(int(payload.get("seeded_days") or 0), 2)
+            self.assertGreater(float(payload.get("seeded_total_miles") or 0.0), 0.0)
+
+            from chronicle.storage import get_plan_day
+
+            day_1 = get_plan_day(api_server.settings.processed_log_file, date_local="2026-02-20")
+            day_2 = get_plan_day(api_server.settings.processed_log_file, date_local="2026-02-21")
+            self.assertIsNotNone(day_1)
+            self.assertIsNotNone(day_2)
+            self.assertAlmostEqual(float(day_1.get("planned_total_miles") or 0.0), 5.0, places=2)
+            self.assertAlmostEqual(float(day_2.get("planned_total_miles") or 0.0), 7.0, places=2)
+
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)
