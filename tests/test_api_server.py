@@ -286,6 +286,31 @@ class TestApiServer(unittest.TestCase):
             self.assertEqual(payload.get("status"), "error")
             self.assertIn("distance", str(payload.get("error")))
 
+    def test_plan_day_put_accepts_is_complete_null_for_auto_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            first = self.client.put(
+                "/plan/day/2026-02-22",
+                json={
+                    "distance": "6",
+                    "run_type": "Easy",
+                    "is_complete": True,
+                },
+            )
+            self.assertEqual(first.status_code, 200)
+            second = self.client.put(
+                "/plan/day/2026-02-22",
+                json={
+                    "distance": "6",
+                    "run_type": "Easy",
+                    "is_complete": None,
+                },
+            )
+            self.assertEqual(second.status_code, 200)
+            payload = second.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertIsNone(payload.get("is_complete"))
+
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)

@@ -472,22 +472,26 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
     raw_notes = body.get("notes", existing_day.get("notes"))
     notes = str(raw_notes or "").strip() or None
 
-    raw_complete = body.get("is_complete", existing_day.get("is_complete"))
-    is_complete: bool | None
-    if raw_complete is None:
-        is_complete = None
-    elif isinstance(raw_complete, bool):
-        is_complete = raw_complete
-    elif isinstance(raw_complete, str):
-        normalized = raw_complete.strip().lower()
-        if normalized in {"true", "1", "yes", "on"}:
-            is_complete = True
-        elif normalized in {"false", "0", "no", "off"}:
-            is_complete = False
+    existing_is_complete = existing_day.get("is_complete")
+    is_complete: bool | None = existing_is_complete if isinstance(existing_is_complete, bool) else None
+    if "is_complete" in body:
+        raw_complete = body.get("is_complete")
+        if raw_complete is None:
+            is_complete = None
+        elif isinstance(raw_complete, bool):
+            is_complete = raw_complete
+        elif isinstance(raw_complete, str):
+            normalized = raw_complete.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                is_complete = True
+            elif normalized in {"false", "0", "no", "off"}:
+                is_complete = False
+            elif normalized in {"auto", "reset", "none", "null"}:
+                is_complete = None
+            else:
+                return {"status": "error", "error": "is_complete must be boolean or null."}, 400
         else:
-            return {"status": "error", "error": "is_complete must be boolean."}, 400
-    else:
-        return {"status": "error", "error": "is_complete must be boolean."}, 400
+            return {"status": "error", "error": "is_complete must be boolean or null."}, 400
 
     sessions: list[dict[str, object]] | None = None
     if "distance" in body:

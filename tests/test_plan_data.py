@@ -62,6 +62,7 @@ class TestPlanData(unittest.TestCase):
         self.assertAlmostEqual(today_row["effective_miles"], 6.2, places=3)
         self.assertEqual(today_row["run_type"], "Easy")
         self.assertFalse(today_row["is_complete"])
+        self.assertEqual(today_row["completion_source"], "manual")
         self.assertEqual(today_row["planned_input"], "6.2")
         self.assertAlmostEqual(today_row["weekly_total"], 51.6, places=1)
         self.assertAlmostEqual(today_row["long_pct"], 13.1 / 51.6, places=3)
@@ -77,8 +78,11 @@ class TestPlanData(unittest.TestCase):
         self.assertTrue(past_row["is_past_or_today"])
         self.assertAlmostEqual(past_row["actual_miles"], 13.1, places=2)
         self.assertAlmostEqual(past_row["effective_miles"], 13.1, places=2)
+        self.assertEqual(past_row["completion_source"], "auto")
         self.assertIn("run_type_options", payload)
         self.assertIn("Easy", payload["run_type_options"])
+        self.assertIn("summary", payload)
+        self.assertIn("week_planned", payload["summary"])
 
     def test_get_plan_payload_uses_session_sum_for_planned_and_planned_input(self) -> None:
         payload = get_plan_payload(
@@ -105,6 +109,7 @@ class TestPlanData(unittest.TestCase):
         row = next(item for item in payload["rows"] if item["date"] == "2026-02-23")
         self.assertAlmostEqual(row["planned_miles"], 10.0, places=3)
         self.assertEqual(row["planned_input"], "6+4")
+        self.assertAlmostEqual(row["day_delta"], -10.0, places=3)
 
     def test_get_plan_payload_rejects_invalid_center_date(self) -> None:
         with self.assertRaises(ValueError):

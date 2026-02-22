@@ -1,6 +1,7 @@
 (function () {
   const bodyEl = document.getElementById("planTableBody");
   const metaEl = document.getElementById("planTopMeta");
+  const summaryEl = document.getElementById("planSummary");
   const centerDateEl = document.getElementById("planCenterDate");
   const reloadBtn = document.getElementById("planReloadBtn");
   const todayBtn = document.getElementById("planTodayBtn");
@@ -25,6 +26,19 @@
   function formatRatio(value, decimals) {
     const parsed = asNumber(value);
     return parsed === null ? "--" : parsed.toFixed(decimals);
+  }
+
+  function formatSigned(value, decimals) {
+    const parsed = asNumber(value);
+    if (parsed === null) return "--";
+    const fixed = parsed.toFixed(decimals);
+    return parsed > 0 ? `+${fixed}` : fixed;
+  }
+
+  function formatPercentRatio(value) {
+    const parsed = asNumber(value);
+    if (parsed === null) return "--";
+    return `${Math.round(parsed * 100)}%`;
   }
 
   function metricBandClass(band) {
@@ -90,7 +104,6 @@
         {
           distance: distanceValue,
           run_type: select.value,
-          is_complete: !!row.is_complete,
         },
         rows[index + 1] ? rows[index + 1].date : "",
       );
@@ -119,7 +132,6 @@
         {
           distance: input.value,
           run_type: runTypeValue,
-          is_complete: !!row.is_complete,
         },
         nextDate,
       );
@@ -135,6 +147,7 @@
       if (row && row.is_today) tr.classList.add("is-today");
 
       const doneTd = document.createElement("td");
+      doneTd.className = "done-cell";
       const doneInput = document.createElement("input");
       doneInput.type = "checkbox";
       doneInput.checked = !!(row && row.is_complete);
@@ -156,6 +169,29 @@
         );
       });
       doneTd.appendChild(doneInput);
+      if (row && row.completion_source === "manual") {
+        const autoBtn = document.createElement("button");
+        autoBtn.type = "button";
+        autoBtn.className = "auto-reset-btn";
+        autoBtn.textContent = "Auto";
+        autoBtn.title = "Reset completion to auto-sync with actual mileage";
+        autoBtn.addEventListener("click", () => {
+          const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
+          const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
+          const distanceValue = distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : String(row.planned_input || "");
+          const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
+          void savePlanRow(
+            row.date,
+            {
+              distance: distanceValue,
+              run_type: runTypeValue,
+              is_complete: null,
+            },
+            "",
+          );
+        });
+        doneTd.appendChild(autoBtn);
+      }
       tr.appendChild(doneTd);
 
       tr.appendChild(makeCell(String((row && row.date) || "--")));
@@ -207,6 +243,60 @@
     metaEl.textContent = `${payload.start_date} to ${payload.end_date} | Center ${payload.center_date} | ${payload.timezone}`;
   }
 
+  function setSummary(payload) {
+    if (!summaryEl) return;
+    if (!payload || payload.status !== "ok" || !payload.summary) {
+      summaryEl.textContent = "";
+      return;
+    }
+    const summary = payload.summary;
+    const cards = [
+      {
+        label: "Day Plan vs Actual",
+        value: `${formatMiles(summary.day_planned, 1)} / ${formatMiles(summary.day_actual, 1)}`,
+        detail: `Δ ${formatSigned(summary.day_delta, 1)}`,
+      },
+      {
+        label: "Trailing 7d Plan vs Actual",
+        value: `${formatMiles(summary.t7_planned, 1)} / ${formatMiles(summary.t7_actual, 1)}`,
+        detail: `Δ ${formatSigned(summary.t7_delta, 1)} | ${formatPercentRatio(summary.t7_adherence_ratio)}`,
+      },
+      {
+        label: "Trailing 30d Plan vs Actual",
+        value: `${formatMiles(summary.t30_planned, 1)} / ${formatMiles(summary.t30_actual, 1)}`,
+        detail: `Δ ${formatSigned(summary.t30_delta, 1)} | ${formatPercentRatio(summary.t30_adherence_ratio)}`,
+      },
+      {
+        label: "Week Plan vs Actual",
+        value: `${formatMiles(summary.week_planned, 1)} / ${formatMiles(summary.week_actual, 1)}`,
+        detail: `Δ ${formatSigned(summary.week_delta, 1)} | ${formatPercentRatio(summary.week_adherence_ratio)}`,
+      },
+      {
+        label: "Month Plan vs Actual",
+        value: `${formatMiles(summary.month_planned, 1)} / ${formatMiles(summary.month_actual, 1)}`,
+        detail: `Δ ${formatSigned(summary.month_delta, 1)} | ${formatPercentRatio(summary.month_adherence_ratio)}`,
+      },
+    ];
+    summaryEl.textContent = "";
+    for (const card of cards) {
+      const item = document.createElement("div");
+      item.className = "plan-summary-card";
+      const label = document.createElement("span");
+      label.className = "plan-summary-label";
+      label.textContent = card.label;
+      const value = document.createElement("span");
+      value.className = "plan-summary-value";
+      value.textContent = card.value;
+      const detail = document.createElement("span");
+      detail.className = "plan-summary-detail";
+      detail.textContent = card.detail;
+      item.appendChild(label);
+      item.appendChild(value);
+      item.appendChild(detail);
+      summaryEl.appendChild(item);
+    }
+  }
+
   function applyPendingFocus() {
     if (!pendingFocusDate) return;
     const target = bodyEl.querySelector(`.plan-distance-input[data-date="${pendingFocusDate}"]`);
@@ -239,6 +329,7 @@
       }
       runTypeOptions = Array.isArray(payload.run_type_options) ? payload.run_type_options : [""];
       setMeta(payload);
+      setSummary(payload);
       renderRows(Array.isArray(payload.rows) ? payload.rows : []);
       applyPendingFocus();
     } catch (_err) {

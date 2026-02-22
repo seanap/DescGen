@@ -30,6 +30,41 @@
   padding: 10px 12px 14px;
 }
 
+.plan-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.plan-summary-card {
+  background: var(--dg-bg-elevated);
+  border: 1px solid var(--dg-border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.plan-summary-label {
+  color: var(--dg-text-dim);
+  display: block;
+  font-size: 0.76rem;
+  margin-bottom: 3px;
+}
+
+.plan-summary-value {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.plan-summary-detail {
+  color: var(--dg-text-dim);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
 .plan-grid-tools {
   align-items: center;
   display: flex;
@@ -86,6 +121,28 @@
   padding: 7px 8px;
   text-align: center;
   vertical-align: middle;
+}
+
+.done-cell {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.done-cell .auto-reset-btn {
+  background: var(--dg-bg-soft);
+  border: 1px solid var(--dg-border-soft);
+  border-radius: 6px;
+  color: var(--dg-text-dim);
+  cursor: pointer;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 3px 5px;
+}
+
+.done-cell .auto-reset-btn:hover {
+  border-color: var(--dg-accent);
+  color: var(--dg-text-main);
 }
 
 .plan-table tbody td:first-child,

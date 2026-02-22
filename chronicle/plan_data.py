@@ -120,6 +120,12 @@ def _sum_days(day_values: dict[str, float], ending_date: date, days: int) -> flo
     return total
 
 
+def _ratio(numerator: float, denominator: float) -> float | None:
+    if denominator <= 0:
+        return None
+    return numerator / denominator
+
+
 def _max_days(day_values: dict[str, float], ending_date: date, days: int) -> float:
     values: list[float] = []
     for offset in range(days):
@@ -304,9 +310,11 @@ def get_plan_payload(
 
     dates_full = _date_range(calc_start, calc_end)
     planned_miles: dict[str, float] = {}
+    actual_miles_by_day: dict[str, float] = {}
     effective_miles: dict[str, float] = {}
     run_type_by_date: dict[str, str] = {}
     complete_by_date: dict[str, bool] = {}
+    completion_source_by_date: dict[str, str] = {}
     notes_by_date: dict[str, str] = {}
 
     for day in dates_full:
@@ -340,16 +348,22 @@ def get_plan_payload(
         explicit_complete = plan_row.get("is_complete")
         if isinstance(explicit_complete, bool):
             complete = explicit_complete
+            completion_source = "manual"
         else:
             complete = day <= today and actual > 0
+            completion_source = "auto"
 
         planned_miles[day_key] = planned
+        actual_miles_by_day[day_key] = actual
         effective_miles[day_key] = effective
         run_type_by_date[day_key] = run_type
         complete_by_date[day_key] = complete
+        completion_source_by_date[day_key] = completion_source
         notes_by_date[day_key] = notes
 
     week_totals: dict[str, float] = {}
+    week_planned_totals: dict[str, float] = {}
+    week_actual_totals: dict[str, float] = {}
     week_long_miles: dict[str, float] = {}
     for day in dates_full:
         week_key = _week_start(day).isoformat()
@@ -358,7 +372,11 @@ def get_plan_payload(
         week_start = _week_start(day)
         week_days = [week_start + timedelta(days=idx) for idx in range(7)]
         miles_values = [float(effective_miles.get(item.isoformat(), 0.0)) for item in week_days]
+        planned_values = [float(planned_miles.get(item.isoformat(), 0.0)) for item in week_days]
+        actual_values = [float(actual_miles_by_day.get(item.isoformat(), 0.0)) for item in week_days]
         week_totals[week_key] = sum(miles_values)
+        week_planned_totals[week_key] = sum(planned_values)
+        week_actual_totals[week_key] = sum(actual_values)
         long_values = [
             miles_values[idx]
             for idx, week_day in enumerate(week_days)
@@ -367,6 +385,8 @@ def get_plan_payload(
         week_long_miles[week_key] = max(long_values) if long_values else (max(miles_values) if miles_values else 0.0)
 
     month_totals: dict[str, float] = {}
+    month_planned_totals: dict[str, float] = {}
+    month_actual_totals: dict[str, float] = {}
     month_cursor = _month_start(calc_start)
     month_limit = _month_end(calc_end)
     while month_cursor <= month_limit:
@@ -374,6 +394,8 @@ def get_plan_payload(
         month_last_day = _month_end(month_cursor)
         month_days = _date_range(month_cursor, month_last_day)
         month_totals[month_key] = sum(float(effective_miles.get(item.isoformat(), 0.0)) for item in month_days)
+        month_planned_totals[month_key] = sum(float(planned_miles.get(item.isoformat(), 0.0)) for item in month_days)
+        month_actual_totals[month_key] = sum(float(actual_miles_by_day.get(item.isoformat(), 0.0)) for item in month_days)
         month_cursor = month_last_day + timedelta(days=1)
 
     rows: list[dict[str, Any]] = []
@@ -383,6 +405,8 @@ def get_plan_payload(
         week_key = week_start.isoformat()
         prev_week_key = (week_start - timedelta(days=7)).isoformat()
         week_total = float(week_totals.get(week_key, 0.0))
+        week_planned_total = float(week_planned_totals.get(week_key, 0.0))
+        week_actual_total = float(week_actual_totals.get(week_key, 0.0))
         prev_week_total = float(week_totals.get(prev_week_key, 0.0))
         wow_change = ((week_total - prev_week_total) / prev_week_total) if prev_week_total > 0 else None
         long_pct = (float(week_long_miles.get(week_key, 0.0)) / week_total) if week_total > 0 else None
@@ -390,12 +414,21 @@ def get_plan_payload(
         month_key = f"{day.year:04d}-{day.month:02d}"
         prev_month_key = _prev_month_key(day)
         month_total = float(month_totals.get(month_key, 0.0))
+        month_planned_total = float(month_planned_totals.get(month_key, 0.0))
+        month_actual_total = float(month_actual_totals.get(month_key, 0.0))
         prev_month_total = float(month_totals.get(prev_month_key, 0.0))
         mom_change = ((month_total - prev_month_total) / prev_month_total) if prev_month_total > 0 else None
 
+        planned_value = float(planned_miles.get(day_key, 0.0))
+        actual_value = float(actual_miles_by_day.get(day_key, 0.0))
         effective = float(effective_miles.get(day_key, 0.0))
+        day_delta = actual_value - planned_value
         t7 = _sum_days(effective_miles, day, 7)
+        t7_planned = _sum_days(planned_miles, day, 7)
+        t7_actual = _sum_days(actual_miles_by_day, day, 7)
         t30 = _sum_days(effective_miles, day, 30)
+        t30_planned = _sum_days(planned_miles, day, 30)
+        t30_actual = _sum_days(actual_miles_by_day, day, 30)
         avg30 = t30 / 30.0
         mi_t30_ratio = (effective / avg30) if avg30 > 0 else None
         prev_t7 = _sum_days(effective_miles, day - timedelta(days=7), 7)
@@ -422,9 +455,10 @@ def get_plan_payload(
                 "is_today": day == today,
                 "is_past_or_today": day <= today,
                 "is_complete": bool(complete_by_date.get(day_key, False)),
+                "completion_source": completion_source_by_date.get(day_key, "auto"),
                 "run_type": run_type_by_date.get(day_key, ""),
                 "notes": notes_by_date.get(day_key, ""),
-                "planned_miles": float(planned_miles.get(day_key, 0.0)),
+                "planned_miles": planned_value,
                 "planned_input": _planned_input_for_day(
                     planned_total=float(planned_miles.get(day_key, 0.0)),
                     sessions=(
@@ -434,17 +468,30 @@ def get_plan_payload(
                         else []
                     ),
                 ),
-                "actual_miles": float(actual_miles.get(day_key, 0.0)),
+                "actual_miles": actual_value,
+                "day_delta": day_delta,
                 "effective_miles": effective,
                 "weekly_total": week_total,
+                "weekly_planned_total": week_planned_total,
+                "weekly_actual_total": week_actual_total,
+                "weekly_adherence_ratio": _ratio(week_actual_total, week_planned_total),
                 "wow_change": wow_change,
                 "long_pct": long_pct,
                 "monthly_total": month_total,
+                "monthly_planned_total": month_planned_total,
+                "monthly_actual_total": month_actual_total,
+                "monthly_adherence_ratio": _ratio(month_actual_total, month_planned_total),
                 "mom_change": mom_change,
                 "mi_t30_ratio": mi_t30_ratio,
                 "t7_miles": t7,
+                "t7_planned_miles": t7_planned,
+                "t7_actual_miles": t7_actual,
+                "t7_adherence_ratio": _ratio(t7_actual, t7_planned),
                 "t7_p7_ratio": t7_p7_ratio,
                 "t30_miles": t30,
+                "t30_planned_miles": t30_planned,
+                "t30_actual_miles": t30_actual,
+                "t30_adherence_ratio": _ratio(t30_actual, t30_planned),
                 "t30_p30_ratio": t30_p30_ratio,
                 "avg30_miles_per_day": avg30,
                 "session_spike_ratio": session_spike_ratio,
@@ -463,6 +510,34 @@ def get_plan_payload(
             }
         )
 
+    summary_anchor = center.isoformat()
+    anchor_row = next((row for row in rows if str(row.get("date")) == summary_anchor), None)
+    if anchor_row is None:
+        anchor_row = rows[0] if rows else {}
+
+    summary = {
+        "anchor_date": summary_anchor,
+        "day_planned": float(anchor_row.get("planned_miles") or 0.0),
+        "day_actual": float(anchor_row.get("actual_miles") or 0.0),
+        "day_delta": float(anchor_row.get("day_delta") or 0.0),
+        "t7_planned": float(anchor_row.get("t7_planned_miles") or 0.0),
+        "t7_actual": float(anchor_row.get("t7_actual_miles") or 0.0),
+        "t7_delta": float(anchor_row.get("t7_actual_miles") or 0.0) - float(anchor_row.get("t7_planned_miles") or 0.0),
+        "t7_adherence_ratio": anchor_row.get("t7_adherence_ratio"),
+        "t30_planned": float(anchor_row.get("t30_planned_miles") or 0.0),
+        "t30_actual": float(anchor_row.get("t30_actual_miles") or 0.0),
+        "t30_delta": float(anchor_row.get("t30_actual_miles") or 0.0) - float(anchor_row.get("t30_planned_miles") or 0.0),
+        "t30_adherence_ratio": anchor_row.get("t30_adherence_ratio"),
+        "week_planned": float(anchor_row.get("weekly_planned_total") or 0.0),
+        "week_actual": float(anchor_row.get("weekly_actual_total") or 0.0),
+        "week_delta": float(anchor_row.get("weekly_actual_total") or 0.0) - float(anchor_row.get("weekly_planned_total") or 0.0),
+        "week_adherence_ratio": anchor_row.get("weekly_adherence_ratio"),
+        "month_planned": float(anchor_row.get("monthly_planned_total") or 0.0),
+        "month_actual": float(anchor_row.get("monthly_actual_total") or 0.0),
+        "month_delta": float(anchor_row.get("monthly_actual_total") or 0.0) - float(anchor_row.get("monthly_planned_total") or 0.0),
+        "month_adherence_ratio": anchor_row.get("monthly_adherence_ratio"),
+    }
+
     return {
         "status": "ok",
         "timezone": settings.timezone,
@@ -472,5 +547,6 @@ def get_plan_payload(
         "start_date": display_start.isoformat(),
         "end_date": display_end.isoformat(),
         "run_type_options": list(RUN_TYPE_OPTIONS),
+        "summary": summary,
         "rows": rows,
     }
