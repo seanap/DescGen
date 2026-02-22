@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Settings
 from .dashboard_data import get_dashboard_payload
-from .storage import list_plan_days
+from .storage import list_plan_days, list_plan_sessions
 
 
 METERS_PER_MILE = 1609.34
@@ -16,6 +16,19 @@ MAX_WINDOW_DAYS = 56
 
 RUN_LIKE_TYPES = {"run", "trailrun", "virtualrun", "walk"}
 LONG_RUN_TYPES = {"longroad", "longmoderate", "longtrail", "race"}
+RUN_TYPE_OPTIONS = [
+    "",
+    "Easy",
+    "Recovery",
+    "SOS",
+    "Long Road",
+    "Long Moderate",
+    "Long Trail",
+    "Race",
+    "LT1",
+    "LT2",
+    "HIIT",
+]
 
 
 def _normalize_key(value: Any) -> str:
@@ -213,6 +226,29 @@ def _plan_day_map(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return mapped
 
 
+def _format_session_piece(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text
+
+
+def _planned_input_for_day(*, planned_total: float, sessions: list[dict[str, Any]]) -> str:
+    pieces: list[str] = []
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+        planned = _as_float(session.get("planned_miles"))
+        if planned is None or planned <= 0:
+            continue
+        pieces.append(_format_session_piece(planned))
+    if pieces:
+        return "+".join(pieces)
+    if planned_total <= 0:
+        return ""
+    return _format_session_piece(planned_total)
+
+
 def get_plan_payload(
     settings: Settings,
     *,
@@ -221,6 +257,7 @@ def get_plan_payload(
     today_local: date | None = None,
     dashboard_payload: dict[str, Any] | None = None,
     plan_day_rows: list[dict[str, Any]] | None = None,
+    plan_sessions_by_day: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     try:
         local_tz = ZoneInfo(settings.timezone)
@@ -258,6 +295,12 @@ def get_plan_payload(
             end_date=calc_end.isoformat(),
         )
     plan_days = _plan_day_map(plan_day_rows if isinstance(plan_day_rows, list) else [])
+    if plan_sessions_by_day is None:
+        plan_sessions_by_day = list_plan_sessions(
+            settings.processed_log_file,
+            start_date=calc_start.isoformat(),
+            end_date=calc_end.isoformat(),
+        )
 
     dates_full = _date_range(calc_start, calc_end)
     planned_miles: dict[str, float] = {}
@@ -269,7 +312,22 @@ def get_plan_payload(
     for day in dates_full:
         day_key = day.isoformat()
         plan_row = plan_days.get(day_key) or {}
-        planned = _as_float(plan_row.get("planned_total_miles")) or 0.0
+        sessions_for_day = (
+            plan_sessions_by_day.get(day_key)
+            if isinstance(plan_sessions_by_day, dict)
+            else []
+        )
+        planned_from_day = _as_float(plan_row.get("planned_total_miles")) or 0.0
+        session_total = 0.0
+        if isinstance(sessions_for_day, list):
+            for session in sessions_for_day:
+                if not isinstance(session, dict):
+                    continue
+                planned_piece = _as_float(session.get("planned_miles"))
+                if planned_piece is None or planned_piece <= 0:
+                    continue
+                session_total += planned_piece
+        planned = session_total if session_total > 0 else planned_from_day
         actual = _as_float(actual_miles.get(day_key)) or 0.0
         run_type = str(plan_row.get("run_type") or "").strip()
         notes = str(plan_row.get("notes") or "").strip()
@@ -367,6 +425,15 @@ def get_plan_payload(
                 "run_type": run_type_by_date.get(day_key, ""),
                 "notes": notes_by_date.get(day_key, ""),
                 "planned_miles": float(planned_miles.get(day_key, 0.0)),
+                "planned_input": _planned_input_for_day(
+                    planned_total=float(planned_miles.get(day_key, 0.0)),
+                    sessions=(
+                        plan_sessions_by_day.get(day_key)
+                        if isinstance(plan_sessions_by_day, dict)
+                        and isinstance(plan_sessions_by_day.get(day_key), list)
+                        else []
+                    ),
+                ),
                 "actual_miles": float(actual_miles.get(day_key, 0.0)),
                 "effective_miles": effective,
                 "weekly_total": week_total,
@@ -404,6 +471,6 @@ def get_plan_payload(
         "window_days": window,
         "start_date": display_start.isoformat(),
         "end_date": display_end.isoformat(),
+        "run_type_options": list(RUN_TYPE_OPTIONS),
         "rows": rows,
     }
-

@@ -117,6 +117,16 @@
   color: #233045;
 }
 
+.plan-complete-toggle {
+  cursor: pointer;
+  height: 18px;
+  width: 18px;
+}
+
+.distance-cell {
+  min-width: 130px;
+}
+
 .distance-main {
   display: block;
   font-weight: 700;
@@ -127,6 +137,22 @@
   display: block;
   font-size: 0.75rem;
   margin-top: 2px;
+}
+
+.plan-distance-input,
+.plan-run-type {
+  border: 1px solid var(--dg-border);
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-size: 0.92rem;
+  padding: 4px 6px;
+  width: 100%;
+}
+
+.plan-distance-input:focus,
+.plan-run-type:focus {
+  border-color: var(--dg-accent);
+  outline: 2px solid color-mix(in srgb, var(--dg-accent) 35%, transparent);
 }
 
 .metric-week {

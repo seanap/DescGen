@@ -1559,6 +1559,181 @@ def list_plan_days(path: Path, *, start_date: str, end_date: str) -> list[dict[s
     return payload
 
 
+def get_plan_day(path: Path, *, date_local: str) -> dict[str, Any] | None:
+    parsed = _parse_plan_date(date_local)
+    if parsed is None:
+        return None
+    date_key = parsed.isoformat()
+    try:
+        with _connect_runtime_db(path) as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    date_local,
+                    timezone,
+                    run_type,
+                    planned_total_miles,
+                    actual_total_miles,
+                    is_complete,
+                    notes,
+                    updated_at_utc
+                FROM plan_days
+                WHERE date_local = ?
+                LIMIT 1
+                """,
+                (date_key,),
+            ).fetchone()
+    except sqlite3.Error:
+        return None
+    if row is None:
+        return None
+    is_complete_raw = row["is_complete"]
+    complete = None if is_complete_raw is None else bool(int(is_complete_raw))
+    return {
+        "date_local": str(row["date_local"]),
+        "timezone": str(row["timezone"]) if row["timezone"] is not None else None,
+        "run_type": str(row["run_type"]) if row["run_type"] is not None else None,
+        "planned_total_miles": (
+            float(row["planned_total_miles"]) if row["planned_total_miles"] is not None else None
+        ),
+        "actual_total_miles": (
+            float(row["actual_total_miles"]) if row["actual_total_miles"] is not None else None
+        ),
+        "is_complete": complete,
+        "notes": str(row["notes"]) if row["notes"] is not None else None,
+        "updated_at_utc": str(row["updated_at_utc"]),
+    }
+
+
+def replace_plan_sessions_for_day(
+    path: Path,
+    *,
+    date_local: str,
+    sessions: list[dict[str, Any]],
+) -> bool:
+    parsed = _parse_plan_date(date_local)
+    if parsed is None:
+        return False
+    date_key = parsed.isoformat()
+    now_iso = _utc_now_iso()
+    rows: list[tuple[str, str, int, float | None, float | None, str | None, str | None, str | None, str]] = []
+    for idx, session in enumerate(sessions):
+        if not isinstance(session, dict):
+            continue
+        planned = _optional_float(session.get("planned_miles"))
+        actual = _optional_float(session.get("actual_miles"))
+        run_type = str(session.get("run_type") or "").strip() or None
+        workout_code = str(session.get("workout_code") or "").strip() or None
+        source_activity_id = str(session.get("source_activity_id") or "").strip() or None
+        rows.append(
+            (
+                uuid.uuid4().hex,
+                date_key,
+                int(session.get("ordinal")) if isinstance(session.get("ordinal"), int) else (idx + 1),
+                planned,
+                actual,
+                run_type,
+                workout_code,
+                source_activity_id,
+                now_iso,
+            )
+        )
+
+    try:
+        with _connect_runtime_db(path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """
+                INSERT INTO plan_days (
+                    date_local,
+                    updated_at_utc
+                )
+                VALUES (?, ?)
+                ON CONFLICT(date_local) DO UPDATE SET
+                    updated_at_utc = excluded.updated_at_utc
+                """,
+                (date_key, now_iso),
+            )
+            conn.execute(
+                "DELETE FROM plan_sessions WHERE date_local = ?",
+                (date_key,),
+            )
+            if rows:
+                conn.executemany(
+                    """
+                    INSERT INTO plan_sessions (
+                        session_id,
+                        date_local,
+                        ordinal,
+                        planned_miles,
+                        actual_miles,
+                        run_type,
+                        workout_code,
+                        source_activity_id,
+                        updated_at_utc
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def list_plan_sessions(path: Path, *, start_date: str, end_date: str) -> dict[str, list[dict[str, Any]]]:
+    start = _parse_plan_date(start_date)
+    end = _parse_plan_date(end_date)
+    if start is None or end is None:
+        return {}
+    if start > end:
+        start, end = end, start
+
+    try:
+        with _connect_runtime_db(path) as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    session_id,
+                    date_local,
+                    ordinal,
+                    planned_miles,
+                    actual_miles,
+                    run_type,
+                    workout_code,
+                    source_activity_id,
+                    updated_at_utc
+                FROM plan_sessions
+                WHERE date_local >= ? AND date_local <= ?
+                ORDER BY date_local ASC, ordinal ASC, session_id ASC
+                """,
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+    except sqlite3.Error:
+        return {}
+
+    payload: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        date_key = str(row["date_local"])
+        bucket = payload.setdefault(date_key, [])
+        bucket.append(
+            {
+                "session_id": str(row["session_id"]),
+                "date_local": date_key,
+                "ordinal": int(row["ordinal"]),
+                "planned_miles": float(row["planned_miles"]) if row["planned_miles"] is not None else None,
+                "actual_miles": float(row["actual_miles"]) if row["actual_miles"] is not None else None,
+                "run_type": str(row["run_type"]) if row["run_type"] is not None else None,
+                "workout_code": str(row["workout_code"]) if row["workout_code"] is not None else None,
+                "source_activity_id": (
+                    str(row["source_activity_id"]) if row["source_activity_id"] is not None else None
+                ),
+                "updated_at_utc": str(row["updated_at_utc"]),
+            }
+        )
+    return payload
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp")

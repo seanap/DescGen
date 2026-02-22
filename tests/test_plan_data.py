@@ -62,6 +62,7 @@ class TestPlanData(unittest.TestCase):
         self.assertAlmostEqual(today_row["effective_miles"], 6.2, places=3)
         self.assertEqual(today_row["run_type"], "Easy")
         self.assertFalse(today_row["is_complete"])
+        self.assertEqual(today_row["planned_input"], "6.2")
         self.assertAlmostEqual(today_row["weekly_total"], 51.6, places=1)
         self.assertAlmostEqual(today_row["long_pct"], 13.1 / 51.6, places=3)
         self.assertEqual(today_row["bands"]["long_pct"], "good")
@@ -76,6 +77,34 @@ class TestPlanData(unittest.TestCase):
         self.assertTrue(past_row["is_past_or_today"])
         self.assertAlmostEqual(past_row["actual_miles"], 13.1, places=2)
         self.assertAlmostEqual(past_row["effective_miles"], 13.1, places=2)
+        self.assertIn("run_type_options", payload)
+        self.assertIn("Easy", payload["run_type_options"])
+
+    def test_get_plan_payload_uses_session_sum_for_planned_and_planned_input(self) -> None:
+        payload = get_plan_payload(
+            _settings(),
+            center_date="2026-02-22",
+            window_days=7,
+            today_local=date(2026, 2, 22),
+            dashboard_payload={"activities": []},
+            plan_day_rows=[
+                {
+                    "date_local": "2026-02-23",
+                    "run_type": "Easy",
+                    "planned_total_miles": 9.0,
+                    "is_complete": False,
+                },
+            ],
+            plan_sessions_by_day={
+                "2026-02-23": [
+                    {"ordinal": 1, "planned_miles": 6.0},
+                    {"ordinal": 2, "planned_miles": 4.0},
+                ]
+            },
+        )
+        row = next(item for item in payload["rows"] if item["date"] == "2026-02-23")
+        self.assertAlmostEqual(row["planned_miles"], 10.0, places=3)
+        self.assertEqual(row["planned_input"], "6+4")
 
     def test_get_plan_payload_rejects_invalid_center_date(self) -> None:
         with self.assertRaises(ValueError):
