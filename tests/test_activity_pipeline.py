@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from chronicle.activity_pipeline import (
     _build_description_context,
+    _extract_activity_smashrun_badges,
     _extract_strava_badges,
     _extract_activity_garmin_badges,
     _extract_strava_segment_notables,
@@ -148,9 +149,47 @@ class TestActivityGarminBadges(unittest.TestCase):
             misery_index_description=None,
             air_quality_index=None,
             aqi_description=None,
+            smashrun_activity={"activityId": 99887766, "distance": 3218.68, "duration": 1500},
+            smashrun_badges=[
+                {"badgeName": "Two by 365 by 10k", "activityId": 99887766},
+                {"badgeName": "Not This Badge", "activityId": 99887765},
+            ],
         )
         self.assertEqual(context.get("activity_badges"), ["February Weekend 10K"])
         self.assertEqual(context.get("garmin", {}).get("activity_badges"), ["February Weekend 10K"])
+        self.assertEqual(context.get("smashrun_activity_badges"), ["Two by 365 by 10k"])
+        self.assertEqual(context.get("smashrun", {}).get("activity_badges"), ["Two by 365 by 10k"])
+
+
+class TestActivitySmashrunBadges(unittest.TestCase):
+    def test_extract_activity_smashrun_badges_matches_smashrun_and_strava_ids(self) -> None:
+        rows = [
+            {"badgeName": "Two by 365 by 10k", "activityId": 99887766},
+            {"badgeName": "Smashrun and Strava Linked", "stravaActivityId": "777"},
+            {"badgeName": "Not This One", "activityId": 111111},
+            {"badgeName": "Two by 365 by 10k", "activityId": 99887766},
+            {"badgeName": "No Association"},
+        ]
+
+        badges = _extract_activity_smashrun_badges(
+            rows,
+            smashrun_activity_id=99887766,
+            strava_activity_id=777,
+        )
+        self.assertEqual(badges, ["Two by 365 by 10k", "Smashrun and Strava Linked"])
+
+    def test_extract_activity_smashrun_badges_supports_activity_list_shapes(self) -> None:
+        rows = [
+            {"badgeName": "List Associated Badge", "activityIds": ["99887766", "123"]},
+            {"badgeName": "Nested Associated Badge", "activities": [{"id": 777}, {"id": 42}]},
+        ]
+
+        badges = _extract_activity_smashrun_badges(
+            rows,
+            smashrun_activity_id="99887766",
+            strava_activity_id="777",
+        )
+        self.assertEqual(badges, ["List Associated Badge", "Nested Associated Badge"])
 
 
 class TestStrengthProfileBehavior(unittest.TestCase):

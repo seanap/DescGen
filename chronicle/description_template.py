@@ -164,6 +164,9 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
     "smashrun_badges": [
         "Smashrun: 1,000 Mile Month Club",
     ],
+    "smashrun_activity_badges": [
+        "Two by 365 by 10k",
+    ],
     "segment_notables": [
         "Strava PR: River Path Sprint (1:18)",
         "Strava 2nd: Bridge Climb (2:42)",
@@ -496,6 +499,9 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "badges": [
             "Smashrun: 1,000 Mile Month Club",
         ],
+        "activity_badges": [
+            "Two by 365 by 10k",
+        ],
         "latest_activity": {
             "activity_id": 99887766,
             "activity_type": "Run",
@@ -713,7 +719,9 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     strength_ctx["garmin_badges"] = []
     strength_ctx["activity_badges"] = []
     strength_ctx["smashrun_badges"] = []
+    strength_ctx["smashrun_activity_badges"] = []
     strength_ctx["smashrun"]["badges"] = []
+    strength_ctx["smashrun"]["activity_badges"] = []
     strength_ctx["garmin"]["activity_badges"] = []
     strength_ctx["smashrun"]["latest_activity"] = {}
     strength_ctx["smashrun"]["stats"] = {}
@@ -2445,6 +2453,7 @@ _GROUP_SOURCE_MAP: dict[str, tuple[str, str]] = {
     "raw": ("Mixed", "Raw and derived payloads from all enabled services."),
     "segment_notables": ("Strava+Garmin", "Segment medals and PR highlights for latest activity."),
     "smashrun": ("Smashrun", "Smashrun latest activity and historical stats."),
+    "smashrun_activity_badges": ("Smashrun", "Smashrun badges linked to the current activity when linkage metadata is available."),
     "smashrun_badges": ("Smashrun", "Earned Smashrun badges."),
     "streak_days": ("Smashrun", "Current run streak length from Smashrun."),
     "strava_badges": ("Strava", "Strava achievement badges from latest activity detail."),
@@ -2484,6 +2493,7 @@ _GROUP_FRESHNESS_MAP: dict[str, str] = {
     "garmin_segment_notables": "activity",
     "strava_badges": "activity",
     "garmin_badges": "daily",
+    "smashrun_activity_badges": "activity",
     "smashrun_badges": "rolling",
     "streak_days": "daily",
     "training": "daily",
@@ -2543,6 +2553,14 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Smashrun badge highlights.",
         "tags": ["smashrun", "badges", "activity"],
         "metric_key": "smashrun_badges",
+    },
+    "smashrun_activity_badges": {
+        "source": "Smashrun",
+        "source_note": "Smashrun badges filtered to current activity by activity-id linkage keys.",
+        "label": "Activity Smashrun Badges",
+        "description": "Smashrun badge names earned by this activity only.",
+        "tags": ["smashrun", "badges", "activity"],
+        "metric_key": "smashrun_activity_badges",
     },
     "strava_segment_notables": {
         "source": "Strava",
@@ -3168,6 +3186,14 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Smashrun earned badge lines.",
         "tags": ["smashrun", "badges", "activity"],
         "metric_key": "smashrun_badges_list",
+    },
+    "smashrun.activity_badges": {
+        "source": "Smashrun",
+        "source_note": "Smashrun badge names linked to the current activity id.",
+        "label": "Smashrun Activity Badge List",
+        "description": "Smashrun badges earned by the latest processed activity.",
+        "tags": ["smashrun", "badges", "activity"],
+        "metric_key": "smashrun_activity_badges_list",
     },
     "garmin.last_activity.gap_pace": {
         "source": "Garmin",

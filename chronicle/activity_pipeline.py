@@ -846,6 +846,148 @@ def _extract_activity_garmin_badges(
     return matches
 
 
+def _smashrun_badge_title(item: dict[str, Any]) -> str:
+    return str(
+        item.get("badgeName")
+        or item.get("badgeTypeName")
+        or item.get("name")
+        or item.get("title")
+        or ""
+    ).strip()
+
+
+def _extract_smashrun_badge_assoc_ids(item: dict[str, Any]) -> set[str]:
+    assoc_type = _normalize_activity_type_key(
+        item.get("badgeAssocType")
+        or item.get("badge_assoc_type")
+        or item.get("assocType")
+        or item.get("assoc_type")
+        or ""
+    )
+    if assoc_type and assoc_type not in {
+        "activity",
+        "activityid",
+        "run",
+        "runid",
+        "stravaactivity",
+        "stravaactivityid",
+        "externalactivity",
+        "externalactivityid",
+    }:
+        return set()
+
+    scalar_keys = (
+        "activityId",
+        "activity_id",
+        "activityID",
+        "smashrunActivityId",
+        "smashrun_activity_id",
+        "stravaActivityId",
+        "strava_activity_id",
+        "externalActivityId",
+        "external_activity_id",
+        "runId",
+        "run_id",
+        "badgeAssocDataId",
+        "badge_assoc_data_id",
+    )
+    list_keys = (
+        "activityIds",
+        "activity_ids",
+        "smashrunActivityIds",
+        "smashrun_activity_ids",
+        "stravaActivityIds",
+        "strava_activity_ids",
+        "externalActivityIds",
+        "external_activity_ids",
+        "runIds",
+        "run_ids",
+        "activities",
+        "runs",
+        "badgeActivities",
+        "badge_activities",
+        "associatedActivities",
+        "associated_activities",
+    )
+    nested_keys = (
+        "association",
+        "associations",
+        "badgeAssociation",
+        "badgeAssociations",
+        "activity",
+        "run",
+    )
+
+    assoc_ids: set[str] = set()
+
+    def _add_id(value: Any) -> None:
+        normalized = _coerce_activity_id_str(value)
+        if normalized:
+            assoc_ids.add(normalized)
+
+    def _collect_from_value(value: Any, *, allow_generic_id: bool = False) -> None:
+        if isinstance(value, dict):
+            for key in scalar_keys:
+                if key in value:
+                    _add_id(value.get(key))
+            if allow_generic_id and "id" in value:
+                _add_id(value.get("id"))
+            return
+        if isinstance(value, (list, tuple, set)):
+            for row in value:
+                _collect_from_value(row, allow_generic_id=True)
+            return
+        _add_id(value)
+
+    for key in scalar_keys:
+        if key in item:
+            _add_id(item.get(key))
+    for key in list_keys:
+        if key in item:
+            _collect_from_value(item.get(key), allow_generic_id=True)
+    for key in nested_keys:
+        if key in item:
+            _collect_from_value(item.get(key), allow_generic_id=True)
+
+    return assoc_ids
+
+
+def _extract_activity_smashrun_badges(
+    smashrun_badge_records: list[dict[str, Any]],
+    *,
+    smashrun_activity_id: Any,
+    strava_activity_id: Any = None,
+    max_items: int = 20,
+) -> list[str]:
+    target_ids = {
+        _coerce_activity_id_str(smashrun_activity_id),
+        _coerce_activity_id_str(strava_activity_id),
+    }
+    target_ids.discard("")
+    if not target_ids:
+        return []
+
+    matches: list[str] = []
+    seen: set[str] = set()
+    for item in smashrun_badge_records:
+        if not isinstance(item, dict):
+            continue
+        badge_name = _smashrun_badge_title(item)
+        if not badge_name:
+            continue
+        assoc_ids = _extract_smashrun_badge_assoc_ids(item)
+        if not assoc_ids or target_ids.isdisjoint(assoc_ids):
+            continue
+        dedupe_key = badge_name.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        matches.append(badge_name)
+        if len(matches) >= max_items:
+            break
+    return matches
+
+
 def _extract_strava_segment_notables(activity: dict[str, Any], *, max_items: int = 20) -> list[str]:
     efforts = activity.get("segment_efforts")
     if not isinstance(efforts, list):
@@ -1482,6 +1624,12 @@ def _build_description_context(
         max_items=20,
     )
     smashrun_badges_lines = _normalize_smashrun_badges(smashrun_badges)
+    smashrun_activity_badges = _extract_activity_smashrun_badges(
+        smashrun_badges,
+        smashrun_activity_id=smashrun_activity_context.get("activity_id"),
+        strava_activity_id=detailed_activity.get("id"),
+        max_items=20,
+    )
     badges = _merge_badge_lists(strava_badges, garmin_badges, smashrun_badges_lines, max_items=30)
 
     distance_miles = round(float(detailed_activity.get("distance", 0) or 0) / 1609.34, 2)
@@ -1622,6 +1770,7 @@ def _build_description_context(
         "garmin_badges": garmin_badges,
         "activity_badges": garmin_activity_badges,
         "smashrun_badges": smashrun_badges_lines,
+        "smashrun_activity_badges": smashrun_activity_badges,
         "segment_notables": segment_notables,
         "strava_segment_notables": strava_segment_notables,
         "garmin_segment_notables": garmin_segment_notables,
@@ -1810,6 +1959,7 @@ def _build_description_context(
         },
         "smashrun": {
             "badges": smashrun_badges_lines,
+            "activity_badges": smashrun_activity_badges,
             "latest_activity": smashrun_activity_context,
             "stats": smashrun_stats_context,
         },
