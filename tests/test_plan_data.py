@@ -115,11 +115,39 @@ class TestPlanData(unittest.TestCase):
         self.assertEqual(
             row["planned_sessions_detail"],
             [
-                {"ordinal": 1, "planned_miles": 6.0, "run_type": "", "workout_code": ""},
-                {"ordinal": 2, "planned_miles": 4.0, "run_type": "", "workout_code": ""},
+                {"ordinal": 1, "planned_workout": "", "planned_miles": 6.0, "run_type": "", "workout_code": ""},
+                {"ordinal": 2, "planned_workout": "", "planned_miles": 4.0, "run_type": "", "workout_code": ""},
             ],
         )
         self.assertAlmostEqual(row["day_delta"], -10.0, places=3)
+
+    def test_get_plan_payload_includes_planned_workout_alias(self) -> None:
+        payload = get_plan_payload(
+            _settings(),
+            center_date="2026-02-22",
+            window_days=7,
+            today_local=date(2026, 2, 22),
+            dashboard_payload={"activities": []},
+            plan_day_rows=[
+                {
+                    "date_local": "2026-02-23",
+                    "run_type": "SOS",
+                    "planned_total_miles": 6.0,
+                    "is_complete": False,
+                },
+            ],
+            plan_sessions_by_day={
+                "2026-02-23": [
+                    {"ordinal": 1, "planned_miles": 6.0, "run_type": "SOS", "planned_workout": "2E + 20T + 2E"}
+                ]
+            },
+        )
+        row = next(item for item in payload["rows"] if item["date"] == "2026-02-23")
+        self.assertEqual(len(row["planned_sessions_detail"]), 1)
+        detail = row["planned_sessions_detail"][0]
+        self.assertEqual(detail["run_type"], "SOS")
+        self.assertEqual(detail["planned_workout"], "2E + 20T + 2E")
+        self.assertEqual(detail["workout_code"], "2E + 20T + 2E")
 
     def test_get_plan_payload_rejects_invalid_center_date(self) -> None:
         with self.assertRaises(ValueError):

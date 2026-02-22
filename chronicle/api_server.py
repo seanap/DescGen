@@ -337,7 +337,7 @@ def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object
         if isinstance(item, dict):
             planned_raw = item.get("planned_miles")
             run_type = str(item.get("run_type") or "").strip() or None
-            workout_code = str(item.get("workout_code") or "").strip() or None
+            workout_code = str(item.get("planned_workout") or item.get("workout_code") or "").strip() or None
         else:
             planned_raw = item
         try:
@@ -358,6 +358,21 @@ def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object
         )
         total += planned
     return sessions, total
+
+
+def _normalize_plan_session_response(sessions: object) -> list[dict[str, object]]:
+    if not isinstance(sessions, list):
+        return []
+    payload: list[dict[str, object]] = []
+    for item in sessions:
+        if not isinstance(item, dict):
+            continue
+        workout_text = str(item.get("planned_workout") or item.get("workout_code") or "").strip()
+        normalized = dict(item)
+        normalized["planned_workout"] = workout_text
+        normalized["workout_code"] = workout_text
+        payload.append(normalized)
+    return payload
 
 
 def _dashboard_min_plan_date(today: date) -> date:
@@ -665,13 +680,15 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
     elif isinstance(planned_total_miles, (int, float)) and float(planned_total_miles) > 0:
         distance_saved = _format_plan_miles_value(float(planned_total_miles))
 
+    normalized_sessions = _normalize_plan_session_response(sessions or [])
+
     return {
         "status": "ok",
         "date_local": date_key,
         "planned_total_miles": float(planned_total_miles or 0.0),
         "distance_saved": distance_saved,
-        "session_count": len(sessions or []),
-        "sessions": sessions or [],
+        "session_count": len(normalized_sessions),
+        "sessions": normalized_sessions,
         "run_type": run_type or "",
         "notes": notes or "",
         "is_complete": is_complete,

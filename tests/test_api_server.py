@@ -349,6 +349,38 @@ class TestApiServer(unittest.TestCase):
             self.assertEqual(len(sessions), 2)
             self.assertEqual(str(sessions[0].get("run_type") or ""), "Easy")
             self.assertEqual(str(sessions[1].get("run_type") or ""), "SOS")
+            self.assertEqual(str(sessions[0].get("planned_workout") or ""), "")
+            self.assertEqual(str(sessions[1].get("planned_workout") or ""), "")
+
+    def test_plan_day_put_accepts_planned_workout_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-23",
+                json={
+                    "sessions": [
+                        {
+                            "planned_miles": 9,
+                            "run_type": "SOS",
+                            "planned_workout": "15WU + 4x4min @LT2 / 3min easy + 10CD",
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            sessions = payload.get("sessions") or []
+            self.assertEqual(len(sessions), 1)
+            self.assertEqual(str(sessions[0].get("run_type") or ""), "SOS")
+            self.assertEqual(
+                str(sessions[0].get("planned_workout") or ""),
+                "15WU + 4x4min @LT2 / 3min easy + 10CD",
+            )
+            self.assertEqual(
+                str(sessions[0].get("workout_code") or ""),
+                "15WU + 4x4min @LT2 / 3min easy + 10CD",
+            )
 
     def test_plan_day_put_rejects_invalid_sessions_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

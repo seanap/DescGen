@@ -26,6 +26,39 @@
     "2": "LT2",
   };
 
+  const WORKOUT_PRESET_LIST_ID = "planWorkoutPresetList";
+  const workoutPresetOptions = [
+    "2E + 3x2T w/2:00 jog + 2E (Hansons strength)",
+    "2E + 6x800m @5k w/400m jog + 2E (Hansons speed)",
+    "1.5E + 10x400m @5k w/400m jog + 1.5E (Hansons speed)",
+    "2E + 20T + 2E (Jack Daniels tempo)",
+    "2E + 5x1k @I w/3:00 jog + 2E (Jack Daniels interval)",
+    "2E + 6x200m @R w/200m jog + 2E (Jack Daniels repetition)",
+    "15WU + 4x4min @LT2 w/3min easy + 10CD (Norwegian 4x4)",
+    "15WU + 5x4min @LT2 w/2min easy + 10CD (Norwegian variant)",
+    "15WU + 3x8min @LT1 w/2min easy + 10CD (Norwegian threshold)",
+  ];
+
+  function normalizeRunType(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
+  function isSosRunType(value) {
+    return normalizeRunType(value) === "sos";
+  }
+
+  function ensureWorkoutPresetList() {
+    if (!document || document.getElementById(WORKOUT_PRESET_LIST_ID)) return;
+    const list = document.createElement("datalist");
+    list.id = WORKOUT_PRESET_LIST_ID;
+    for (const optionValue of workoutPresetOptions) {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      list.appendChild(option);
+    }
+    document.body.appendChild(list);
+  }
+
   function asNumber(value) {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
   }
@@ -170,6 +203,7 @@
         ordinal: idx + 1,
         planned_miles: planned,
         run_type: String(item.run_type || ""),
+        planned_workout: String(item.planned_workout || item.workout_code || ""),
       });
     }
     if (normalized.length > 0) return normalized;
@@ -180,6 +214,7 @@
         ordinal: idx + 1,
         planned_miles: Number.parseFloat(String(value)),
         run_type: idx === 0 ? String((row && row.run_type) || "") : "",
+        planned_workout: "",
       }))
       .filter((item) => Number.isFinite(item.planned_miles) && item.planned_miles > 0);
     if (fromExplicit.length > 0) return fromExplicit;
@@ -190,14 +225,15 @@
         ordinal: idx + 1,
         planned_miles: value,
         run_type: idx === 0 ? String((row && row.run_type) || "") : "",
+        planned_workout: "",
       }));
     }
 
     const fallback = Number.parseFloat(String(row && row.planned_miles));
     if (Number.isFinite(fallback) && fallback > 0) {
-      return [{ ordinal: 1, planned_miles: fallback, run_type: String((row && row.run_type) || "") }];
+      return [{ ordinal: 1, planned_miles: fallback, run_type: String((row && row.run_type) || ""), planned_workout: "" }];
     }
-    return [{ ordinal: 1, planned_miles: null, run_type: String((row && row.run_type) || "") }];
+    return [{ ordinal: 1, planned_miles: null, run_type: String((row && row.run_type) || ""), planned_workout: "" }];
   }
 
   function serializeSessionsForApi(sessionDetails) {
@@ -208,12 +244,16 @@
       const planned = Number.parseFloat(String(session.planned_miles));
       if (!Number.isFinite(planned) || planned <= 0) continue;
       const runType = String(session.run_type || "").trim();
+      const plannedWorkout = String(session.planned_workout || session.workout_code || "").trim();
       const item = {
         ordinal: payload.length + 1,
         planned_miles: planned,
       };
       if (runType) {
         item.run_type = runType;
+      }
+      if (plannedWorkout) {
+        item.planned_workout = plannedWorkout;
       }
       payload.push(item);
     }
@@ -230,9 +270,20 @@
       const runTypeSelect = bodyEl.querySelector(
         `.plan-session-type[data-date="${dateLocal}"][data-session-index="${sessionIndex}"]`,
       );
+      const workoutInput = bodyEl.querySelector(
+        `.plan-session-workout[data-date="${dateLocal}"][data-session-index="${sessionIndex}"]`,
+      );
+      const fallbackWorkout = runTypeSelect && runTypeSelect.dataset ? String(runTypeSelect.dataset.plannedWorkout || "") : "";
+      const workoutValue = workoutInput && typeof workoutInput.value === "string"
+        ? workoutInput.value
+        : fallbackWorkout;
+      if (runTypeSelect && runTypeSelect.dataset) {
+        runTypeSelect.dataset.plannedWorkout = String(workoutValue || "");
+      }
       return {
         planned_miles: distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : "",
         run_type: runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : "",
+        planned_workout: workoutValue,
       };
     });
     return serializeSessionsForApi(raw);
@@ -311,6 +362,7 @@
     select.className = "plan-run-type plan-session-type";
     select.dataset.date = row.date;
     select.dataset.sessionIndex = String(sessionIndex);
+    select.dataset.plannedWorkout = String(session && (session.planned_workout || session.workout_code) ? (session.planned_workout || session.workout_code) : "");
     for (const optionValue of runTypeOptions) {
       const option = document.createElement("option");
       option.value = optionValue;
@@ -331,6 +383,40 @@
       focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
     });
     return select;
+  }
+
+  function buildSessionWorkoutInput(row, index, rows, session, sessionIndex, runTypeSelect) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "plan-workout-input plan-session-workout";
+    input.dataset.date = row.date;
+    input.dataset.sessionIndex = String(sessionIndex);
+    input.setAttribute("list", WORKOUT_PRESET_LIST_ID);
+    input.placeholder = "Workout shorthand";
+    input.title = "Workout shorthand for SOS session. Press Enter to save.";
+    input.value = String((session && (session.planned_workout || session.workout_code)) || runTypeSelect.dataset.plannedWorkout || "");
+    runTypeSelect.dataset.plannedWorkout = input.value;
+
+    input.addEventListener("input", () => {
+      runTypeSelect.dataset.plannedWorkout = String(input.value || "");
+    });
+    input.addEventListener("change", () => {
+      runTypeSelect.dataset.plannedWorkout = String(input.value || "");
+      saveSessionPayload(row, index, rows, row.date, "distance");
+    });
+    input.addEventListener("keydown", (event) => {
+      if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          runTypeSelect.dataset.plannedWorkout = String(input.value || "");
+          saveSessionPayload(row, index, rows, row.date, "distance");
+        }
+        return;
+      }
+      event.preventDefault();
+      focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+    });
+    return input;
   }
 
   function buildSessionDistanceEditor(row, index, rows) {
@@ -397,7 +483,7 @@
         addBtn.title = "Add session";
         addBtn.addEventListener("click", () => {
           const current = collectSessionPayloadForDate(row.date);
-          current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "" });
+          current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "", planned_workout: "" });
           saveSessionPayload(row, index, rows, row.date, "distance", current);
         });
         inlineActions.appendChild(addBtn);
@@ -437,7 +523,13 @@
       rowEl.className = "plan-session-row";
       rowEl.dataset.date = row.date;
       rowEl.dataset.sessionIndex = String(sessionIndex);
-      rowEl.appendChild(buildSessionTypeSelect(row, index, rows, session, sessionIndex));
+      const runTypeSelect = buildSessionTypeSelect(row, index, rows, session, sessionIndex);
+      rowEl.appendChild(runTypeSelect);
+      const runTypeValue = String(session && session.run_type ? session.run_type : runTypeSelect.value || "");
+      if (isSosRunType(runTypeValue)) {
+        rowEl.classList.add("plan-session-row-sos");
+        rowEl.appendChild(buildSessionWorkoutInput(row, index, rows, session, sessionIndex, runTypeSelect));
+      }
       editor.appendChild(rowEl);
     }
     return editor;
@@ -737,5 +829,6 @@
     });
   }
 
+  ensureWorkoutPresetList();
   loadPlan(centerDateEl.value);
 })();

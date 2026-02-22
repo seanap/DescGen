@@ -292,7 +292,7 @@ body.plan-page {
 }
 
 .plan-table {
-  --plan-col-done: 44px;
+  --plan-col-done: 34px;
   --plan-col-date: 178px;
   --plan-col-distance: 184px;
   --plan-col-run-type: 176px;
@@ -333,7 +333,7 @@ body.plan-page {
   border-right: 0;
   padding: 6px 8px;
   text-align: center;
-  vertical-align: top;
+  vertical-align: middle;
   white-space: nowrap;
   background: transparent;
 }
@@ -463,18 +463,22 @@ body.plan-page {
 }
 
 .done-cell {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  padding-inline: 4px;
+  min-width: var(--plan-col-done);
+  padding: 0 6px 0 2px;
+  position: relative;
+  vertical-align: middle !important;
 }
 
 .done-chip {
   aspect-ratio: 1 / 1;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  display: inline-block;
+  display: block;
   height: 11px;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 11px;
 }
 
@@ -547,6 +551,11 @@ body.plan-page {
   min-height: 24px;
 }
 
+.plan-session-row-sos {
+  display: grid;
+  gap: 4px;
+}
+
 .session-distance-wrap {
   position: relative;
 }
@@ -592,7 +601,8 @@ body.plan-page {
 }
 
 .plan-distance-input,
-.plan-run-type {
+.plan-run-type,
+.plan-workout-input {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 8px;
@@ -606,6 +616,11 @@ body.plan-page {
   min-width: min(164px, 100%);
 }
 
+.plan-workout-input {
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
+}
+
 .session-type-editor .plan-session-row {
   align-items: center;
   display: block;
@@ -616,7 +631,8 @@ body.plan-page {
 }
 
 .plan-distance-input:focus,
-.plan-run-type:focus {
+.plan-run-type:focus,
+.plan-workout-input:focus {
   outline: none;
   border-color: rgba(252, 76, 2, 0.88);
   box-shadow: 0 0 0 2px rgba(252, 76, 2, 0.25);

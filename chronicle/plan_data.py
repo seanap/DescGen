@@ -382,7 +382,8 @@ def get_plan_payload(
                         ),
                         "planned_miles": float(planned_piece),
                         "run_type": str(session.get("run_type") or "").strip(),
-                        "workout_code": str(session.get("workout_code") or "").strip(),
+                        "workout_code": str(session.get("workout_code") or session.get("planned_workout") or "").strip(),
+                        "planned_workout": str(session.get("planned_workout") or session.get("workout_code") or "").strip(),
                     }
                 )
         planned = session_total if session_total > 0 else planned_from_day
