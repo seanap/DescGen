@@ -14,6 +14,7 @@ from chronicle.storage import (
     enqueue_activity_job,
     get_activity_job,
     get_activity_state,
+    list_plan_days,
     get_runtime_value,
     get_runtime_values,
     is_activity_processed,
@@ -27,6 +28,7 @@ from chronicle.storage import (
     set_runtime_value,
     set_runtime_values,
     set_worker_heartbeat,
+    upsert_plan_day,
     write_json,
     write_config_snapshot,
 )
@@ -96,6 +98,31 @@ class TestStorage(unittest.TestCase):
                 "2026-02-22T00:00:00+00:00",
             )
             self.assertNotIn("worker.missing", values)
+
+    def test_plan_day_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            saved = upsert_plan_day(
+                path,
+                date_local="2026-02-22",
+                timezone_name="America/New_York",
+                run_type="Easy",
+                planned_total_miles=6.2,
+                is_complete=False,
+                notes="Plan day",
+            )
+            self.assertTrue(saved)
+            rows = list_plan_days(
+                path,
+                start_date="2026-02-01",
+                end_date="2026-02-28",
+            )
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["date_local"], "2026-02-22")
+            self.assertEqual(row["run_type"], "Easy")
+            self.assertAlmostEqual(float(row["planned_total_miles"]), 6.2, places=3)
+            self.assertEqual(row["is_complete"], False)
 
     def test_runtime_schema_initializes_once_per_db_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
