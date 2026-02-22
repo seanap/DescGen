@@ -379,27 +379,11 @@ body.plan-page {
   background: color-mix(in srgb, var(--plan-neon-blue) 10%, transparent);
 }
 
-.plan-table tbody tr {
-  position: relative;
-}
-
-.plan-table tbody tr.week-start::before,
-.plan-table tbody tr.week-end::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  z-index: 2;
-}
-
-.plan-table tbody tr.week-start::before {
-  top: 0;
+.plan-table tbody tr.week-start > td {
   border-top: 2px solid color-mix(in srgb, var(--plan-neon-blue) 56%, transparent);
 }
 
-.plan-table tbody tr.week-end::after {
-  bottom: 0;
+.plan-table tbody tr.week-end > td {
   border-bottom: 2px solid color-mix(in srgb, var(--plan-neon-pink) 50%, transparent);
 }
 
