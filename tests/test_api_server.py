@@ -311,6 +311,37 @@ class TestApiServer(unittest.TestCase):
             self.assertEqual(payload.get("status"), "ok")
             self.assertIsNone(payload.get("is_complete"))
 
+    def test_plan_day_put_accepts_sessions_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-23",
+                json={
+                    "sessions": [6, 4],
+                    "run_type": "Easy",
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(payload.get("session_count"), 2)
+            self.assertEqual(payload.get("distance_saved"), "6+4")
+
+    def test_plan_day_put_rejects_invalid_sessions_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-23",
+                json={
+                    "sessions": "6+4",
+                    "run_type": "Easy",
+                },
+            )
+            self.assertEqual(response.status_code, 400)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "error")
+            self.assertIn("sessions", str(payload.get("error")))
+
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)

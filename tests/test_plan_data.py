@@ -109,6 +109,7 @@ class TestPlanData(unittest.TestCase):
         row = next(item for item in payload["rows"] if item["date"] == "2026-02-23")
         self.assertAlmostEqual(row["planned_miles"], 10.0, places=3)
         self.assertEqual(row["planned_input"], "6+4")
+        self.assertEqual(row["planned_sessions"], [6.0, 4.0])
         self.assertAlmostEqual(row["day_delta"], -10.0, places=3)
 
     def test_get_plan_payload_rejects_invalid_center_date(self) -> None:

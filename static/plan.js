@@ -7,7 +7,20 @@
   const todayBtn = document.getElementById("planTodayBtn");
 
   let runTypeOptions = [""];
-  let pendingFocusDate = "";
+  let pendingFocus = { date: "", field: "distance" };
+
+  const runTypeHotkeys = {
+    e: "Easy",
+    r: "Recovery",
+    s: "SOS",
+    l: "Long Road",
+    m: "Long Moderate",
+    t: "Long Trail",
+    x: "Race",
+    h: "HIIT",
+    "1": "LT1",
+    "2": "LT2",
+  };
 
   function asNumber(value) {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -41,6 +54,13 @@
     return `${Math.round(parsed * 100)}%`;
   }
 
+  function formatSessionValue(value) {
+    if (Math.abs(value - Math.round(value)) < 1e-9) {
+      return String(Math.round(value));
+    }
+    return value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  }
+
   function metricBandClass(band) {
     const key = String(band || "neutral").toLowerCase();
     if (key === "easy" || key === "good" || key === "caution" || key === "hard") {
@@ -65,7 +85,55 @@
     return td;
   }
 
-  async function savePlanRow(dateLocal, payload, nextDate) {
+  function rowAt(rows, index) {
+    if (index < 0 || index >= rows.length) return null;
+    return rows[index];
+  }
+
+  function parseDistanceExpression(value) {
+    const text = String(value || "").trim();
+    if (!text) return [];
+    const parts = text.replace(/\s+/g, "").split("+");
+    const values = [];
+    for (const part of parts) {
+      if (!part) continue;
+      const parsed = Number.parseFloat(part);
+      if (!Number.isFinite(parsed) || parsed <= 0) continue;
+      values.push(parsed);
+    }
+    return values;
+  }
+
+  function sessionsFromRow(row, distanceValue) {
+    const explicit = Array.isArray(row && row.planned_sessions) ? row.planned_sessions : [];
+    const cleanExplicit = explicit
+      .map((value) => Number.parseFloat(String(value)))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (cleanExplicit.length > 0) return cleanExplicit;
+
+    const parsed = parseDistanceExpression(distanceValue);
+    if (parsed.length > 0) return parsed;
+    const fallback = Number.parseFloat(String(row && row.planned_miles));
+    return Number.isFinite(fallback) && fallback > 0 ? [fallback] : [];
+  }
+
+  function serializeSessionsForApi(values) {
+    return values
+      .map((value, index) => ({
+        ordinal: index + 1,
+        planned_miles: value,
+      }))
+      .filter((item) => Number.isFinite(item.planned_miles) && item.planned_miles > 0);
+  }
+
+  function setPendingFocus(dateValue, field) {
+    pendingFocus = {
+      date: String(dateValue || ""),
+      field: field === "run_type" || field === "complete" ? field : "distance",
+    };
+  }
+
+  async function savePlanRow(dateLocal, payload, nextFocusDate, nextField) {
     try {
       const response = await fetch(`/plan/day/${encodeURIComponent(dateLocal)}`, {
         method: "PUT",
@@ -76,11 +144,30 @@
       if (!response.ok || result.status !== "ok") {
         throw new Error(String((result && result.error) || "Failed to save plan day"));
       }
-      pendingFocusDate = String(nextDate || "");
+      setPendingFocus(nextFocusDate, nextField);
       await loadPlan(centerDateEl.value);
     } catch (err) {
       metaEl.textContent = String(err && err.message ? err.message : "Failed to save plan row");
     }
+  }
+
+  function selectorForField(field, dateValue) {
+    const dateEscaped = String(dateValue || "");
+    if (field === "run_type") return `.plan-run-type[data-date="${dateEscaped}"]`;
+    if (field === "complete") return `.plan-complete-toggle[data-date="${dateEscaped}"]`;
+    return `.plan-distance-input[data-date="${dateEscaped}"]`;
+  }
+
+  function focusNeighbor(rows, index, field, delta) {
+    const target = rowAt(rows, index + delta);
+    if (!target) return false;
+    const element = bodyEl.querySelector(selectorForField(field, target.date));
+    if (!element) return false;
+    element.focus();
+    if (field === "distance" && typeof element.select === "function") {
+      element.select();
+    }
+    return true;
   }
 
   function buildRunTypeSelect(row, index, rows) {
@@ -105,8 +192,16 @@
           distance: distanceValue,
           run_type: select.value,
         },
-        rows[index + 1] ? rows[index + 1].date : "",
+        row.date,
+        "run_type",
       );
+    });
+    select.addEventListener("keydown", (event) => {
+      if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
+        return;
+      }
+      event.preventDefault();
+      focusNeighbor(rows, index, "run_type", event.key === "ArrowDown" ? 1 : -1);
     });
     return select;
   }
@@ -117,14 +212,39 @@
     input.type = "text";
     input.dataset.date = row.date;
     input.value = String(row.planned_input || "");
-    input.title = "Use single mileage (6.2) or doubles/triples syntax (6+4 or 5+3+2).";
+    input.title = "Use single mileage (6.2) or doubles/triples syntax (6+4 or 5+3+2). Hotkeys: Ctrl+Shift+E/R/S/L/M/T/X/H/1/2.";
 
     input.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey) {
+        const mapped = runTypeHotkeys[String(event.key || "").toLowerCase()];
+        if (mapped && runTypeOptions.includes(mapped)) {
+          event.preventDefault();
+          const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
+          if (runTypeSelect) runTypeSelect.value = mapped;
+          void savePlanRow(
+            row.date,
+            {
+              distance: input.value,
+              run_type: mapped,
+            },
+            row.date,
+            "distance",
+          );
+          return;
+        }
+      }
+
       if (event.key !== "Enter") {
         return;
       }
       event.preventDefault();
-      const nextDate = rows[index + 1] ? rows[index + 1].date : "";
+      const nextRow = rowAt(rows, index + 1);
       const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
       const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
       void savePlanRow(
@@ -133,10 +253,85 @@
           distance: input.value,
           run_type: runTypeValue,
         },
-        nextDate,
+        nextRow ? nextRow.date : "",
+        "distance",
       );
     });
     return input;
+  }
+
+  function buildSessionControls(row, index, rows) {
+    const controls = document.createElement("div");
+    controls.className = "session-actions";
+
+    const label = document.createElement("span");
+    label.className = "session-label";
+    const baseSessions = sessionsFromRow(row, row && row.planned_input);
+    label.textContent = baseSessions.length > 0 ? baseSessions.map((item) => formatSessionValue(item)).join(" + ") : "single";
+    controls.appendChild(label);
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "session-btn";
+    addBtn.textContent = "+ Sess";
+    addBtn.title = "Add another session to this day.";
+    addBtn.addEventListener("click", () => {
+      const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
+      const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
+      const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
+      const currentSessions = sessionsFromRow(row, distanceInput ? distanceInput.value : row.planned_input);
+      currentSessions.push(1.0);
+      const nextPayload = serializeSessionsForApi(currentSessions);
+      void savePlanRow(
+        row.date,
+        {
+          sessions: nextPayload,
+          run_type: runTypeValue,
+        },
+        row.date,
+        "distance",
+      );
+    });
+    controls.appendChild(addBtn);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "session-btn";
+    removeBtn.textContent = "- Sess";
+    removeBtn.title = "Remove the last session from this day.";
+    removeBtn.disabled = baseSessions.length <= 1;
+    removeBtn.addEventListener("click", () => {
+      const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
+      const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
+      const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
+      const currentSessions = sessionsFromRow(row, distanceInput ? distanceInput.value : row.planned_input);
+      currentSessions.pop();
+      const nextPayload = serializeSessionsForApi(currentSessions);
+      if (nextPayload.length === 0) {
+        void savePlanRow(
+          row.date,
+          {
+            distance: "",
+            run_type: runTypeValue,
+          },
+          row.date,
+          "distance",
+        );
+        return;
+      }
+      void savePlanRow(
+        row.date,
+        {
+          sessions: nextPayload,
+          run_type: runTypeValue,
+        },
+        row.date,
+        "distance",
+      );
+    });
+    controls.appendChild(removeBtn);
+
+    return controls;
   }
 
   function renderRows(rows) {
@@ -165,8 +360,14 @@
             run_type: runTypeValue,
             is_complete: doneInput.checked,
           },
-          "",
+          row.date,
+          "complete",
         );
+      });
+      doneInput.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        event.preventDefault();
+        focusNeighbor(rows, index, "complete", event.key === "ArrowDown" ? 1 : -1);
       });
       doneTd.appendChild(doneInput);
       if (row && row.completion_source === "manual") {
@@ -187,7 +388,8 @@
               run_type: runTypeValue,
               is_complete: null,
             },
-            "",
+            row.date,
+            "complete",
           );
         });
         doneTd.appendChild(autoBtn);
@@ -199,9 +401,10 @@
       const distanceTd = document.createElement("td");
       distanceTd.className = "distance-cell";
       distanceTd.appendChild(buildDistanceInput(row, index, rows));
+      distanceTd.appendChild(buildSessionControls(row, index, rows));
       const detail = document.createElement("span");
       detail.className = "distance-detail";
-      detail.textContent = `A ${formatMiles(row && row.actual_miles, 1)} | E ${formatMiles(row && row.effective_miles, 1)}`;
+      detail.textContent = `A ${formatMiles(row && row.actual_miles, 1)} | E ${formatMiles(row && row.effective_miles, 1)} | Δ ${formatSigned(row && row.day_delta, 1)}`;
       distanceTd.appendChild(detail);
       tr.appendChild(distanceTd);
 
@@ -298,12 +501,15 @@
   }
 
   function applyPendingFocus() {
-    if (!pendingFocusDate) return;
-    const target = bodyEl.querySelector(`.plan-distance-input[data-date="${pendingFocusDate}"]`);
-    pendingFocusDate = "";
+    if (!pendingFocus.date) return;
+    const target = bodyEl.querySelector(selectorForField(pendingFocus.field, pendingFocus.date));
+    const field = pendingFocus.field;
+    pendingFocus = { date: "", field: "distance" };
     if (!target) return;
     target.focus();
-    target.select();
+    if (field === "distance" && typeof target.select === "function") {
+      target.select();
+    }
   }
 
   async function loadPlan(centerDate) {

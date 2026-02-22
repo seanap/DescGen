@@ -324,6 +324,34 @@ def _parse_plan_distance_input(raw_value: object) -> tuple[list[dict[str, object
     return sessions, total
 
 
+def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object]], float]:
+    if not isinstance(raw_value, list):
+        raise ValueError("sessions must be an array of numeric values or objects with planned_miles.")
+    sessions: list[dict[str, object]] = []
+    total = 0.0
+    for idx, item in enumerate(raw_value):
+        if isinstance(item, dict):
+            planned_raw = item.get("planned_miles")
+        else:
+            planned_raw = item
+        try:
+            planned = float(planned_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("sessions entries must be numeric planned mileage values.") from exc
+        if planned < 0:
+            raise ValueError("sessions planned_miles must be >= 0.")
+        if planned == 0:
+            continue
+        sessions.append(
+            {
+                "ordinal": idx + 1,
+                "planned_miles": planned,
+            }
+        )
+        total += planned
+    return sessions, total
+
+
 @app.get("/health")
 def health() -> tuple[dict, int]:
     payload = _latest_payload()
@@ -494,7 +522,12 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
             return {"status": "error", "error": "is_complete must be boolean or null."}, 400
 
     sessions: list[dict[str, object]] | None = None
-    if "distance" in body:
+    if "sessions" in body:
+        try:
+            sessions, planned_total_miles = _parse_plan_sessions_input(body.get("sessions"))
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 400
+    elif "distance" in body:
         try:
             sessions, planned_total_miles = _parse_plan_distance_input(body.get("distance"))
         except ValueError as exc:
@@ -552,6 +585,7 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
         "planned_total_miles": float(planned_total_miles or 0.0),
         "distance_saved": distance_saved,
         "session_count": len(sessions or []),
+        "sessions": sessions or [],
         "run_type": run_type or "",
         "notes": notes or "",
         "is_complete": is_complete,
