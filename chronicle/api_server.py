@@ -12,6 +12,7 @@ from flask import Flask, redirect, render_template, request
 from .activity_pipeline import run_once
 from .config import Settings
 from .dashboard_data import get_dashboard_payload
+from .plan_data import get_plan_payload
 from .setup_config import (
     PROVIDER_FIELDS,
     PROVIDER_LINKS,
@@ -349,6 +350,11 @@ def dashboard_page() -> str:
     return render_template("dashboard.html")
 
 
+@app.get("/plan")
+def plan_page() -> str:
+    return render_template("plan.html")
+
+
 @app.get("/control")
 def control_page() -> str:
     return render_template("control.html")
@@ -374,6 +380,24 @@ def dashboard_data_get() -> tuple[dict, int]:
         return {"status": "error", "error": str(exc)}, 400
     except Exception as exc:
         return {"status": "error", "error": f"Failed to build dashboard payload: {exc}"}, 500
+    return payload, 200
+
+
+@app.get("/plan/data.json")
+def plan_data_get() -> tuple[dict, int]:
+    center_date = str(request.args.get("center_date") or "").strip() or None
+    window_days = str(request.args.get("window_days") or "").strip() or str(14)
+    current = _effective_settings()
+    try:
+        payload = get_plan_payload(
+            current,
+            center_date=center_date,
+            window_days=window_days,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    except Exception as exc:
+        return {"status": "error", "error": f"Failed to build plan payload: {exc}"}, 500
     return payload, 200
 
 
