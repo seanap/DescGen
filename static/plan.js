@@ -2,9 +2,10 @@
   const bodyEl = document.getElementById("planTableBody");
   const metaEl = document.getElementById("planTopMeta");
   const summaryEl = document.getElementById("planSummary");
+  const tableWrapEl = document.querySelector(".plan-table-wrap");
   const centerDateEl = document.getElementById("planCenterDate");
+  const centerBtn = document.getElementById("planCenterBtn");
   const reloadBtn = document.getElementById("planReloadBtn");
-  const todayBtn = document.getElementById("planTodayBtn");
   const settingsBtn = document.getElementById("planSettingsBtn");
   const settingsPanel = document.getElementById("planSettingsPanel");
   const seedBtn = document.getElementById("planSeedBtn");
@@ -16,6 +17,7 @@
   let renderedRows = [];
   let loadedStartDate = "";
   let loadedEndDate = "";
+  let loadedTimezone = "";
   const PLAN_INITIAL_FUTURE_DAYS = 365;
   const PLAN_APPEND_FUTURE_DAYS = 56;
 
@@ -145,6 +147,40 @@
     return "metric-hard";
   }
 
+  const DISTANCE_COLOR_STOPS = [
+    { miles: 4.50, rgb: [201, 207, 218] }, // light gray (min)
+    { miles: 6.15, rgb: [66, 196, 117] }, // green (mid)
+    { miles: 13.10, rgb: [132, 88, 206] }, // purple (max)
+  ];
+
+  function interpolateRgb(a, b, ratio) {
+    const next = Math.max(0, Math.min(1, Number(ratio || 0)));
+    return [
+      Math.round(a[0] + ((b[0] - a[0]) * next)),
+      Math.round(a[1] + ((b[1] - a[1]) * next)),
+      Math.round(a[2] + ((b[2] - a[2]) * next)),
+    ];
+  }
+
+  function distanceColorForMiles(value) {
+    const miles = asNumber(value);
+    if (miles === null) return "";
+    const first = DISTANCE_COLOR_STOPS[0];
+    const last = DISTANCE_COLOR_STOPS[DISTANCE_COLOR_STOPS.length - 1];
+    if (miles <= first.miles) return `rgb(${first.rgb.join(" ")})`;
+    if (miles >= last.miles) return `rgb(${last.rgb.join(" ")})`;
+    for (let idx = 1; idx < DISTANCE_COLOR_STOPS.length; idx += 1) {
+      const left = DISTANCE_COLOR_STOPS[idx - 1];
+      const right = DISTANCE_COLOR_STOPS[idx];
+      if (miles > right.miles) continue;
+      const span = right.miles - left.miles;
+      const ratio = span > 0 ? (miles - left.miles) / span : 0;
+      const rgb = interpolateRgb(left.rgb, right.rgb, ratio);
+      return `rgb(${rgb.join(" ")})`;
+    }
+    return `rgb(${last.rgb.join(" ")})`;
+  }
+
   function makeCell(text, className) {
     const td = document.createElement("td");
     td.textContent = text;
@@ -256,6 +292,26 @@
     const monthStart = new Date(parsed.getTime());
     monthStart.setUTCDate(1);
     return formatIsoDate(monthStart);
+  }
+
+  function overlapStartForDate(anchorDate, floorDate = "") {
+    const weekBoundaryStart = weekStartIso(anchorDate);
+    const monthBoundaryStart = monthStartIso(anchorDate);
+    let appendStart = "";
+    if (isIsoDateString(weekBoundaryStart) && isIsoDateString(monthBoundaryStart)) {
+      appendStart = weekBoundaryStart < monthBoundaryStart ? weekBoundaryStart : monthBoundaryStart;
+    } else if (isIsoDateString(weekBoundaryStart)) {
+      appendStart = weekBoundaryStart;
+    } else if (isIsoDateString(monthBoundaryStart)) {
+      appendStart = monthBoundaryStart;
+    }
+    if (!appendStart && isIsoDateString(anchorDate)) {
+      appendStart = anchorDate;
+    }
+    if (isIsoDateString(floorDate) && appendStart < floorDate) {
+      appendStart = floorDate;
+    }
+    return appendStart;
   }
 
   function parseDistanceExpression(value) {
@@ -479,21 +535,7 @@
         && requestedFocusDate > loadedEndDate
       );
       if (shouldAppendFuture) {
-        const weekBoundaryStart = weekStartIso(dateLocal);
-        const monthBoundaryStart = monthStartIso(dateLocal);
-        let appendStart = "";
-        if (isIsoDateString(weekBoundaryStart) && isIsoDateString(monthBoundaryStart)) {
-          appendStart = weekBoundaryStart < monthBoundaryStart ? weekBoundaryStart : monthBoundaryStart;
-        } else if (isIsoDateString(weekBoundaryStart)) {
-          appendStart = weekBoundaryStart;
-        } else if (isIsoDateString(monthBoundaryStart)) {
-          appendStart = monthBoundaryStart;
-        } else {
-          appendStart = addDaysIso(loadedEndDate, 1);
-        }
-        if (isIsoDateString(loadedStartDate) && appendStart < loadedStartDate) {
-          appendStart = loadedStartDate;
-        }
+        const appendStart = overlapStartForDate(dateLocal, loadedStartDate);
         const appendTarget = addDaysIso(loadedEndDate, PLAN_APPEND_FUTURE_DAYS);
         const appendEnd = requestedFocusDate > appendTarget ? requestedFocusDate : appendTarget;
         await loadPlanRange({
@@ -771,6 +813,9 @@
         rowsByDate.set(row.date, row);
       }
       const tr = document.createElement("tr");
+      if (row && typeof row.date === "string" && row.date) {
+        tr.dataset.date = row.date;
+      }
       const weekInfo = weekInfoForDate(row && row.date);
       const prevWeekInfo = weekInfoForDate(rowAt(rows, index - 1) && rowAt(rows, index - 1).date);
       const nextWeekInfo = weekInfoForDate(rowAt(rows, index + 1) && rowAt(rows, index + 1).date);
@@ -826,6 +871,18 @@
 
       const distanceTd = document.createElement("td");
       distanceTd.className = "distance-cell";
+      let distanceMileage = null;
+      if (row && row.is_past_or_today && !row.is_today) {
+        distanceMileage = asNumber(row.actual_miles);
+        if (distanceMileage === null) distanceMileage = asNumber(row.planned_miles);
+      } else {
+        distanceMileage = asNumber(row && row.planned_miles);
+      }
+      const distanceTone = distanceColorForMiles(distanceMileage);
+      if (distanceTone) {
+        distanceTd.classList.add("distance-gradient-cell");
+        distanceTd.style.setProperty("--distance-mile-color", distanceTone);
+      }
       if (row && row.is_past_or_today && !row.is_today) {
         distanceTd.appendChild(buildPastDistanceSummary(row));
       } else {
@@ -897,7 +954,17 @@
       metaEl.textContent = "Data unavailable";
       return;
     }
-    metaEl.textContent = `${payload.start_date} to ${payload.end_date} | Center ${payload.center_date} | ${payload.timezone}`;
+    loadedTimezone = String(payload.timezone || loadedTimezone || "");
+    metaEl.textContent = `${payload.start_date} to ${payload.end_date} | Center ${payload.center_date} | ${loadedTimezone}`;
+  }
+
+  function setMetaFromState(centerDate) {
+    if (!metaEl) return;
+    if (!isIsoDateString(loadedStartDate) || !isIsoDateString(loadedEndDate)) return;
+    const centerValue = isIsoDateString(centerDate) ? centerDate : centerDateEl.value;
+    const effectiveCenter = isIsoDateString(centerValue) ? centerValue : loadedEndDate;
+    const timezoneText = loadedTimezone || "--";
+    metaEl.textContent = `${loadedStartDate} to ${loadedEndDate} | Center ${effectiveCenter} | ${timezoneText}`;
   }
 
   function setSettingsStatus(message, tone) {
@@ -993,6 +1060,91 @@
     }
   }
 
+  function summaryFromRow(row) {
+    const weekPlanned = Number(row && row.weekly_planned_total) || 0;
+    const weekActual = Number(row && row.weekly_actual_total) || 0;
+    const monthPlanned = Number(row && row.monthly_planned_total) || 0;
+    const monthActual = Number(row && row.monthly_actual_total) || 0;
+    const t7Planned = Number(row && row.t7_planned_miles) || 0;
+    const t7Actual = Number(row && row.t7_actual_miles) || 0;
+    const t30Planned = Number(row && row.t30_planned_miles) || 0;
+    const t30Actual = Number(row && row.t30_actual_miles) || 0;
+    return {
+      day_planned: Number(row && row.planned_miles) || 0,
+      day_actual: Number(row && row.actual_miles) || 0,
+      day_delta: Number(row && row.day_delta) || 0,
+      t7_planned: t7Planned,
+      t7_actual: t7Actual,
+      t7_delta: t7Actual - t7Planned,
+      t7_adherence_ratio: row ? row.t7_adherence_ratio : null,
+      t30_planned: t30Planned,
+      t30_actual: t30Actual,
+      t30_delta: t30Actual - t30Planned,
+      t30_adherence_ratio: row ? row.t30_adherence_ratio : null,
+      week_planned: weekPlanned,
+      week_actual: weekActual,
+      week_delta: weekActual - weekPlanned,
+      week_adherence_ratio: row ? row.weekly_adherence_ratio : null,
+      month_planned: monthPlanned,
+      month_actual: monthActual,
+      month_delta: monthActual - monthPlanned,
+      month_adherence_ratio: row ? row.monthly_adherence_ratio : null,
+    };
+  }
+
+  function setSummaryForDate(dateValue) {
+    if (!isIsoDateString(dateValue)) return;
+    const row = rowsByDate.get(dateValue);
+    if (!row) return;
+    setSummary({
+      status: "ok",
+      summary: summaryFromRow(row),
+    });
+  }
+
+  function centerDateRowInView(dateValue, behavior = "auto") {
+    if (!tableWrapEl || !isIsoDateString(dateValue)) return false;
+    const targetRow = bodyEl.querySelector(`tr[data-date="${dateValue}"]`);
+    if (!(targetRow instanceof HTMLElement)) return false;
+    const tableEl = tableWrapEl.querySelector("table");
+    const headerHeight = tableEl && tableEl.tHead ? tableEl.tHead.getBoundingClientRect().height : 0;
+    const viewportHeight = Math.max(1, tableWrapEl.clientHeight - headerHeight);
+    const desiredTop = targetRow.offsetTop - headerHeight - ((viewportHeight - targetRow.offsetHeight) / 2);
+    const maxScroll = Math.max(0, tableWrapEl.scrollHeight - tableWrapEl.clientHeight);
+    const nextTop = Math.max(0, Math.min(desiredTop, maxScroll));
+    tableWrapEl.scrollTo({
+      top: nextTop,
+      behavior: behavior === "smooth" ? "smooth" : "auto",
+    });
+    return true;
+  }
+
+  async function ensureDateLoadedForCenter(targetDate) {
+    if (!isIsoDateString(targetDate)) return;
+    if (!isIsoDateString(loadedEndDate)) return;
+    const hasStart = isIsoDateString(loadedStartDate);
+    if (hasStart && targetDate < loadedStartDate) {
+      await loadPlanRange({
+        startDate: targetDate,
+        endDate: loadedEndDate,
+        centerDateOverride: targetDate,
+        append: false,
+      });
+      return;
+    }
+    if (targetDate > loadedEndDate) {
+      const appendStart = overlapStartForDate(loadedEndDate, hasStart ? loadedStartDate : "");
+      const appendTarget = addDaysIso(loadedEndDate, PLAN_APPEND_FUTURE_DAYS);
+      const appendEnd = targetDate > appendTarget ? targetDate : appendTarget;
+      await loadPlanRange({
+        startDate: appendStart,
+        endDate: appendEnd,
+        centerDateOverride: targetDate,
+        append: true,
+      });
+    }
+  }
+
   function applyPendingFocus() {
     if (!pendingFocus.date) return;
     const target = bodyEl.querySelector(selectorForField(pendingFocus.field, pendingFocus.date));
@@ -1010,6 +1162,8 @@
     endDate = "",
     centerDateOverride = "",
     append = false,
+    centerDateInView = "",
+    centerBehavior = "auto",
   } = {}) {
     const params = new URLSearchParams();
     params.set("window_days", "14");
@@ -1060,13 +1214,21 @@
         loadedEndDate = String(endDate);
       }
       applyPendingFocus();
+      const centerTarget = String(centerDateInView || "").trim();
+      if (isIsoDateString(centerTarget)) {
+        requestAnimationFrame(() => {
+          centerDateRowInView(centerTarget, centerBehavior);
+        });
+      }
     } catch (_err) {
       bodyEl.innerHTML = "<tr><td colspan=\"15\">Network error while loading plan data.</td></tr>";
       if (metaEl) metaEl.textContent = "Network error";
     }
   }
 
-  async function loadPlan(centerDate) {
+  async function loadPlan(centerDate, options = {}) {
+    const centerInView = !!options.centerInView;
+    const centerBehavior = String(options.centerBehavior || "auto");
     const targetDate = String(centerDate || centerDateEl.value || todayIsoLocal()).trim();
     const endDate = isIsoDateString(loadedEndDate) ? loadedEndDate : addDaysIso(todayIsoLocal(), PLAN_INITIAL_FUTURE_DAYS);
     const startDate = isIsoDateString(loadedStartDate) ? loadedStartDate : "";
@@ -1075,19 +1237,35 @@
       endDate,
       centerDateOverride: targetDate,
       append: false,
+      centerDateInView: centerInView ? targetDate : "",
+      centerBehavior,
     });
+  }
+
+  async function centerOnSelectedDate() {
+    const selectedDate = isIsoDateString(centerDateEl.value) ? centerDateEl.value : todayIsoLocal();
+    centerDateEl.value = selectedDate;
+    await ensureDateLoadedForCenter(selectedDate);
+    const effectiveCenter = isIsoDateString(centerDateEl.value) ? centerDateEl.value : selectedDate;
+    setMetaFromState(effectiveCenter);
+    setSummaryForDate(effectiveCenter);
+    if (!centerDateRowInView(effectiveCenter, "smooth")) {
+      await loadPlan(effectiveCenter, { centerInView: true, centerBehavior: "smooth" });
+    }
   }
 
   reloadBtn.addEventListener("click", () => {
     void loadPlan(centerDateEl.value);
   });
-  todayBtn.addEventListener("click", () => {
-    const isoDate = todayIsoLocal();
-    centerDateEl.value = isoDate;
-    void loadPlan(isoDate);
-  });
-  centerDateEl.addEventListener("change", () => {
-    void loadPlan(centerDateEl.value);
+  if (centerBtn) {
+    centerBtn.addEventListener("click", () => {
+      void centerOnSelectedDate();
+    });
+  }
+  centerDateEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    void centerOnSelectedDate();
   });
 
   if (settingsBtn && settingsPanel) {
@@ -1112,5 +1290,8 @@
   }
 
   bindWorkoutMenuHandlers();
-  void loadPlan(centerDateEl.value || todayIsoLocal());
+  if (!isIsoDateString(centerDateEl.value)) {
+    centerDateEl.value = todayIsoLocal();
+  }
+  void loadPlan(centerDateEl.value || todayIsoLocal(), { centerInView: true, centerBehavior: "auto" });
 })();

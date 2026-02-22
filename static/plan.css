@@ -204,14 +204,6 @@ body.plan-page {
   flex-wrap: wrap;
 }
 
-.plan-grid-controls label {
-  color: var(--dg-muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
 .plan-grid-controls input,
 .plan-grid-controls button {
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -501,6 +493,18 @@ body.plan-page {
   min-width: var(--plan-col-distance);
 }
 
+.plan-table tbody td.distance-cell.distance-gradient-cell {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--distance-mile-color, #8aa4c4) 32%, rgba(10, 10, 10, 0.82)),
+      color-mix(in srgb, var(--distance-mile-color, #8aa4c4) 18%, transparent)
+    ) !important;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--distance-mile-color, #8aa4c4) 36%, transparent),
+    0 0 12px -11px var(--distance-mile-color, #8aa4c4);
+}
+
 .plan-aed-summary {
   align-items: center;
   color: #c2cfe0;
@@ -536,6 +540,8 @@ body.plan-page {
 }
 
 .session-distance-wrap {
+  margin: 0 auto;
+  max-width: 124px;
   position: relative;
 }
 
@@ -725,7 +731,7 @@ body.plan-page {
 .metric-long-block,
 .metric-month-block,
 .metric-mom-block {
-  min-width: 88px;
+  min-width: 72px;
 }
 
 .metric-long-block {
@@ -818,10 +824,6 @@ body.plan-page {
   .plan-grid-controls {
     width: 100%;
     gap: 7px;
-  }
-
-  .plan-grid-controls label {
-    width: 100%;
   }
 
   .plan-grid-controls input {
