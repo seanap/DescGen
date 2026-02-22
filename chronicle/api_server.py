@@ -557,12 +557,16 @@ def dashboard_data_get() -> tuple[dict, int]:
 def plan_data_get() -> tuple[dict, int]:
     center_date = str(request.args.get("center_date") or "").strip() or None
     window_days = str(request.args.get("window_days") or "").strip() or str(14)
+    start_date = str(request.args.get("start_date") or "").strip() or None
+    end_date = str(request.args.get("end_date") or "").strip() or None
     current = _effective_settings()
     try:
         payload = get_plan_payload(
             current,
             center_date=center_date,
             window_days=window_days,
+            start_date=start_date,
+            end_date=end_date,
         )
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400

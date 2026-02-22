@@ -185,6 +185,43 @@ class TestPlanData(unittest.TestCase):
         self.assertEqual(payload["min_center_date"], "2025-01-01")
         self.assertEqual(payload["center_date"], "2025-01-01")
 
+    def test_range_mode_uses_start_and_end_dates(self) -> None:
+        with patch.dict(os.environ, {"DASHBOARD_START_DATE": "2025-01-01"}, clear=False):
+            payload = get_plan_payload(
+                _settings(),
+                start_date="2025-01-01",
+                end_date="2026-02-24",
+                today_local=date(2026, 2, 22),
+                dashboard_payload={"activities": []},
+                plan_day_rows=[],
+            )
+        self.assertEqual(payload["start_date"], "2025-01-01")
+        self.assertEqual(payload["end_date"], "2026-02-24")
+        self.assertEqual(len(payload["rows"]), 420)
+
+    def test_range_mode_defaults_start_to_dashboard_start_date(self) -> None:
+        with patch.dict(os.environ, {"DASHBOARD_START_DATE": "2024-01-01"}, clear=False):
+            payload = get_plan_payload(
+                _settings(),
+                end_date="2026-02-24",
+                today_local=date(2026, 2, 22),
+                dashboard_payload={"activities": []},
+                plan_day_rows=[],
+            )
+        self.assertEqual(payload["start_date"], "2024-01-01")
+        self.assertEqual(payload["end_date"], "2026-02-24")
+
+    def test_range_mode_rejects_end_before_start(self) -> None:
+        with self.assertRaises(ValueError):
+            get_plan_payload(
+                _settings(),
+                start_date="2026-02-24",
+                end_date="2026-02-01",
+                today_local=date(2026, 2, 22),
+                dashboard_payload={"activities": []},
+                plan_day_rows=[],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

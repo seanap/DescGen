@@ -241,6 +241,29 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0].get("center_date"), "2026-02-22")
         self.assertEqual(calls[0].get("window_days"), "14")
+        self.assertIsNone(calls[0].get("start_date"))
+        self.assertIsNone(calls[0].get("end_date"))
+
+    def test_plan_data_endpoint_passes_range_dates(self) -> None:
+        calls: list[dict] = []
+
+        def _payload(*_args, **kwargs):
+            calls.append(kwargs)
+            return {
+                "status": "ok",
+                "start_date": "2025-01-01",
+                "end_date": "2027-02-22",
+                "rows": [],
+            }
+
+        api_server.get_plan_payload = _payload
+        response = self.client.get("/plan/data.json?start_date=2025-01-01&end_date=2027-02-22")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload.get("status"), "ok")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].get("start_date"), "2025-01-01")
+        self.assertEqual(calls[0].get("end_date"), "2027-02-22")
 
     def test_plan_data_endpoint_returns_400_for_invalid_center_date(self) -> None:
         def _raise(*_args, **_kwargs):
