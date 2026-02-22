@@ -66,6 +66,8 @@ FALLBACK_ACCENTS = [
 _REFRESH_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="dashboard-refresh")
 _REFRESH_FUTURE: concurrent.futures.Future | None = None
 _REFRESH_GUARD = threading.Lock()
+_PAYLOAD_MEMORY_CACHE_GUARD = threading.Lock()
+_PAYLOAD_MEMORY_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _to_bool(value: object) -> bool:
@@ -189,6 +191,64 @@ def _dashboard_history_start() -> datetime:
 def dashboard_data_path(settings: Settings) -> Path:
     filename = str(os.getenv("DASHBOARD_DATA_FILE", DEFAULT_DASHBOARD_DATA_FILE)).strip() or DEFAULT_DASHBOARD_DATA_FILE
     return settings.state_dir / filename
+
+
+def _dashboard_payload_cache_key(data_path: Path) -> str:
+    try:
+        return str(data_path.resolve())
+    except OSError:
+        return str(data_path)
+
+
+def _dashboard_payload_file_marker(data_path: Path) -> tuple[int, int, int, int] | None:
+    try:
+        stat = data_path.stat()
+    except OSError:
+        return None
+    return int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ctime_ns), int(stat.st_ino)
+
+
+def _load_dashboard_payload_cached(data_path: Path) -> dict[str, Any] | None:
+    cache_key = _dashboard_payload_cache_key(data_path)
+    marker = _dashboard_payload_file_marker(data_path)
+    with _PAYLOAD_MEMORY_CACHE_GUARD:
+        if marker is None:
+            _PAYLOAD_MEMORY_CACHE.pop(cache_key, None)
+        else:
+            entry = _PAYLOAD_MEMORY_CACHE.get(cache_key)
+            if isinstance(entry, dict) and entry.get("marker") == marker:
+                payload = entry.get("payload")
+                if isinstance(payload, dict):
+                    return dict(payload)
+
+    payload = read_json(data_path)
+    if not isinstance(payload, dict):
+        with _PAYLOAD_MEMORY_CACHE_GUARD:
+            _PAYLOAD_MEMORY_CACHE.pop(cache_key, None)
+        return None
+
+    current_marker = _dashboard_payload_file_marker(data_path)
+    if current_marker is not None:
+        with _PAYLOAD_MEMORY_CACHE_GUARD:
+            _PAYLOAD_MEMORY_CACHE[cache_key] = {
+                "marker": current_marker,
+                "payload": dict(payload),
+            }
+    return payload
+
+
+def _persist_dashboard_payload_cached(data_path: Path, payload: dict[str, Any]) -> None:
+    write_json(data_path, payload)
+    cache_key = _dashboard_payload_cache_key(data_path)
+    marker = _dashboard_payload_file_marker(data_path)
+    with _PAYLOAD_MEMORY_CACHE_GUARD:
+        if marker is None:
+            _PAYLOAD_MEMORY_CACHE.pop(cache_key, None)
+            return
+        _PAYLOAD_MEMORY_CACHE[cache_key] = {
+            "marker": marker,
+            "payload": dict(payload),
+        }
 
 
 def intervals_metrics_cache_path(settings: Settings) -> Path:
@@ -1006,6 +1066,109 @@ def _normalize_dashboard_payload(payload: dict[str, Any], settings: Settings) ->
     return normalized
 
 
+def _normalize_dashboard_response_mode(value: object) -> str:
+    normalized = str(value or "").strip().lower()
+    if not normalized or normalized == "full":
+        return "full"
+    if normalized in {"summary", "slim"}:
+        return "summary"
+    if normalized == "year":
+        return "year"
+    raise ValueError(f"Invalid dashboard mode '{value}'. Expected one of: full, summary, year.")
+
+
+def _parse_dashboard_response_year(value: object) -> int:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("Dashboard year mode requires query parameter 'year'.")
+    try:
+        year = int(text)
+    except ValueError as exc:
+        raise ValueError("Dashboard year must be a valid integer.") from exc
+    if year < 1970 or year > 9999:
+        raise ValueError("Dashboard year must be between 1970 and 9999.")
+    return year
+
+
+def _project_dashboard_payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    projected = dict(payload)
+    activities_raw = payload.get("activities")
+    activity_count = len(activities_raw) if isinstance(activities_raw, list) else 0
+    projected["activities"] = []
+    projected["activity_count"] = activity_count
+    projected["response_mode"] = "summary"
+    return projected
+
+
+def _project_dashboard_payload_year(payload: dict[str, Any], *, response_year: int) -> dict[str, Any]:
+    year_key = str(response_year)
+    projected = dict(payload)
+
+    aggregates_raw = payload.get("aggregates")
+    aggregate_year = (
+        aggregates_raw.get(year_key)
+        if isinstance(aggregates_raw, dict) and isinstance(aggregates_raw.get(year_key), dict)
+        else {}
+    )
+    projected["aggregates"] = {year_key: aggregate_year} if aggregate_year else {}
+
+    intervals_year_type_raw = payload.get("intervals_year_type_metrics")
+    intervals_year_type = (
+        intervals_year_type_raw.get(year_key)
+        if isinstance(intervals_year_type_raw, dict) and isinstance(intervals_year_type_raw.get(year_key), dict)
+        else {}
+    )
+    projected["intervals_year_type_metrics"] = {year_key: intervals_year_type} if intervals_year_type else {}
+
+    activities: list[dict[str, Any]] = []
+    activities_raw = payload.get("activities")
+    if isinstance(activities_raw, list):
+        for item in activities_raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                item_year = int(item.get("year"))
+            except (TypeError, ValueError):
+                continue
+            if item_year == response_year:
+                activities.append(dict(item))
+    projected["activities"] = activities
+    projected["activity_count"] = len(activities)
+    projected["years"] = [response_year]
+
+    types_raw = payload.get("types")
+    type_order = [item for item in types_raw if isinstance(item, str)] if isinstance(types_raw, list) else []
+    scoped_types = list(aggregate_year.keys())
+    ordered_types = [item for item in type_order if item in scoped_types]
+    for item in scoped_types:
+        if item not in ordered_types:
+            ordered_types.append(item)
+    projected["types"] = ordered_types
+
+    type_meta_raw = payload.get("type_meta")
+    type_meta = type_meta_raw if isinstance(type_meta_raw, dict) else {}
+    projected["type_meta"] = {item: type_meta[item] for item in ordered_types if item in type_meta}
+
+    projected["response_mode"] = "year"
+    projected["response_year"] = response_year
+    return projected
+
+
+def _apply_dashboard_response_mode(
+    payload: dict[str, Any],
+    *,
+    response_mode: str,
+    response_year: int | str | None,
+) -> dict[str, Any]:
+    mode = _normalize_dashboard_response_mode(response_mode)
+    if mode == "full":
+        return dict(payload)
+    if mode == "summary":
+        return _project_dashboard_payload_summary(payload)
+    year = _parse_dashboard_response_year(response_year)
+    return _project_dashboard_payload_year(payload, response_year=year)
+
+
 def _refresh_lock_ttl_seconds() -> int:
     raw = str(os.getenv("DASHBOARD_REFRESH_LOCK_TTL_SECONDS", DEFAULT_REFRESH_LOCK_TTL_SECONDS)).strip()
     try:
@@ -1022,7 +1185,7 @@ def _build_and_persist_payload(
     latest_marker: tuple[str | None, str | None] | None = None,
 ) -> dict[str, Any]:
     payload = _normalize_dashboard_payload(build_dashboard_payload(settings, latest_marker=latest_marker), settings)
-    write_json(data_path, payload)
+    _persist_dashboard_payload_cached(data_path, payload)
     return payload
 
 
@@ -1030,7 +1193,7 @@ def _smart_revalidate_payload(settings: Settings, data_path: Path, cached_payloa
     latest_marker = _fetch_latest_activity_marker(settings)
     if _cache_is_current_for_latest_activity(cached_payload, latest_marker):
         touched = _touch_cached_payload_validation(cached_payload, latest_marker)
-        write_json(data_path, touched)
+        _persist_dashboard_payload_cached(data_path, touched)
         return touched
     incremental = _build_incremental_payload_from_cache(
         settings,
@@ -1038,7 +1201,7 @@ def _smart_revalidate_payload(settings: Settings, data_path: Path, cached_payloa
         latest_marker=latest_marker,
     )
     if isinstance(incremental, dict):
-        write_json(data_path, incremental)
+        _persist_dashboard_payload_cached(data_path, incremental)
         return incremental
     return _build_and_persist_payload(settings, data_path, latest_marker=latest_marker)
 
@@ -1057,7 +1220,7 @@ def _run_background_refresh(settings: Settings, *, reason: str) -> None:
 
     try:
         data_path = dashboard_data_path(settings)
-        cached = read_json(data_path)
+        cached = _load_dashboard_payload_cached(data_path)
         set_runtime_values(
             settings.processed_log_file,
             {
@@ -1123,7 +1286,7 @@ def _schedule_background_refresh(settings: Settings, *, reason: str) -> bool:
 
 def ensure_dashboard_cache_warm(settings: Settings) -> dict[str, Any]:
     data_path = dashboard_data_path(settings)
-    cached = read_json(data_path)
+    cached = _load_dashboard_payload_cached(data_path)
     if isinstance(cached, dict):
         return _normalize_dashboard_payload(cached, settings)
     try:
@@ -1139,35 +1302,72 @@ def get_dashboard_payload(
     force_refresh: bool = False,
     max_age_seconds: int | None = None,
     allow_async_refresh: bool = True,
+    response_mode: str = "full",
+    response_year: int | str | None = None,
 ) -> dict[str, Any]:
     data_path = dashboard_data_path(settings)
     age_limit = _cache_max_age_seconds() if max_age_seconds is None else max(0, int(max_age_seconds))
+    mode = _normalize_dashboard_response_mode(response_mode)
 
-    cached = read_json(data_path)
+    cached = _load_dashboard_payload_cached(data_path)
     if force_refresh:
         try:
-            return _build_and_persist_payload(settings, data_path)
+            rebuilt = _build_and_persist_payload(settings, data_path)
+            return _apply_dashboard_response_mode(
+                _normalize_dashboard_payload(rebuilt, settings),
+                response_mode=mode,
+                response_year=response_year,
+            )
         except Exception:
             if isinstance(cached, dict):
                 logger.exception("Forced dashboard rebuild failed; serving stale cached payload.")
-                return _normalize_dashboard_payload(cached, settings)
+                return _apply_dashboard_response_mode(
+                    _normalize_dashboard_payload(cached, settings),
+                    response_mode=mode,
+                    response_year=response_year,
+                )
             logger.exception("Forced dashboard rebuild failed with no cache; serving empty payload.")
-            return _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings)
+            return _apply_dashboard_response_mode(
+                _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings),
+                response_mode=mode,
+                response_year=response_year,
+            )
 
     if isinstance(cached, dict):
         if _is_payload_fresh(cached, max_age_seconds=age_limit):
-            return _normalize_dashboard_payload(cached, settings)
+            return _apply_dashboard_response_mode(
+                _normalize_dashboard_payload(cached, settings),
+                response_mode=mode,
+                response_year=response_year,
+            )
         revalidating = _schedule_background_refresh(settings, reason="stale_cached_request") if allow_async_refresh else False
         stale_response = dict(cached)
         stale_response["cache_state"] = "stale_revalidating" if revalidating else "stale"
         stale_response["revalidating"] = revalidating
-        return _normalize_dashboard_payload(stale_response, settings)
+        return _apply_dashboard_response_mode(
+            _normalize_dashboard_payload(stale_response, settings),
+            response_mode=mode,
+            response_year=response_year,
+        )
 
     try:
-        return _build_and_persist_payload(settings, data_path)
+        rebuilt = _build_and_persist_payload(settings, data_path)
+        return _apply_dashboard_response_mode(
+            _normalize_dashboard_payload(rebuilt, settings),
+            response_mode=mode,
+            response_year=response_year,
+        )
     except Exception:
         if isinstance(cached, dict):
             logger.exception("Dashboard rebuild failed; serving stale cached payload.")
-            return _normalize_dashboard_payload(cached, settings)
+            return _apply_dashboard_response_mode(
+                _normalize_dashboard_payload(cached, settings),
+                response_mode=mode,
+                response_year=response_year,
+            )
         logger.exception("Dashboard rebuild failed with no cache; serving empty payload.")
-        return _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings)
+        return _apply_dashboard_response_mode(
+            _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings),
+            response_mode=mode,
+            response_year=response_year,
+        )

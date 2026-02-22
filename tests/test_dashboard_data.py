@@ -96,6 +96,174 @@ class TestDashboardData(unittest.TestCase):
             self.assertEqual(payload["generated_at"], now_iso)
             mock_build.assert_not_called()
 
+    def test_in_memory_cache_reuses_payload_until_file_marker_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            data_path = dashboard_data_path(settings)
+            dashboard_data._PAYLOAD_MEMORY_CACHE.clear()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            initial = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+            }
+            write_json(data_path, initial)
+
+            with mock.patch("chronicle.dashboard_data.read_json", wraps=dashboard_data.read_json) as read_json_mock:
+                first = get_dashboard_payload(settings, max_age_seconds=3600)
+                second = get_dashboard_payload(settings, max_age_seconds=3600)
+                self.assertEqual(first["generated_at"], second["generated_at"])
+                self.assertEqual(read_json_mock.call_count, 1)
+
+                replacement = dict(initial)
+                replacement["generated_at"] = datetime.now(timezone.utc).isoformat()
+                replacement["validated_at"] = replacement["generated_at"]
+                write_json(data_path, replacement)
+
+                third = get_dashboard_payload(settings, max_age_seconds=3600)
+                self.assertEqual(read_json_mock.call_count, 2)
+                self.assertEqual(third["generated_at"], replacement["generated_at"])
+
+    def test_response_mode_summary_omits_activities(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": ["Run"],
+                "type_meta": {"Run": {"label": "Run", "accent": "#3fa8ff"}},
+                "other_bucket": "OtherSports",
+                "aggregates": {"2026": {"Run": {}}},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [
+                    {
+                        "id": "1001",
+                        "date": "2026-02-01",
+                        "year": 2026,
+                        "type": "Run",
+                        "raw_type": "Run",
+                        "start_date_local": "2026-02-01T10:15:00+00:00",
+                        "hour": 10,
+                        "distance": 5000.0,
+                        "moving_time": 1500.0,
+                        "elevation_gain": 42.0,
+                        "url": "https://www.strava.com/activities/1001",
+                    }
+                ],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {"2026": {"Run": {"avg_fitness": 70.0}}},
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+
+            payload = get_dashboard_payload(settings, max_age_seconds=3600, response_mode="summary")
+            self.assertEqual(payload.get("response_mode"), "summary")
+            self.assertEqual(payload.get("activity_count"), 1)
+            self.assertEqual(payload.get("activities"), [])
+            self.assertIn("2026", payload.get("aggregates", {}))
+
+    def test_response_mode_year_filters_payload_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2025, 2026],
+                "types": ["Run", "Ride"],
+                "type_meta": {
+                    "Run": {"label": "Run", "accent": "#3fa8ff"},
+                    "Ride": {"label": "Ride", "accent": "#39d98a"},
+                },
+                "other_bucket": "OtherSports",
+                "aggregates": {
+                    "2025": {"Ride": {"2025-02-01": {"count": 1, "activity_ids": ["9001"]}}},
+                    "2026": {"Run": {"2026-02-01": {"count": 1, "activity_ids": ["1001"]}}},
+                },
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [
+                    {
+                        "id": "9001",
+                        "date": "2025-02-01",
+                        "year": 2025,
+                        "type": "Ride",
+                        "raw_type": "Ride",
+                        "start_date_local": "2025-02-01T10:15:00+00:00",
+                        "hour": 10,
+                        "distance": 12000.0,
+                        "moving_time": 1800.0,
+                        "elevation_gain": 100.0,
+                        "url": "https://www.strava.com/activities/9001",
+                    },
+                    {
+                        "id": "1001",
+                        "date": "2026-02-01",
+                        "year": 2026,
+                        "type": "Run",
+                        "raw_type": "Run",
+                        "start_date_local": "2026-02-01T10:15:00+00:00",
+                        "hour": 10,
+                        "distance": 5000.0,
+                        "moving_time": 1500.0,
+                        "elevation_gain": 42.0,
+                        "url": "https://www.strava.com/activities/1001",
+                    },
+                ],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {
+                    "2025": {"Ride": {"avg_fitness": 68.0}},
+                    "2026": {"Run": {"avg_fitness": 72.0}},
+                },
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+
+            payload = get_dashboard_payload(
+                settings,
+                max_age_seconds=3600,
+                response_mode="year",
+                response_year=2026,
+            )
+            self.assertEqual(payload.get("response_mode"), "year")
+            self.assertEqual(payload.get("response_year"), 2026)
+            self.assertEqual(payload.get("years"), [2026])
+            self.assertEqual(set(payload.get("aggregates", {}).keys()), {"2026"})
+            self.assertEqual(set(payload.get("intervals_year_type_metrics", {}).keys()), {"2026"})
+            self.assertEqual(payload.get("types"), ["Run"])
+            self.assertEqual(len(payload.get("activities", [])), 1)
+            self.assertEqual(payload["activities"][0]["id"], "1001")
+
+    def test_response_mode_year_requires_year_parameter(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {},
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+            with self.assertRaises(ValueError):
+                get_dashboard_payload(settings, max_age_seconds=3600, response_mode="year")
+
     def test_returns_stale_cache_if_rebuild_fails(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             settings = self._settings_for(td)

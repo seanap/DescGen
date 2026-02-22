@@ -61,7 +61,12 @@ curl http://localhost:1609/service-metrics
 - Purpose: Dashboard JSON payload.
 - Query params:
   - `force=true` (optional) to force rebuild.
+  - `mode=full|summary|year` (optional, default `full`)
+  - `year=YYYY` (required when `mode=year`)
 - Response notes:
+  - `mode=summary` omits the `activities` array and returns `activity_count` to reduce payload size.
+  - `mode=year` scopes `aggregates`, `intervals_year_type_metrics`, `activities`, and `types` to one year.
+  - Invalid `mode`/`year` values return `400`.
   - Includes stale-while-revalidate hints when serving stale cache:
     - `cache_state` (`stale` or `stale_revalidating`)
     - `revalidating` (boolean)
@@ -77,6 +82,8 @@ curl http://localhost:1609/service-metrics
 ```bash
 curl http://localhost:1609/dashboard/data.json
 curl "http://localhost:1609/dashboard/data.json?force=true"
+curl "http://localhost:1609/dashboard/data.json?mode=summary"
+curl "http://localhost:1609/dashboard/data.json?mode=year&year=2026"
 ```
 
 ## Sources / Setup API
