@@ -962,6 +962,27 @@ def _normalize_activity_type_key(value: Any) -> str:
     return "".join(ch for ch in raw if ch.isalnum())
 
 
+def _is_incline_treadmill_named_activity(
+    activity: dict[str, Any],
+    training: dict[str, Any] | None = None,
+) -> bool:
+    texts = [_text_blob(activity)]
+    garmin_type_key = ""
+    if isinstance(training, dict):
+        garmin_last = training.get("garmin_last_activity")
+        if isinstance(garmin_last, dict):
+            texts.append(str(garmin_last.get("activity_name") or "").strip().lower())
+            texts.append(str(garmin_last.get("activity_type") or "").strip().lower())
+            garmin_type_key = _normalize_activity_type_key(garmin_last.get("activity_type"))
+
+    for text in texts:
+        normalized = " ".join(str(text or "").split())
+        if "treadmill incline" in normalized or "incline treadmill" in normalized:
+            return True
+
+    return garmin_type_key in {"treadmillincline", "inclinetreadmill"}
+
+
 def _training_indicates_strength(training: dict[str, Any] | None) -> bool:
     def _is_positive_numeric(value: Any) -> bool:
         parsed = _as_float(value)
@@ -1015,6 +1036,8 @@ def _incline_treadmill_match_reasons(
     sport_type = raw_sport_type.lower()
     if _is_strength_like(activity) or _training_indicates_strength(training):
         return []
+    if not _is_incline_treadmill_named_activity(activity, training):
+        return []
     text = _text_blob(activity)
     start = _start_latlng(activity)
     no_gps = start is None
@@ -1036,6 +1059,7 @@ def _incline_treadmill_match_reasons(
     has_device_hint = external_id.startswith("garmin_ping_") or "garmin" in device_name
 
     reasons: list[str] = []
+    reasons.append("incline treadmill activity name")
     if has_treadmill_hint:
         reasons.append("treadmill keyword")
     if sport_type == "virtualrun" and no_gps:
@@ -1247,7 +1271,7 @@ def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[st
         return payload
     if profile_id == "incline_treadmill":
         payload["type"] = "Walk"
-        payload["name"] = "Max Incline Treadmill Walk"
+        payload["name"] = "Max Incline Treadmill"
         payload["trainer"] = True
         return payload
     if profile_id == "treadmill":
@@ -1255,7 +1279,7 @@ def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[st
         speed_mph = speed_mps * 2.23694
         is_walk = speed_mph < 4.0
         payload["type"] = "Walk" if is_walk else "Run"
-        payload["name"] = "Max Incline Treadmill Walk" if is_walk else "Max Incline Treadmill Run"
+        payload["name"] = "Treadmill Walk" if is_walk else "Treadmill Run"
         payload["trainer"] = True
     return payload
 
