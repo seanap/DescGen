@@ -158,6 +158,9 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
     "garmin_badges": [
         "Garmin: Run Streak 400 (L1)",
     ],
+    "activity_badges": [
+        "February Weekend 10K",
+    ],
     "smashrun_badges": [
         "Smashrun: 1,000 Mile Month Club",
     ],
@@ -412,8 +415,12 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
         "badges": [
             "Garmin: Run Streak 400 (L1)",
         ],
+        "activity_badges": [
+            "February Weekend 10K",
+        ],
         "segment_notables": [],
         "last_activity": {
+            "activity_id": 21939412525,
             "activity_name": "Morning Run",
             "activity_type": "running",
             "start_local": "2026-02-15 06:42:00",
@@ -544,7 +551,15 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
     },
     "raw": {
         "activity": {"id": 1234567890},
-        "training": {},
+        "training": {
+            "garmin_badges_raw": [
+                {
+                    "badgeName": "February Weekend 10K",
+                    "badgeAssocType": "activityId",
+                    "badgeAssocDataId": "21939412525",
+                }
+            ]
+        },
         "intervals": {},
         "week": {},
         "month": {},
@@ -696,8 +711,10 @@ def _build_sample_fixtures() -> dict[str, dict[str, Any]]:
     strength_ctx["badges"] = []
     strength_ctx["strava_badges"] = []
     strength_ctx["garmin_badges"] = []
+    strength_ctx["activity_badges"] = []
     strength_ctx["smashrun_badges"] = []
     strength_ctx["smashrun"]["badges"] = []
+    strength_ctx["garmin"]["activity_badges"] = []
     strength_ctx["smashrun"]["latest_activity"] = {}
     strength_ctx["smashrun"]["stats"] = {}
 
@@ -2416,6 +2433,7 @@ def _type_name(value: Any) -> str:
 _GROUP_SOURCE_MAP: dict[str, tuple[str, str]] = {
     "achievements": ("Intervals.icu", "Achievement badges from Intervals activity payload."),
     "activity": ("Strava", "Latest activity metrics. Elevation can be overridden by Smashrun."),
+    "activity_badges": ("Garmin", "Garmin badges filtered to the current activity when linkage metadata is available."),
     "badges": ("Mixed", "Badge-style highlights from Strava, Garmin, and Smashrun."),
     "crono": ("crono-api", "Local nutrition/energy balance API values."),
     "garmin": ("Garmin", "Garmin-focused readiness, status, and run-dynamics metrics."),
@@ -2455,6 +2473,7 @@ _SOURCE_COST_TIER_MAP: dict[str, str] = {
 
 _GROUP_FRESHNESS_MAP: dict[str, str] = {
     "activity": "activity",
+    "activity_badges": "activity",
     "achievements": "activity",
     "badges": "activity",
     "intervals": "activity",
@@ -2508,6 +2527,14 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Garmin badge highlights.",
         "tags": ["garmin", "badges", "activity"],
         "metric_key": "garmin_badges",
+    },
+    "activity_badges": {
+        "source": "Garmin",
+        "source_note": "Garmin badges filtered to current activity by badgeAssocType/activityId linkage.",
+        "label": "Activity Garmin Badges",
+        "description": "Garmin badge names earned by this activity only.",
+        "tags": ["garmin", "badges", "activity"],
+        "metric_key": "garmin_activity_badges",
     },
     "smashrun_badges": {
         "source": "Smashrun",
@@ -3157,6 +3184,14 @@ _FIELD_CATALOG_EXACT_MAP: dict[str, dict[str, Any]] = {
         "description": "Garmin earned badge lines.",
         "tags": ["garmin", "badges", "activity"],
         "metric_key": "garmin_badges_list",
+    },
+    "garmin.activity_badges": {
+        "source": "Garmin",
+        "source_note": "Garmin badge names linked to the current activity id.",
+        "label": "Garmin Activity Badge List",
+        "description": "Garmin badges earned by the latest processed activity.",
+        "tags": ["garmin", "badges", "activity"],
+        "metric_key": "garmin_activity_badges_list",
     },
     "garmin.segment_notables": {
         "source": "Garmin",

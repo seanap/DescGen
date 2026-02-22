@@ -290,6 +290,7 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("segment_notables", context)
         self.assertIn("strava_badges", context)
         self.assertIn("garmin_badges", context)
+        self.assertIn("activity_badges", context)
         self.assertIn("smashrun_badges", context)
         self.assertIn("strava_segment_notables", context)
         self.assertIn("garmin_segment_notables", context)
@@ -297,6 +298,7 @@ class TestDescriptionTemplate(unittest.TestCase):
         self.assertIn("badges", context["smashrun"])
         self.assertIn("last_activity", context["garmin"])
         self.assertIn("badges", context["garmin"])
+        self.assertIn("activity_badges", context["garmin"])
         self.assertIn("segment_notables", context["activity"])
         self.assertIn("index", context["misery"])
 
