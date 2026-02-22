@@ -668,24 +668,32 @@
       runTypeTd.appendChild(buildSessionTypeEditor(row, index, rows));
       tr.appendChild(runTypeTd);
 
-      if (row && row.show_week_metrics) {
-        const weekTd = makeCell(formatMiles(row.weekly_total, 1), "metric-week");
-        weekTd.rowSpan = Math.max(1, Number(row.week_row_span) || 1);
-        tr.appendChild(weekTd);
-        const wowTd = makeCell(formatPct(row && row.wow_change), wowBandFromValue(row && row.wow_change));
-        wowTd.rowSpan = Math.max(1, Number(row.week_row_span) || 1);
-        tr.appendChild(wowTd);
-      }
+      const showWeekMetrics = !!(row && row.show_week_metrics);
+      const weekTd = makeCell(showWeekMetrics ? formatMiles(row.weekly_total, 1) : "", "metric-week metric-week-block");
+      weekTd.classList.add(showWeekMetrics ? "metric-block-start" : "metric-block-cont");
+      tr.appendChild(weekTd);
+
+      const wowTd = makeCell(
+        showWeekMetrics ? formatPct(row && row.wow_change) : "",
+        `${wowBandFromValue(row && row.wow_change)} metric-wow-block`,
+      );
+      wowTd.classList.add(showWeekMetrics ? "metric-block-start" : "metric-block-cont");
+      tr.appendChild(wowTd);
+
       tr.appendChild(makeCell(formatPct(row && row.long_pct), metricBandClass(row && row.bands && row.bands.long_pct)));
 
-      if (row && row.show_month_metrics) {
-        const monthTd = makeCell(formatMiles(row.monthly_total, 1), "metric-month");
-        monthTd.rowSpan = Math.max(1, Number(row.month_row_span) || 1);
-        tr.appendChild(monthTd);
-        const momTd = makeCell(formatPct(row && row.mom_change), wowBandFromValue(row && row.mom_change));
-        momTd.rowSpan = Math.max(1, Number(row.month_row_span) || 1);
-        tr.appendChild(momTd);
-      }
+      const showMonthMetrics = !!(row && row.show_month_metrics);
+      const monthTd = makeCell(showMonthMetrics ? formatMiles(row.monthly_total, 1) : "", "metric-month metric-month-block");
+      monthTd.classList.add(showMonthMetrics ? "metric-block-start" : "metric-block-cont");
+      tr.appendChild(monthTd);
+
+      const momTd = makeCell(
+        showMonthMetrics ? formatPct(row && row.mom_change) : "",
+        `${wowBandFromValue(row && row.mom_change)} metric-mom-block`,
+      );
+      momTd.classList.add(showMonthMetrics ? "metric-block-start" : "metric-block-cont");
+      tr.appendChild(momTd);
+
       tr.appendChild(makeCell(formatMiles(row && row.t7_miles, 1), "metric-neutral"));
       tr.appendChild(makeCell(formatRatio(row && row.t7_p7_ratio, 1), metricBandClass(row && row.bands && row.bands.t7_p7_ratio)));
       tr.appendChild(makeCell(formatMiles(row && row.t30_miles, 1), "metric-neutral"));

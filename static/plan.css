@@ -656,6 +656,18 @@ body.plan-page {
     0 0 14px -12px var(--plan-neon-green);
 }
 
+.metric-week-block,
+.metric-wow-block,
+.metric-month-block,
+.metric-mom-block {
+  min-width: 88px;
+}
+
+.metric-block-cont {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
 .metric-easy {
   background: color-mix(in srgb, var(--plan-neon-blue) 20%, transparent) !important;
   color: #d9f5ff;
