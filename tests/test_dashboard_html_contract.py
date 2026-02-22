@@ -33,6 +33,14 @@ class TestDashboardHtmlContract(unittest.TestCase):
 
         self.assertIn('<script src="/static/dashboard.js"></script>', html)
 
+    def test_dashboard_script_uses_backend_type_meta_contract(self) -> None:
+        script_path = Path("static/dashboard.js")
+        self.assertTrue(script_path.exists(), "static/dashboard.js missing")
+        script = script_path.read_text(encoding="utf-8")
+        self.assertIn("TYPE_META = payload.type_meta || {}", script)
+        self.assertNotIn("TYPE_ACCENT_OVERRIDES", script)
+        self.assertNotIn("TYPE_LABEL_OVERRIDES", script)
+
 
 if __name__ == "__main__":
     unittest.main()

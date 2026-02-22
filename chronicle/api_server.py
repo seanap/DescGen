@@ -357,9 +357,21 @@ def control_page() -> str:
 @app.get("/dashboard/data.json")
 def dashboard_data_get() -> tuple[dict, int]:
     force_refresh = str(request.args.get("force") or "").strip().lower() in {"1", "true", "yes", "on"}
+    response_mode = str(request.args.get("mode") or "").strip()
+    response_year_raw = request.args.get("year")
+    response_year = str(response_year_raw).strip() if response_year_raw is not None else None
+    if response_year == "":
+        response_year = None
     current = _effective_settings()
     try:
-        payload = get_dashboard_payload(current, force_refresh=force_refresh)
+        payload = get_dashboard_payload(
+            current,
+            force_refresh=force_refresh,
+            response_mode=response_mode or "full",
+            response_year=response_year,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
     except Exception as exc:
         return {"status": "error", "error": f"Failed to build dashboard payload: {exc}"}, 500
     return payload, 200

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,6 +30,14 @@ JOB_STATUS_TERMINAL = {
     JOB_STATUS_CANCELLED,
 }
 JOB_STATUS_ALL = JOB_STATUS_NON_TERMINAL | JOB_STATUS_TERMINAL
+
+_RUNTIME_SCHEMA_READY: set[str] = set()
+_RUNTIME_SCHEMA_LOCK = threading.Lock()
+
+_TRANSIENT_RUNTIME_KEYS_TO_PRUNE = (
+    "setup.strava.oauth",
+    "cycle.period_stats.activities_cache",
+)
 
 
 def _utc_now() -> datetime:
@@ -67,6 +76,26 @@ def _connect_runtime_db(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA foreign_keys=ON;")
+    _ensure_runtime_schema(db_path, conn)
+    return conn
+
+
+def _schema_cache_key(db_path: Path) -> str:
+    return str(db_path.resolve())
+
+
+def _ensure_runtime_schema(db_path: Path, conn: sqlite3.Connection) -> None:
+    key = _schema_cache_key(db_path)
+    if key in _RUNTIME_SCHEMA_READY:
+        return
+    with _RUNTIME_SCHEMA_LOCK:
+        if key in _RUNTIME_SCHEMA_READY:
+            return
+        _initialize_runtime_schema(conn)
+        _RUNTIME_SCHEMA_READY.add(key)
+
+
+def _initialize_runtime_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS processed_activities (
@@ -196,7 +225,6 @@ def _connect_runtime_db(path: Path) -> sqlite3.Connection:
         ON runs (job_id, started_at_utc DESC)
         """
     )
-    return conn
 
 
 def _load_processed_ids_from_file(path: Path) -> set[str]:
@@ -262,9 +290,24 @@ def _from_json_string(value_json: str) -> Any:
 
 
 def set_runtime_value(path: Path, key: str, value: Any) -> None:
+    set_runtime_values(path, {key: value})
+
+
+def set_runtime_values(path: Path, values: dict[str, Any]) -> None:
+    if not values:
+        return
+    rows: list[tuple[str, str, str]] = []
+    updated_at_utc = _utc_now_iso()
+    for key, value in values.items():
+        key_text = str(key).strip()
+        if not key_text:
+            continue
+        rows.append((key_text, _to_json_string(value), updated_at_utc))
+    if not rows:
+        return
     try:
         with _connect_runtime_db(path) as conn:
-            conn.execute(
+            conn.executemany(
                 """
                 INSERT INTO runtime_kv (key, value_json, updated_at_utc)
                 VALUES (?, ?, ?)
@@ -272,7 +315,7 @@ def set_runtime_value(path: Path, key: str, value: Any) -> None:
                     value_json = excluded.value_json,
                     updated_at_utc = excluded.updated_at_utc
                 """,
-                (key, _to_json_string(value), _utc_now_iso()),
+                rows,
             )
     except sqlite3.Error:
         return
@@ -294,6 +337,38 @@ def get_runtime_value(path: Path, key: str, default: Any = None) -> Any:
         return _from_json_string(str(row[0]))
     except (json.JSONDecodeError, TypeError, ValueError):
         return default
+
+
+def get_runtime_values(path: Path, keys: list[str]) -> dict[str, Any]:
+    normalized_keys: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        key_text = str(key).strip()
+        if not key_text or key_text in seen:
+            continue
+        seen.add(key_text)
+        normalized_keys.append(key_text)
+    if not normalized_keys:
+        return {}
+
+    placeholders = ",".join(["?"] * len(normalized_keys))
+    query = f"SELECT key, value_json FROM runtime_kv WHERE key IN ({placeholders})"
+    try:
+        with _connect_runtime_db(path) as conn:
+            rows = conn.execute(query, normalized_keys).fetchall()
+    except sqlite3.Error:
+        return {}
+
+    values: dict[str, Any] = {}
+    for row in rows:
+        key_text = str(row[0]).strip()
+        if not key_text:
+            continue
+        try:
+            values[key_text] = _from_json_string(str(row[1]))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return values
 
 
 def delete_runtime_value(path: Path, key: str) -> None:
@@ -1033,6 +1108,150 @@ def write_config_snapshot(path: Path, source: str, payload: Any) -> str | None:
         return snapshot_id
     except sqlite3.Error:
         return None
+
+
+def cleanup_runtime_state(
+    path: Path,
+    *,
+    now_utc: datetime | None = None,
+    service_cache_retention_seconds: int = 259200,
+    transient_runtime_retention_seconds: int = 604800,
+    config_snapshot_retention_count: int = 50,
+    terminal_job_retention_days: int = 30,
+    expired_lock_retention_seconds: int = 86400,
+) -> dict[str, int]:
+    now = now_utc.astimezone(timezone.utc) if now_utc else _utc_now()
+    service_cutoff_iso = (
+        now - timedelta(seconds=max(0, int(service_cache_retention_seconds)))
+    ).isoformat()
+    transient_cutoff_iso = (
+        now - timedelta(seconds=max(0, int(transient_runtime_retention_seconds)))
+    ).isoformat()
+    terminal_job_cutoff_iso = (
+        now - timedelta(days=max(1, int(terminal_job_retention_days)))
+    ).isoformat()
+    lock_cutoff_iso = (
+        now - timedelta(seconds=max(0, int(expired_lock_retention_seconds)))
+    ).isoformat()
+    keep_snapshot_count = max(1, int(config_snapshot_retention_count))
+
+    stats: dict[str, int] = {
+        "runtime_kv_service_cache_deleted": 0,
+        "runtime_kv_transient_deleted": 0,
+        "config_snapshots_deleted": 0,
+        "runs_deleted": 0,
+        "jobs_deleted": 0,
+        "expired_locks_deleted": 0,
+        "deleted_total": 0,
+        "errors": 0,
+    }
+
+    try:
+        with _connect_runtime_db(path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            deleted = conn.execute(
+                """
+                DELETE FROM runtime_kv
+                WHERE key LIKE 'service.%.cache.%'
+                  AND updated_at_utc < ?
+                """,
+                (service_cutoff_iso,),
+            )
+            stats["runtime_kv_service_cache_deleted"] = int(max(0, deleted.rowcount))
+
+            placeholders = ", ".join("?" for _ in _TRANSIENT_RUNTIME_KEYS_TO_PRUNE)
+            deleted = conn.execute(
+                f"""
+                DELETE FROM runtime_kv
+                WHERE key IN ({placeholders})
+                  AND updated_at_utc < ?
+                """,
+                (*_TRANSIENT_RUNTIME_KEYS_TO_PRUNE, transient_cutoff_iso),
+            )
+            stats["runtime_kv_transient_deleted"] = int(max(0, deleted.rowcount))
+
+            deleted = conn.execute(
+                """
+                DELETE FROM config_snapshots
+                WHERE snapshot_id IN (
+                    SELECT snapshot_id
+                    FROM config_snapshots
+                    ORDER BY created_at_utc DESC
+                    LIMIT -1 OFFSET ?
+                )
+                """,
+                (keep_snapshot_count,),
+            )
+            stats["config_snapshots_deleted"] = int(max(0, deleted.rowcount))
+
+            status_placeholders = ", ".join("?" for _ in JOB_STATUS_TERMINAL)
+            terminal_statuses = tuple(sorted(JOB_STATUS_TERMINAL))
+            rows = conn.execute(
+                f"""
+                SELECT job_id
+                FROM jobs
+                WHERE status IN ({status_placeholders})
+                  AND finished_at_utc IS NOT NULL
+                  AND finished_at_utc < ?
+                  AND job_id NOT IN (
+                    SELECT last_job_id
+                    FROM activity_state
+                    WHERE last_job_id IS NOT NULL
+                  )
+                """,
+                (*terminal_statuses, terminal_job_cutoff_iso),
+            ).fetchall()
+            candidate_job_ids = [str(row["job_id"]) for row in rows if str(row["job_id"]).strip()]
+            if candidate_job_ids:
+                candidate_placeholders = ", ".join("?" for _ in candidate_job_ids)
+                deleted = conn.execute(
+                    f"""
+                    DELETE FROM runs
+                    WHERE job_id IN ({candidate_placeholders})
+                      AND run_id NOT IN (
+                        SELECT last_run_id
+                        FROM activity_state
+                        WHERE last_run_id IS NOT NULL
+                      )
+                    """,
+                    tuple(candidate_job_ids),
+                )
+                stats["runs_deleted"] = int(max(0, deleted.rowcount))
+
+                deleted = conn.execute(
+                    f"""
+                    DELETE FROM jobs
+                    WHERE job_id IN ({candidate_placeholders})
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM runs
+                        WHERE runs.job_id = jobs.job_id
+                      )
+                    """,
+                    tuple(candidate_job_ids),
+                )
+                stats["jobs_deleted"] = int(max(0, deleted.rowcount))
+
+            deleted = conn.execute(
+                """
+                DELETE FROM runtime_locks
+                WHERE expires_at_utc < ?
+                """,
+                (lock_cutoff_iso,),
+            )
+            stats["expired_locks_deleted"] = int(max(0, deleted.rowcount))
+    except sqlite3.Error:
+        stats["errors"] = 1
+
+    stats["deleted_total"] = (
+        int(stats["runtime_kv_service_cache_deleted"])
+        + int(stats["runtime_kv_transient_deleted"])
+        + int(stats["config_snapshots_deleted"])
+        + int(stats["runs_deleted"])
+        + int(stats["jobs_deleted"])
+        + int(stats["expired_locks_deleted"])
+    )
+    return stats
 
 
 def get_activity_job(path: Path, job_id: str) -> dict[str, Any] | None:

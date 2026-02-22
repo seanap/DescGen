@@ -179,6 +179,42 @@ class TestApiServer(unittest.TestCase):
         self.assertIn("types", payload)
         self.assertIn("activities", payload)
 
+    def test_dashboard_data_endpoint_passes_response_mode_and_year(self) -> None:
+        calls: list[dict] = []
+
+        def _payload(*_args, **kwargs):
+            calls.append(kwargs)
+            return {
+                "generated_at": "2026-02-19T00:00:00+00:00",
+                "years": [2026],
+                "types": ["Run"],
+                "type_meta": {"Run": {"label": "Run", "accent": "#01cdfe"}},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+            }
+
+        api_server.get_dashboard_payload = _payload
+        response = self.client.get("/dashboard/data.json?mode=year&year=2026&force=true")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].get("response_mode"), "year")
+        self.assertEqual(calls[0].get("response_year"), "2026")
+        self.assertTrue(bool(calls[0].get("force_refresh")))
+
+    def test_dashboard_data_endpoint_returns_400_for_invalid_mode(self) -> None:
+        def _raise(*_args, **_kwargs):
+            raise ValueError("Invalid dashboard mode")
+
+        api_server.get_dashboard_payload = _raise
+        response = self.client.get("/dashboard/data.json?mode=bad")
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("Invalid dashboard mode", str(payload.get("error")))
+
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)
