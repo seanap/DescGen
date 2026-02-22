@@ -13,27 +13,18 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Settings
+from .pipeline_context_collectors import (
+    collect_crono_context as _collect_crono_context_impl,
+    collect_smashrun_context as _collect_smashrun_context_impl,
+    collect_weather_context as _collect_weather_context_impl,
+)
 from .numeric_utils import (
     as_float as _shared_as_float,
     meters_to_feet_int as _shared_meters_to_feet_int,
     mps_to_mph as _shared_mps_to_mph,
 )
 from .stat_modules import beers_earned, period_stats
-from .stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
 from .stat_modules.intervals_data import get_intervals_activity_data
-from .stat_modules.misery_index import (
-    get_misery_index_details_for_activity,
-    get_misery_index_for_activity,
-)
-from .stat_modules.smashrun import (
-    aggregate_elevation_totals,
-    get_activity_record,
-    get_activity_elevation_feet,
-    get_activities as get_smashrun_activities,
-    get_badges as get_smashrun_badges,
-    get_notables,
-    get_stats as get_smashrun_stats,
-)
 from .stat_modules.garmin_metrics import default_metrics as default_garmin_metrics
 from .stat_modules.garmin_metrics import fetch_training_status_and_scores
 from .stat_modules.garmin_metrics import get_activity_context_for_strava_activity
@@ -2210,82 +2201,17 @@ def _collect_smashrun_context(
     now_utc: datetime,
     service_state: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    context: dict[str, Any] = {
-        "longest_streak": None,
-        "notables": [],
-        "latest_elevation_feet": None,
-        "smashrun_elevation_totals": {"week": 0.0, "month": 0.0, "year": 0.0},
-        "smashrun_activity_record": None,
-        "smashrun_stats": None,
-        "smashrun_badges": [],
-    }
-
-    if not (settings.enable_smashrun and settings.smashrun_access_token):
-        return context
-
-    smashrun_activities = _run_service_call(
+    return _collect_smashrun_context_impl(
         settings,
-        "smashrun.activities",
-        get_smashrun_activities,
-        settings.smashrun_access_token,
+        detailed_activity,
+        selected_activity_id=selected_activity_id,
+        latest_activity_id=latest_activity_id,
+        now_utc=now_utc,
         service_state=service_state,
-        cache_key="smashrun.activities:default",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
+        run_service_call=_run_service_call,
+        as_float=_as_float,
+        logger=logger,
     )
-
-    if smashrun_activities:
-        context["smashrun_activity_record"] = get_activity_record(smashrun_activities, detailed_activity)
-        context["latest_elevation_feet"] = get_activity_elevation_feet(smashrun_activities, detailed_activity)
-        context["smashrun_elevation_totals"] = aggregate_elevation_totals(
-            smashrun_activities,
-            now_utc,
-            timezone_name=settings.timezone,
-        )
-        if selected_activity_id == latest_activity_id:
-            latest_smashrun_activity_id = smashrun_activities[0].get("activityId") if smashrun_activities else None
-            notables_payload = _run_service_call(
-                settings,
-                "smashrun.notables",
-                get_notables,
-                settings.smashrun_access_token,
-                latest_activity_id=latest_smashrun_activity_id,
-                service_state=service_state,
-                cache_key=f"smashrun.notables:{latest_smashrun_activity_id or 'latest'}",
-                cache_ttl_seconds=settings.service_cache_ttl_seconds,
-            )
-            if isinstance(notables_payload, list):
-                context["notables"] = [str(item) for item in notables_payload if str(item).strip()]
-        else:
-            logger.info("Skipping Smashrun notables because selected activity is not latest.")
-
-    smashrun_stats_payload = _run_service_call(
-        settings,
-        "smashrun.stats",
-        get_smashrun_stats,
-        settings.smashrun_access_token,
-        service_state=service_state,
-        cache_key="smashrun.stats:default",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-    )
-    if isinstance(smashrun_stats_payload, dict):
-        context["smashrun_stats"] = smashrun_stats_payload
-        streak_numeric = _as_float(smashrun_stats_payload.get("longestStreak"))
-        if streak_numeric is not None:
-            context["longest_streak"] = int(round(streak_numeric))
-
-    smashrun_badges_payload = _run_service_call(
-        settings,
-        "smashrun.badges",
-        get_smashrun_badges,
-        settings.smashrun_access_token,
-        service_state=service_state,
-        cache_key="smashrun.badges:default",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-    )
-    if isinstance(smashrun_badges_payload, list):
-        context["smashrun_badges"] = [item for item in smashrun_badges_payload if isinstance(item, dict)]
-
-    return context
 
 
 def _collect_weather_context(
@@ -2295,47 +2221,13 @@ def _collect_weather_context(
     selected_activity_id: int,
     service_state: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    context = {
-        "weather_details": None,
-        "misery_index": None,
-        "misery_desc": None,
-        "aqi": None,
-        "aqi_desc": None,
-    }
-    if not settings.enable_weather:
-        return context
-
-    weather_details = _run_service_call(
+    return _collect_weather_context_impl(
         settings,
-        "weather.details",
-        get_misery_index_details_for_activity,
         detailed_activity,
-        settings.weather_api_key,
+        selected_activity_id=selected_activity_id,
         service_state=service_state,
-        cache_key=f"weather.details:{selected_activity_id}",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
+        run_service_call=_run_service_call,
     )
-    context["weather_details"] = weather_details
-    if weather_details:
-        context["misery_index"] = weather_details.get("misery_index")
-        context["misery_desc"] = weather_details.get("misery_description")
-        context["aqi"] = weather_details.get("aqi")
-        context["aqi_desc"] = weather_details.get("aqi_description")
-        return context
-
-    fallback_weather = _run_service_call(
-        settings,
-        "weather.fallback",
-        get_misery_index_for_activity,
-        detailed_activity,
-        settings.weather_api_key,
-        service_state=service_state,
-        cache_key=f"weather.fallback:{selected_activity_id}",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-    )
-    if isinstance(fallback_weather, tuple) and len(fallback_weather) == 4:
-        context["misery_index"], context["misery_desc"], context["aqi"], context["aqi_desc"] = fallback_weather
-    return context
 
 
 def _collect_crono_context(
@@ -2345,22 +2237,13 @@ def _collect_crono_context(
     selected_activity_id: int,
     service_state: dict[str, Any] | None,
 ) -> tuple[dict[str, Any] | None, str | None]:
-    if not settings.enable_crono_api:
-        return None, None
-    crono_summary = _run_service_call(
+    return _collect_crono_context_impl(
         settings,
-        "crono.summary",
-        get_crono_summary_for_activity,
+        detailed_activity,
+        selected_activity_id=selected_activity_id,
         service_state=service_state,
-        cache_key=f"crono.summary:{selected_activity_id}:{settings.timezone}:7",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-        activity=detailed_activity,
-        timezone_name=settings.timezone,
-        base_url=settings.crono_api_base_url,
-        api_key=settings.crono_api_key,
-        days=7,
+        run_service_call=_run_service_call,
     )
-    return crono_summary, format_crono_line(crono_summary)
 
 
 def _is_retryable_run_error(exc: Exception) -> bool:

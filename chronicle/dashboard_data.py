@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .dashboard_response_modes import apply_dashboard_response_mode, normalize_dashboard_response_mode
 from .stat_modules.intervals_data import get_intervals_dashboard_metrics
 from .storage import (
     acquire_runtime_lock,
@@ -1066,109 +1067,6 @@ def _normalize_dashboard_payload(payload: dict[str, Any], settings: Settings) ->
     return normalized
 
 
-def _normalize_dashboard_response_mode(value: object) -> str:
-    normalized = str(value or "").strip().lower()
-    if not normalized or normalized == "full":
-        return "full"
-    if normalized in {"summary", "slim"}:
-        return "summary"
-    if normalized == "year":
-        return "year"
-    raise ValueError(f"Invalid dashboard mode '{value}'. Expected one of: full, summary, year.")
-
-
-def _parse_dashboard_response_year(value: object) -> int:
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError("Dashboard year mode requires query parameter 'year'.")
-    try:
-        year = int(text)
-    except ValueError as exc:
-        raise ValueError("Dashboard year must be a valid integer.") from exc
-    if year < 1970 or year > 9999:
-        raise ValueError("Dashboard year must be between 1970 and 9999.")
-    return year
-
-
-def _project_dashboard_payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
-    projected = dict(payload)
-    activities_raw = payload.get("activities")
-    activity_count = len(activities_raw) if isinstance(activities_raw, list) else 0
-    projected["activities"] = []
-    projected["activity_count"] = activity_count
-    projected["response_mode"] = "summary"
-    return projected
-
-
-def _project_dashboard_payload_year(payload: dict[str, Any], *, response_year: int) -> dict[str, Any]:
-    year_key = str(response_year)
-    projected = dict(payload)
-
-    aggregates_raw = payload.get("aggregates")
-    aggregate_year = (
-        aggregates_raw.get(year_key)
-        if isinstance(aggregates_raw, dict) and isinstance(aggregates_raw.get(year_key), dict)
-        else {}
-    )
-    projected["aggregates"] = {year_key: aggregate_year} if aggregate_year else {}
-
-    intervals_year_type_raw = payload.get("intervals_year_type_metrics")
-    intervals_year_type = (
-        intervals_year_type_raw.get(year_key)
-        if isinstance(intervals_year_type_raw, dict) and isinstance(intervals_year_type_raw.get(year_key), dict)
-        else {}
-    )
-    projected["intervals_year_type_metrics"] = {year_key: intervals_year_type} if intervals_year_type else {}
-
-    activities: list[dict[str, Any]] = []
-    activities_raw = payload.get("activities")
-    if isinstance(activities_raw, list):
-        for item in activities_raw:
-            if not isinstance(item, dict):
-                continue
-            try:
-                item_year = int(item.get("year"))
-            except (TypeError, ValueError):
-                continue
-            if item_year == response_year:
-                activities.append(dict(item))
-    projected["activities"] = activities
-    projected["activity_count"] = len(activities)
-    projected["years"] = [response_year]
-
-    types_raw = payload.get("types")
-    type_order = [item for item in types_raw if isinstance(item, str)] if isinstance(types_raw, list) else []
-    scoped_types = list(aggregate_year.keys())
-    ordered_types = [item for item in type_order if item in scoped_types]
-    for item in scoped_types:
-        if item not in ordered_types:
-            ordered_types.append(item)
-    projected["types"] = ordered_types
-
-    type_meta_raw = payload.get("type_meta")
-    type_meta = type_meta_raw if isinstance(type_meta_raw, dict) else {}
-    projected["type_meta"] = {item: type_meta[item] for item in ordered_types if item in type_meta}
-
-    projected["response_mode"] = "year"
-    projected["response_year"] = response_year
-    return projected
-
-
-def _apply_dashboard_response_mode(
-    payload: dict[str, Any],
-    *,
-    response_mode: str,
-    response_year: int | str | None,
-) -> dict[str, Any]:
-    mode = _normalize_dashboard_response_mode(response_mode)
-    if mode == "full":
-        return dict(payload)
-    if mode == "summary":
-        return _project_dashboard_payload_summary(payload)
-    year = _parse_dashboard_response_year(response_year)
-    return _project_dashboard_payload_year(payload, response_year=year)
-
-
 def _refresh_lock_ttl_seconds() -> int:
     raw = str(os.getenv("DASHBOARD_REFRESH_LOCK_TTL_SECONDS", DEFAULT_REFRESH_LOCK_TTL_SECONDS)).strip()
     try:
@@ -1307,13 +1205,13 @@ def get_dashboard_payload(
 ) -> dict[str, Any]:
     data_path = dashboard_data_path(settings)
     age_limit = _cache_max_age_seconds() if max_age_seconds is None else max(0, int(max_age_seconds))
-    mode = _normalize_dashboard_response_mode(response_mode)
+    mode = normalize_dashboard_response_mode(response_mode)
 
     cached = _load_dashboard_payload_cached(data_path)
     if force_refresh:
         try:
             rebuilt = _build_and_persist_payload(settings, data_path)
-            return _apply_dashboard_response_mode(
+            return apply_dashboard_response_mode(
                 _normalize_dashboard_payload(rebuilt, settings),
                 response_mode=mode,
                 response_year=response_year,
@@ -1321,13 +1219,13 @@ def get_dashboard_payload(
         except Exception:
             if isinstance(cached, dict):
                 logger.exception("Forced dashboard rebuild failed; serving stale cached payload.")
-                return _apply_dashboard_response_mode(
+                return apply_dashboard_response_mode(
                     _normalize_dashboard_payload(cached, settings),
                     response_mode=mode,
                     response_year=response_year,
                 )
             logger.exception("Forced dashboard rebuild failed with no cache; serving empty payload.")
-            return _apply_dashboard_response_mode(
+            return apply_dashboard_response_mode(
                 _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings),
                 response_mode=mode,
                 response_year=response_year,
@@ -1335,7 +1233,7 @@ def get_dashboard_payload(
 
     if isinstance(cached, dict):
         if _is_payload_fresh(cached, max_age_seconds=age_limit):
-            return _apply_dashboard_response_mode(
+            return apply_dashboard_response_mode(
                 _normalize_dashboard_payload(cached, settings),
                 response_mode=mode,
                 response_year=response_year,
@@ -1344,7 +1242,7 @@ def get_dashboard_payload(
         stale_response = dict(cached)
         stale_response["cache_state"] = "stale_revalidating" if revalidating else "stale"
         stale_response["revalidating"] = revalidating
-        return _apply_dashboard_response_mode(
+        return apply_dashboard_response_mode(
             _normalize_dashboard_payload(stale_response, settings),
             response_mode=mode,
             response_year=response_year,
@@ -1352,7 +1250,7 @@ def get_dashboard_payload(
 
     try:
         rebuilt = _build_and_persist_payload(settings, data_path)
-        return _apply_dashboard_response_mode(
+        return apply_dashboard_response_mode(
             _normalize_dashboard_payload(rebuilt, settings),
             response_mode=mode,
             response_year=response_year,
@@ -1360,13 +1258,13 @@ def get_dashboard_payload(
     except Exception:
         if isinstance(cached, dict):
             logger.exception("Dashboard rebuild failed; serving stale cached payload.")
-            return _apply_dashboard_response_mode(
+            return apply_dashboard_response_mode(
                 _normalize_dashboard_payload(cached, settings),
                 response_mode=mode,
                 response_year=response_year,
             )
         logger.exception("Dashboard rebuild failed with no cache; serving empty payload.")
-        return _apply_dashboard_response_mode(
+        return apply_dashboard_response_mode(
             _normalize_dashboard_payload(_empty_payload(error="dashboard_build_failed"), settings),
             response_mode=mode,
             response_year=response_year,
