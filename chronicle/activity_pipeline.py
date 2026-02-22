@@ -766,6 +766,86 @@ def _coerce_string_list(value: Any, *, max_items: int = 25) -> list[str]:
     return normalized
 
 
+def _coerce_activity_id_str(value: Any) -> str:
+    if isinstance(value, bool) or value is None:
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return ""
+        if value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+    text = str(value).strip()
+    if not text:
+        return ""
+    if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
+        return str(int(text))
+    if text.endswith(".0") and text[:-2].isdigit():
+        return str(int(text[:-2]))
+    return text
+
+
+def _coerce_garmin_badge_records(value: Any, *, max_items: int = 250) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        badge_name = str(
+            item.get("badgeName")
+            or item.get("badgeTypeName")
+            or item.get("name")
+            or item.get("badge_name")
+            or ""
+        ).strip()
+        if not badge_name:
+            continue
+        normalized.append(
+            {
+                "badgeName": badge_name,
+                "badgeAssocType": str(item.get("badgeAssocType") or item.get("badge_assoc_type") or "").strip(),
+                "badgeAssocDataId": _coerce_activity_id_str(
+                    item.get("badgeAssocDataId") or item.get("badge_assoc_data_id")
+                ),
+            }
+        )
+        if len(normalized) >= max_items:
+            break
+    return normalized
+
+
+def _extract_activity_garmin_badges(
+    garmin_badge_records: list[dict[str, Any]],
+    *,
+    garmin_activity_id: Any,
+    max_items: int = 20,
+) -> list[str]:
+    activity_id = _coerce_activity_id_str(garmin_activity_id)
+    if not activity_id:
+        return []
+    matches: list[str] = []
+    seen: set[str] = set()
+    for badge in _coerce_garmin_badge_records(garmin_badge_records, max_items=500):
+        assoc_type = _normalize_activity_type_key(badge.get("badgeAssocType"))
+        assoc_id = _coerce_activity_id_str(badge.get("badgeAssocDataId"))
+        if assoc_type != "activityid" or assoc_id != activity_id:
+            continue
+        badge_name = str(badge.get("badgeName") or "").strip()
+        if not badge_name:
+            continue
+        dedupe_key = badge_name.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        matches.append(badge_name)
+        if len(matches) >= max_items:
+            break
+    return matches
+
+
 def _extract_strava_segment_notables(activity: dict[str, Any], *, max_items: int = 20) -> list[str]:
     efforts = activity.get("segment_efforts")
     if not isinstance(efforts, list):
@@ -1393,7 +1473,14 @@ def _build_description_context(
     garmin_segment_notables = _coerce_string_list(training.get("garmin_segment_notables"), max_items=20)
     segment_notables = _merge_badge_lists(strava_segment_notables, garmin_segment_notables, max_items=25)
     strava_badges = _extract_strava_badges(detailed_activity, segment_notables=strava_segment_notables)
+    garmin_badges_raw = _coerce_garmin_badge_records(training.get("garmin_badges_raw"), max_items=250)
     garmin_badges = _coerce_string_list(training.get("garmin_badges"), max_items=20)
+    garmin_last_activity = training.get("garmin_last_activity") if isinstance(training.get("garmin_last_activity"), dict) else {}
+    garmin_activity_badges = _extract_activity_garmin_badges(
+        garmin_badges_raw,
+        garmin_activity_id=garmin_last_activity.get("activity_id"),
+        max_items=20,
+    )
     smashrun_badges_lines = _normalize_smashrun_badges(smashrun_badges)
     badges = _merge_badge_lists(strava_badges, garmin_badges, smashrun_badges_lines, max_items=30)
 
@@ -1533,6 +1620,7 @@ def _build_description_context(
         "badges": badges,
         "strava_badges": strava_badges,
         "garmin_badges": garmin_badges,
+        "activity_badges": garmin_activity_badges,
         "smashrun_badges": smashrun_badges_lines,
         "segment_notables": segment_notables,
         "strava_segment_notables": strava_segment_notables,
@@ -1695,8 +1783,9 @@ def _build_description_context(
         },
         "garmin": {
             "badges": garmin_badges,
+            "activity_badges": garmin_activity_badges,
             "segment_notables": garmin_segment_notables,
-            "last_activity": training.get("garmin_last_activity", {}),
+            "last_activity": garmin_last_activity,
             "readiness": {
                 "score": training.get("training_readiness_score", "N/A"),
                 "level": training.get("readiness_level", "N/A"),

@@ -69,6 +69,7 @@ def _default_metrics() -> dict[str, Any]:
         "garmin_last_activity": {},
         "fitness_age_details": {},
         "garmin_badges": [],
+        "garmin_badges_raw": [],
         "garmin_segment_notables": [],
     }
 
@@ -191,7 +192,7 @@ def _normalize_garmin_segment_notables(last_activity: dict[str, Any]) -> list[st
     return [item[2] for item in ordered]
 
 
-def _normalize_garmin_badges(payload: Any, max_items: int = 20) -> list[str]:
+def _normalize_badge_collection_payload(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict):
         for key in ("badges", "items", "results"):
             nested = payload.get(key)
@@ -200,19 +201,75 @@ def _normalize_garmin_badges(payload: Any, max_items: int = 20) -> list[str]:
                 break
     if not isinstance(payload, list):
         return []
+    return [item for item in payload if isinstance(item, dict)]
 
-    badges: list[str] = []
-    seen: set[str] = set()
-    for item in payload:
-        if not isinstance(item, dict):
-            continue
-        title = str(item.get("badgeName") or item.get("badgeTypeName") or item.get("name") or "").strip()
+
+def _badge_title(item: dict[str, Any]) -> str:
+    return str(
+        item.get("badgeName")
+        or item.get("badgeTypeName")
+        or item.get("name")
+        or item.get("badge_name")
+        or ""
+    ).strip()
+
+
+def _badge_level(item: dict[str, Any]) -> int | None:
+    return _as_int(
+        item.get("badgeLevel")
+        or item.get("level")
+        or item.get("currentLevel")
+        or item.get("badge_level")
+    )
+
+
+def _badge_display_line(title: str, level: int | None) -> str:
+    suffix = f" (L{level})" if level is not None and level > 0 else ""
+    return f"Garmin: {title}{suffix}"
+
+
+def _normalize_garmin_badges_raw(payload: Any, max_items: int = 250) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for item in _normalize_badge_collection_payload(payload):
+        title = _badge_title(item)
         if not title:
             continue
-        level = _as_int(item.get("badgeLevel") or item.get("level") or item.get("currentLevel"))
-        suffix = f" (L{level})" if level is not None and level > 0 else ""
-        line = f"Garmin: {title}{suffix}"
-        if line in seen:
+        level = _badge_level(item)
+        assoc_type = str(item.get("badgeAssocType") or item.get("badge_assoc_type") or "").strip()
+        assoc_data_id = str(item.get("badgeAssocDataId") or item.get("badge_assoc_data_id") or "").strip()
+        earned_date = str(item.get("badgeEarnedDate") or item.get("badge_earned_date") or "").strip() or None
+        start_date = str(item.get("badgeStartDate") or item.get("badge_start_date") or "").strip() or None
+        end_date = str(item.get("badgeEndDate") or item.get("badge_end_date") or "").strip() or None
+        normalized.append(
+            {
+                "badgeName": title,
+                "badgeLevel": level if level is not None else "N/A",
+                "badgeAssocType": assoc_type,
+                "badgeAssocDataId": assoc_data_id,
+                "badgeEarnedDate": earned_date,
+                "badgeStartDate": start_date,
+                "badgeEndDate": end_date,
+                "badge_name": title,
+                "badge_level": level if level is not None else "N/A",
+                "badge_assoc_type": assoc_type,
+                "badge_assoc_data_id": assoc_data_id,
+                "badge_earned_date": earned_date,
+                "badge_start_date": start_date,
+                "badge_end_date": end_date,
+                "badge_display": _badge_display_line(title, level),
+            }
+        )
+        if len(normalized) >= max_items:
+            break
+    return normalized
+
+
+def _normalize_garmin_badges(payload: Any, max_items: int = 20) -> list[str]:
+    badges: list[str] = []
+    seen: set[str] = set()
+    for item in _normalize_garmin_badges_raw(payload, max_items=max(max_items * 8, max_items)):
+        line = str(item.get("badge_display") or "").strip()
+        if not line or line in seen:
             continue
         seen.add(line)
         badges.append(line)
@@ -475,6 +532,7 @@ def _build_garmin_last_activity_context(
     *,
     exercise_sets_payload: Any | None = None,
 ) -> dict[str, Any]:
+    activity_id = _as_int(last_activity.get("activityId"))
     avg_power = _as_float(last_activity.get("avgPower"))
     norm_power = _as_float(last_activity.get("normPower"))
     max_power = _as_float(last_activity.get("maxPower"))
@@ -532,6 +590,7 @@ def _build_garmin_last_activity_context(
                 max_weight = weight
 
     return {
+        "activity_id": activity_id if activity_id is not None else "N/A",
         "activity_name": str(last_activity.get("activityName") or "N/A"),
         "activity_type": str(safe_get(last_activity, ["activityType", "typeKey"], default="N/A") or "N/A"),
         "start_local": str(last_activity.get("startTimeLocal") or "N/A"),
@@ -793,7 +852,9 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
     try:
         get_earned_badges = getattr(client, "get_earned_badges", None)
         if callable(get_earned_badges):
-            metrics["garmin_badges"] = _normalize_garmin_badges(get_earned_badges())
+            earned_badges_payload = get_earned_badges()
+            metrics["garmin_badges_raw"] = _normalize_garmin_badges_raw(earned_badges_payload)
+            metrics["garmin_badges"] = _normalize_garmin_badges(earned_badges_payload)
     except Exception as exc:
         logger.debug("Garmin badges unavailable: %s", exc)
 
