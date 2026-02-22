@@ -1321,21 +1321,6 @@ function sundayOnOrBefore(d) {
   return result;
 }
 
-function saturdayOnOrAfter(d) {
-  const day = d.getDay();
-  const offset = (6 - day + 7) % 7;
-  const result = new Date(d);
-  result.setDate(d.getDate() + offset);
-  return result;
-}
-
-function formatLocalDateKey(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 function localDayNumber(date) {
   return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / MS_PER_DAY);
 }
@@ -1961,29 +1946,9 @@ function shouldIgnoreTouchCellClick() {
   return nowMs() <= touchTooltipInteractionBlockUntil;
 }
 
-function isPointInsideTooltip(event) {
-  if (!tooltip.classList.contains("visible")) return false;
-  const clientX = Number(event?.clientX);
-  const clientY = Number(event?.clientY);
-  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return false;
-  const rect = tooltip.getBoundingClientRect();
-  return clientX >= rect.left
-    && clientX <= rect.right
-    && clientY >= rect.top
-    && clientY <= rect.bottom;
-}
-
 function hasActiveTooltipCell() {
   if (!useTouchInteractions) return false;
   return Boolean(document.querySelector(".cell.active"));
-}
-
-function isTooltipLinkTarget(target) {
-  const resolvedTarget = target?.nodeType === Node.TEXT_NODE
-    ? target.parentElement
-    : target;
-  if (!resolvedTarget || typeof resolvedTarget.closest !== "function") return false;
-  return Boolean(resolvedTarget.closest(".tooltip-link"));
 }
 
 function resolveTooltipTargetElement(target) {
