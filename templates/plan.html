@@ -18,14 +18,14 @@
   <link rel="stylesheet" href="/static/ui-theme.css">
   <link rel="stylesheet" href="/static/plan.css">
 </head>
-<body>
+<body class="plan-page">
   {% include "_app_shell_nav.html" %}
 
   <div class="plan-shell">
     <section class="plan-hero card">
       <div class="plan-hero-copy">
         <h1>Plan</h1>
-        <p class="muted">Trailing two weeks and next two weeks centered on today with derived load metrics.</p>
+        <p class="muted">Trailing two weeks and next two weeks centered on today with derived load and adherence metrics.</p>
       </div>
       <div id="planTopMeta" class="plan-meta">Loading...</div>
     </section>
@@ -33,10 +33,18 @@
 
     <section class="plan-grid card">
       <div class="plan-grid-tools">
-        <label for="planCenterDate">Center Date</label>
-        <input id="planCenterDate" type="date">
-        <button id="planTodayBtn" type="button">Today</button>
-        <button id="planReloadBtn" type="button">Reload</button>
+        <div class="plan-grid-controls">
+          <label for="planCenterDate">Center Date</label>
+          <input id="planCenterDate" type="date">
+          <button id="planTodayBtn" type="button">Today</button>
+          <button id="planReloadBtn" type="button">Reload</button>
+        </div>
+        <div class="plan-legend" role="note" aria-label="Metric color legend">
+          <span class="legend-chip legend-good">Good</span>
+          <span class="legend-chip legend-caution">Caution</span>
+          <span class="legend-chip legend-hard">Hard</span>
+          <span class="legend-chip legend-neutral">Neutral</span>
+        </div>
       </div>
       <div class="plan-table-wrap" role="region" aria-label="Plan table">
         <table class="plan-table">
@@ -46,17 +54,17 @@
               <th>Date</th>
               <th>Distance (mi)</th>
               <th>Run Type</th>
-              <th>Total Weekly Mileage</th>
-              <th>Week over Week change</th>
+              <th title="Total Weekly Mileage">Week Mi</th>
+              <th title="Week over Week Change">WoW</th>
               <th>Long%</th>
-              <th>Total Monthly Mileage</th>
-              <th>Month over Month change</th>
-              <th>mi / T30D avg</th>
-              <th>Cumulative Mileage (Trailing 7 Day)</th>
+              <th title="Total Monthly Mileage">Month Mi</th>
+              <th title="Month over Month Change">MoM</th>
+              <th title="Miles / Trailing 30 Day Average">Mi/T30</th>
+              <th title="Cumulative Mileage (Trailing 7 Day)">T7 Mi</th>
               <th>T7D / P7D</th>
-              <th>Cumulative Mileage (Trailing 30 Day)</th>
+              <th title="Cumulative Mileage (Trailing 30 Day)">T30 Mi</th>
               <th>T30D / P30D</th>
-              <th>Avg. mi/day (Trailing 30-day)</th>
+              <th title="Average Miles per Day (Trailing 30 Day)">Avg Mi/day</th>
             </tr>
           </thead>
           <tbody id="planTableBody"></tbody>

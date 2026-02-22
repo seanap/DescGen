@@ -90,6 +90,50 @@
     return rows[index];
   }
 
+  function parseIsoDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
+    if (!match) return null;
+    const year = Number.parseInt(match[1], 10);
+    const month = Number.parseInt(match[2], 10);
+    const day = Number.parseInt(match[3], 10);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return date;
+  }
+
+  function formatIsoDate(date) {
+    const year = String(date.getUTCFullYear());
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function weekInfoForDate(value) {
+    const date = parseIsoDate(value);
+    if (!date) {
+      return {
+        weekKey: "",
+        weekEndKey: "",
+      };
+    }
+    const mondayOffset = (date.getUTCDay() + 6) % 7;
+    const weekStart = new Date(date.getTime());
+    weekStart.setUTCDate(weekStart.getUTCDate() - mondayOffset);
+    const weekEnd = new Date(weekStart.getTime());
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+    return {
+      weekKey: formatIsoDate(weekStart),
+      weekEndKey: formatIsoDate(weekEnd),
+    };
+  }
+
   function parseDistanceExpression(value) {
     const text = String(value || "").trim();
     if (!text) return [];
@@ -336,9 +380,24 @@
 
   function renderRows(rows) {
     bodyEl.textContent = "";
+    let weekIndex = -1;
+    let currentWeekKey = "";
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
       const tr = document.createElement("tr");
+      const weekInfo = weekInfoForDate(row && row.date);
+      const prevWeekInfo = weekInfoForDate(rowAt(rows, index - 1) && rowAt(rows, index - 1).date);
+      const nextWeekInfo = weekInfoForDate(rowAt(rows, index + 1) && rowAt(rows, index + 1).date);
+      const isWeekStart = !weekInfo.weekKey || weekInfo.weekKey !== prevWeekInfo.weekKey;
+      const isWeekEnd = !weekInfo.weekKey || weekInfo.weekKey !== nextWeekInfo.weekKey;
+
+      if (isWeekStart && weekInfo.weekKey && weekInfo.weekKey !== currentWeekKey) {
+        currentWeekKey = weekInfo.weekKey;
+        weekIndex += 1;
+      }
+      if (isWeekStart) tr.classList.add("week-start");
+      if (isWeekEnd) tr.classList.add("week-end");
+      tr.classList.add((weekIndex + 1) % 2 === 0 ? "week-block-even" : "week-block-odd");
       if (row && row.is_today) tr.classList.add("is-today");
 
       const doneTd = document.createElement("td");
@@ -396,7 +455,20 @@
       }
       tr.appendChild(doneTd);
 
-      tr.appendChild(makeCell(String((row && row.date) || "--")));
+      const dateTd = document.createElement("td");
+      dateTd.className = "date-cell";
+      const dateMain = document.createElement("span");
+      dateMain.className = "plan-date-main";
+      dateMain.textContent = String((row && row.date) || "--");
+      dateTd.appendChild(dateMain);
+      if (isWeekStart && weekInfo.weekKey) {
+        const badge = document.createElement("span");
+        badge.className = "week-badge";
+        badge.textContent = `Week of ${weekInfo.weekKey}`;
+        badge.title = `${weekInfo.weekKey} to ${weekInfo.weekEndKey}`;
+        dateTd.appendChild(badge);
+      }
+      tr.appendChild(dateTd);
 
       const distanceTd = document.createElement("td");
       distanceTd.className = "distance-cell";
