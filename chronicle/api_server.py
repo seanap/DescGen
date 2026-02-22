@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -12,6 +12,7 @@ from flask import Flask, redirect, render_template, request
 from .activity_pipeline import run_once
 from .config import Settings
 from .dashboard_data import get_dashboard_payload
+from .plan_data import get_plan_payload
 from .setup_config import (
     PROVIDER_FIELDS,
     PROVIDER_LINKS,
@@ -25,11 +26,15 @@ from .setup_config import (
 )
 from .storage import (
     delete_runtime_value,
+    get_plan_day,
     get_runtime_value,
     get_worker_heartbeat,
     is_worker_healthy,
+    list_plan_sessions,
     read_json,
+    replace_plan_sessions_for_day,
     set_runtime_value,
+    upsert_plan_day,
     write_json,
 )
 from .template_profiles import (
@@ -271,6 +276,82 @@ def _parse_enabled_value(raw_value: object) -> bool:
     raise ValueError("enabled must be a boolean (true/false).")
 
 
+def _resolve_plan_date(raw_date: str) -> str:
+    text = str(raw_date or "").strip()
+    if not text:
+        raise ValueError("date_local is required.")
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError("date_local must be YYYY-MM-DD.") from exc
+    return parsed.isoformat()
+
+
+def _format_plan_miles_value(value: float) -> str:
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _parse_plan_distance_input(raw_value: object) -> tuple[list[dict[str, object]], float]:
+    text = str(raw_value or "").strip()
+    if not text:
+        return [], 0.0
+    normalized = text.replace(" ", "")
+    parts = normalized.split("+")
+    if any(part == "" for part in parts):
+        raise ValueError("distance supports numbers separated by '+', for example '6+4'.")
+
+    values: list[float] = []
+    for part in parts:
+        try:
+            parsed = float(part)
+        except ValueError as exc:
+            raise ValueError("distance must be numeric or '+' separated numeric values.") from exc
+        if parsed < 0:
+            raise ValueError("distance values must be >= 0.")
+        values.append(parsed)
+
+    non_zero = [value for value in values if value > 0]
+    sessions = [
+        {
+            "ordinal": idx + 1,
+            "planned_miles": value,
+        }
+        for idx, value in enumerate(non_zero)
+    ]
+    total = float(sum(non_zero))
+    return sessions, total
+
+
+def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object]], float]:
+    if not isinstance(raw_value, list):
+        raise ValueError("sessions must be an array of numeric values or objects with planned_miles.")
+    sessions: list[dict[str, object]] = []
+    total = 0.0
+    for idx, item in enumerate(raw_value):
+        if isinstance(item, dict):
+            planned_raw = item.get("planned_miles")
+        else:
+            planned_raw = item
+        try:
+            planned = float(planned_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("sessions entries must be numeric planned mileage values.") from exc
+        if planned < 0:
+            raise ValueError("sessions planned_miles must be >= 0.")
+        if planned == 0:
+            continue
+        sessions.append(
+            {
+                "ordinal": idx + 1,
+                "planned_miles": planned,
+            }
+        )
+        total += planned
+    return sessions, total
+
+
 @app.get("/health")
 def health() -> tuple[dict, int]:
     payload = _latest_payload()
@@ -349,6 +430,11 @@ def dashboard_page() -> str:
     return render_template("dashboard.html")
 
 
+@app.get("/plan")
+def plan_page() -> str:
+    return render_template("plan.html")
+
+
 @app.get("/control")
 def control_page() -> str:
     return render_template("control.html")
@@ -375,6 +461,135 @@ def dashboard_data_get() -> tuple[dict, int]:
     except Exception as exc:
         return {"status": "error", "error": f"Failed to build dashboard payload: {exc}"}, 500
     return payload, 200
+
+
+@app.get("/plan/data.json")
+def plan_data_get() -> tuple[dict, int]:
+    center_date = str(request.args.get("center_date") or "").strip() or None
+    window_days = str(request.args.get("window_days") or "").strip() or str(14)
+    current = _effective_settings()
+    try:
+        payload = get_plan_payload(
+            current,
+            center_date=center_date,
+            window_days=window_days,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    except Exception as exc:
+        return {"status": "error", "error": f"Failed to build plan payload: {exc}"}, 500
+    return payload, 200
+
+
+@app.put("/plan/day/<string:date_local>")
+def plan_day_put(date_local: str) -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return {"status": "error", "error": "Request body must be a JSON object."}, 400
+
+    current = _effective_settings()
+    try:
+        date_key = _resolve_plan_date(date_local)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    existing_day = get_plan_day(current.processed_log_file, date_local=date_key) or {}
+
+    raw_run_type = body.get("run_type", existing_day.get("run_type"))
+    run_type = str(raw_run_type or "").strip() or None
+    raw_notes = body.get("notes", existing_day.get("notes"))
+    notes = str(raw_notes or "").strip() or None
+
+    existing_is_complete = existing_day.get("is_complete")
+    is_complete: bool | None = existing_is_complete if isinstance(existing_is_complete, bool) else None
+    if "is_complete" in body:
+        raw_complete = body.get("is_complete")
+        if raw_complete is None:
+            is_complete = None
+        elif isinstance(raw_complete, bool):
+            is_complete = raw_complete
+        elif isinstance(raw_complete, str):
+            normalized = raw_complete.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                is_complete = True
+            elif normalized in {"false", "0", "no", "off"}:
+                is_complete = False
+            elif normalized in {"auto", "reset", "none", "null"}:
+                is_complete = None
+            else:
+                return {"status": "error", "error": "is_complete must be boolean or null."}, 400
+        else:
+            return {"status": "error", "error": "is_complete must be boolean or null."}, 400
+
+    sessions: list[dict[str, object]] | None = None
+    if "sessions" in body:
+        try:
+            sessions, planned_total_miles = _parse_plan_sessions_input(body.get("sessions"))
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 400
+    elif "distance" in body:
+        try:
+            sessions, planned_total_miles = _parse_plan_distance_input(body.get("distance"))
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 400
+    elif "planned_total_miles" in body:
+        try:
+            sessions, planned_total_miles = _parse_plan_distance_input(body.get("planned_total_miles"))
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 400
+    else:
+        planned_total_miles = existing_day.get("planned_total_miles")
+
+    saved = upsert_plan_day(
+        current.processed_log_file,
+        date_local=date_key,
+        timezone_name=current.timezone,
+        run_type=run_type,
+        planned_total_miles=planned_total_miles,
+        actual_total_miles=existing_day.get("actual_total_miles"),
+        is_complete=is_complete,
+        notes=notes,
+    )
+    if not saved:
+        return {"status": "error", "error": "Failed to persist plan day."}, 500
+
+    if sessions is not None:
+        replaced = replace_plan_sessions_for_day(
+            current.processed_log_file,
+            date_local=date_key,
+            sessions=sessions,
+        )
+        if not replaced:
+            return {"status": "error", "error": "Failed to persist plan sessions."}, 500
+    else:
+        existing_sessions = list_plan_sessions(
+            current.processed_log_file,
+            start_date=date_key,
+            end_date=date_key,
+        ).get(date_key, [])
+        sessions = existing_sessions if isinstance(existing_sessions, list) else []
+
+    distance_saved = ""
+    if sessions:
+        distance_saved = "+".join(
+            _format_plan_miles_value(float(item.get("planned_miles") or 0.0))
+            for item in sessions
+            if isinstance(item, dict) and float(item.get("planned_miles") or 0.0) > 0
+        )
+    elif isinstance(planned_total_miles, (int, float)) and float(planned_total_miles) > 0:
+        distance_saved = _format_plan_miles_value(float(planned_total_miles))
+
+    return {
+        "status": "ok",
+        "date_local": date_key,
+        "planned_total_miles": float(planned_total_miles or 0.0),
+        "distance_saved": distance_saved,
+        "session_count": len(sessions or []),
+        "sessions": sessions or [],
+        "run_type": run_type or "",
+        "notes": notes or "",
+        "is_complete": is_complete,
+    }, 200
 
 
 @app.get("/setup/api/config")

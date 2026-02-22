@@ -1,0 +1,306 @@
+.plan-shell {
+  margin: 20px auto 28px;
+  max-width: 1700px;
+  padding: 0 16px;
+}
+
+.plan-hero {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 14px 18px;
+}
+
+.plan-hero h1 {
+  margin: 0;
+}
+
+.plan-hero p {
+  margin: 4px 0 0;
+}
+
+.plan-meta {
+  color: var(--dg-text-dim);
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.plan-grid {
+  padding: 10px 12px 14px;
+}
+
+.plan-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 14px;
+  padding: 10px 12px;
+}
+
+.plan-summary-card {
+  background: var(--dg-bg-elevated);
+  border: 1px solid var(--dg-border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.plan-summary-label {
+  color: var(--dg-text-dim);
+  display: block;
+  font-size: 0.76rem;
+  margin-bottom: 3px;
+}
+
+.plan-summary-value {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.plan-summary-detail {
+  color: var(--dg-text-dim);
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+.plan-grid-tools {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.plan-grid-tools input,
+.plan-grid-tools button {
+  border: 1px solid var(--dg-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.plan-grid-tools button {
+  background: var(--dg-bg-elevated);
+  color: var(--dg-text-main);
+  cursor: pointer;
+}
+
+.plan-grid-tools button:hover {
+  border-color: var(--dg-accent);
+}
+
+.plan-table-wrap {
+  border: 1px solid var(--dg-border);
+  border-radius: 10px;
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+}
+
+.plan-table {
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  min-width: 1500px;
+  width: 100%;
+}
+
+.plan-table thead th {
+  background: var(--dg-bg-elevated);
+  border-bottom: 1px solid var(--dg-border);
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 9px 8px;
+  position: sticky;
+  text-align: center;
+  top: 0;
+  z-index: 2;
+}
+
+.plan-table tbody td {
+  border-bottom: 1px solid var(--dg-border-soft);
+  border-right: 1px solid var(--dg-border-soft);
+  padding: 7px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.done-cell {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.done-cell .auto-reset-btn {
+  background: var(--dg-bg-soft);
+  border: 1px solid var(--dg-border-soft);
+  border-radius: 6px;
+  color: var(--dg-text-dim);
+  cursor: pointer;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 3px 5px;
+}
+
+.done-cell .auto-reset-btn:hover {
+  border-color: var(--dg-accent);
+  color: var(--dg-text-main);
+}
+
+.plan-table tbody td:first-child,
+.plan-table tbody td:nth-child(2),
+.plan-table tbody td:nth-child(4) {
+  text-align: left;
+}
+
+.plan-table tbody tr.is-today {
+  box-shadow: inset 0 0 0 2px var(--dg-accent);
+}
+
+.done-chip {
+  border-radius: 6px;
+  display: inline-block;
+  font-weight: 700;
+  min-width: 22px;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+.done-chip.done {
+  background: #18d84a;
+  color: #05300f;
+}
+
+.done-chip.pending {
+  background: #b2b7bf;
+  color: #233045;
+}
+
+.plan-complete-toggle {
+  cursor: pointer;
+  height: 18px;
+  width: 18px;
+}
+
+.distance-cell {
+  min-width: 185px;
+}
+
+.distance-main {
+  display: block;
+  font-weight: 700;
+}
+
+.distance-detail {
+  color: var(--dg-text-dim);
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.session-actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.session-label {
+  color: var(--dg-text-dim);
+  font-size: 0.72rem;
+  min-width: 48px;
+  text-align: left;
+}
+
+.session-btn {
+  background: var(--dg-bg-soft);
+  border: 1px solid var(--dg-border-soft);
+  border-radius: 6px;
+  color: var(--dg-text-main);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  padding: 3px 6px;
+}
+
+.session-btn:hover {
+  border-color: var(--dg-accent);
+}
+
+.session-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.plan-distance-input,
+.plan-run-type {
+  border: 1px solid var(--dg-border);
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-size: 0.92rem;
+  padding: 4px 6px;
+  width: 100%;
+}
+
+.plan-distance-input:focus,
+.plan-run-type:focus {
+  border-color: var(--dg-accent);
+  outline: 2px solid color-mix(in srgb, var(--dg-accent) 35%, transparent);
+}
+
+.metric-week {
+  background: #7ec8b6;
+  color: #0f1b1a;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.metric-month {
+  background: #88c7a6;
+  color: #0f1b1a;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.metric-easy {
+  background: #69a9cb;
+  color: #0f2230;
+}
+
+.metric-good {
+  background: #5db59b;
+  color: #0f1b19;
+}
+
+.metric-caution {
+  background: #c8af5f;
+  color: #241f0f;
+}
+
+.metric-hard {
+  background: #dc7b71;
+  color: #2e1210;
+}
+
+.metric-neutral {
+  background: var(--dg-bg-soft);
+  color: var(--dg-text-main);
+}
+
+@media (max-width: 900px) {
+  .plan-shell {
+    padding: 0 10px;
+  }
+
+  .plan-hero {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .plan-grid-tools {
+    flex-wrap: wrap;
+  }
+
+  .plan-table {
+    font-size: 0.86rem;
+  }
+}

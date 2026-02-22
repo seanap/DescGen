@@ -14,6 +14,9 @@ from chronicle.storage import (
     enqueue_activity_job,
     get_activity_job,
     get_activity_state,
+    get_plan_day,
+    list_plan_days,
+    list_plan_sessions,
     get_runtime_value,
     get_runtime_values,
     is_activity_processed,
@@ -23,10 +26,12 @@ from chronicle.storage import (
     start_activity_job_run,
     read_json,
     release_runtime_lock,
+    replace_plan_sessions_for_day,
     register_activity_discovery,
     set_runtime_value,
     set_runtime_values,
     set_worker_heartbeat,
+    upsert_plan_day,
     write_json,
     write_config_snapshot,
 )
@@ -96,6 +101,60 @@ class TestStorage(unittest.TestCase):
                 "2026-02-22T00:00:00+00:00",
             )
             self.assertNotIn("worker.missing", values)
+
+    def test_plan_day_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            saved = upsert_plan_day(
+                path,
+                date_local="2026-02-22",
+                timezone_name="America/New_York",
+                run_type="Easy",
+                planned_total_miles=6.2,
+                is_complete=False,
+                notes="Plan day",
+            )
+            self.assertTrue(saved)
+            rows = list_plan_days(
+                path,
+                start_date="2026-02-01",
+                end_date="2026-02-28",
+            )
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["date_local"], "2026-02-22")
+            self.assertEqual(row["run_type"], "Easy")
+            self.assertAlmostEqual(float(row["planned_total_miles"]), 6.2, places=3)
+            self.assertEqual(row["is_complete"], False)
+
+    def test_plan_sessions_replace_and_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            self.assertTrue(
+                replace_plan_sessions_for_day(
+                    path,
+                    date_local="2026-02-22",
+                    sessions=[
+                        {"ordinal": 1, "planned_miles": 6.0},
+                        {"ordinal": 2, "planned_miles": 4.0},
+                    ],
+                )
+            )
+            sessions = list_plan_sessions(
+                path,
+                start_date="2026-02-01",
+                end_date="2026-02-28",
+            )
+            self.assertIn("2026-02-22", sessions)
+            day_sessions = sessions["2026-02-22"]
+            self.assertEqual(len(day_sessions), 2)
+            self.assertEqual(day_sessions[0]["ordinal"], 1)
+            self.assertAlmostEqual(float(day_sessions[0]["planned_miles"]), 6.0, places=3)
+            self.assertEqual(day_sessions[1]["ordinal"], 2)
+            self.assertAlmostEqual(float(day_sessions[1]["planned_miles"]), 4.0, places=3)
+
+            day = get_plan_day(path, date_local="2026-02-22")
+            self.assertIsNotNone(day)
 
     def test_runtime_schema_initializes_once_per_db_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

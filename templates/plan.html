@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chronicle Plan</title>
+  <meta name="theme-color" content="#ff6a00">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Chronicle">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='icons/icon-512.png') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='chronicle.png') }}">
+  <link rel="stylesheet" href="/static/ui-theme.css">
+  <link rel="stylesheet" href="/static/plan.css">
+</head>
+<body>
+  {% include "_app_shell_nav.html" %}
+
+  <div class="plan-shell">
+    <section class="plan-hero card">
+      <div class="plan-hero-copy">
+        <h1>Plan</h1>
+        <p class="muted">Trailing two weeks and next two weeks centered on today with derived load metrics.</p>
+      </div>
+      <div id="planTopMeta" class="plan-meta">Loading...</div>
+    </section>
+    <section id="planSummary" class="plan-summary card"></section>
+
+    <section class="plan-grid card">
+      <div class="plan-grid-tools">
+        <label for="planCenterDate">Center Date</label>
+        <input id="planCenterDate" type="date">
+        <button id="planTodayBtn" type="button">Today</button>
+        <button id="planReloadBtn" type="button">Reload</button>
+      </div>
+      <div class="plan-table-wrap" role="region" aria-label="Plan table">
+        <table class="plan-table">
+          <thead>
+            <tr>
+              <th>Done</th>
+              <th>Date</th>
+              <th>Distance (mi)</th>
+              <th>Run Type</th>
+              <th>Total Weekly Mileage</th>
+              <th>Week over Week change</th>
+              <th>Long%</th>
+              <th>Total Monthly Mileage</th>
+              <th>Month over Month change</th>
+              <th>mi / T30D avg</th>
+              <th>Cumulative Mileage (Trailing 7 Day)</th>
+              <th>T7D / P7D</th>
+              <th>Cumulative Mileage (Trailing 30 Day)</th>
+              <th>T30D / P30D</th>
+              <th>Avg. mi/day (Trailing 30-day)</th>
+            </tr>
+          </thead>
+          <tbody id="planTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/static/plan.js"></script>
+</body>
+</html>

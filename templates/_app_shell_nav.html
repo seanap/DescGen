@@ -16,6 +16,12 @@
       >View</a>
       <span class="dg-nav-sep" aria-hidden="true">|</span>
       <a
+        class="dg-nav-link {% if _path.startswith('/plan') %}is-active{% endif %}"
+        href="/plan"
+        {% if _path.startswith('/plan') %}aria-current="page"{% endif %}
+      >Plan</a>
+      <span class="dg-nav-sep" aria-hidden="true">|</span>
+      <a
         class="dg-nav-link {% if _path.startswith('/editor') %}is-active{% endif %}"
         href="/editor"
         {% if _path.startswith('/editor') %}aria-current="page"{% endif %}

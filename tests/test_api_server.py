@@ -17,6 +17,7 @@ class TestApiServer(unittest.TestCase):
         self._original_run_once = api_server.run_once
         self._original_is_worker_healthy = api_server.is_worker_healthy
         self._original_get_dashboard_payload = api_server.get_dashboard_payload
+        self._original_get_plan_payload = api_server.get_plan_payload
         self._original_settings = api_server.settings
         self._original_state_dir_env = os.environ.get("STATE_DIR")
         self._original_setup_env_file = os.environ.get("SETUP_ENV_FILE")
@@ -25,6 +26,7 @@ class TestApiServer(unittest.TestCase):
         api_server.run_once = self._original_run_once
         api_server.is_worker_healthy = self._original_is_worker_healthy
         api_server.get_dashboard_payload = self._original_get_dashboard_payload
+        api_server.get_plan_payload = self._original_get_plan_payload
         api_server.settings = self._original_settings
         if self._original_state_dir_env is None:
             os.environ.pop("STATE_DIR", None)
@@ -160,6 +162,10 @@ class TestApiServer(unittest.TestCase):
         response = self.client.get("/control")
         self.assertEqual(response.status_code, 200)
 
+    def test_plan_page_endpoint(self) -> None:
+        response = self.client.get("/plan")
+        self.assertEqual(response.status_code, 200)
+
     def test_dashboard_data_endpoint(self) -> None:
         api_server.get_dashboard_payload = lambda *_args, **_kwargs: {
             "generated_at": "2026-02-19T00:00:00+00:00",
@@ -214,6 +220,127 @@ class TestApiServer(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload.get("status"), "error")
         self.assertIn("Invalid dashboard mode", str(payload.get("error")))
+
+    def test_plan_data_endpoint(self) -> None:
+        calls: list[dict] = []
+
+        def _payload(*_args, **kwargs):
+            calls.append(kwargs)
+            return {
+                "status": "ok",
+                "center_date": "2026-02-22",
+                "window_days": 14,
+                "rows": [],
+            }
+
+        api_server.get_plan_payload = _payload
+        response = self.client.get("/plan/data.json?center_date=2026-02-22&window_days=14")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload.get("status"), "ok")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0].get("center_date"), "2026-02-22")
+        self.assertEqual(calls[0].get("window_days"), "14")
+
+    def test_plan_data_endpoint_returns_400_for_invalid_center_date(self) -> None:
+        def _raise(*_args, **_kwargs):
+            raise ValueError("center_date must be YYYY-MM-DD.")
+
+        api_server.get_plan_payload = _raise
+        response = self.client.get("/plan/data.json?center_date=02/22/2026")
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("center_date", str(payload.get("error")))
+
+    def test_plan_day_put_persists_distance_and_run_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-22",
+                json={
+                    "distance": "6+4",
+                    "run_type": "Easy",
+                    "is_complete": False,
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(payload.get("session_count"), 2)
+            self.assertEqual(payload.get("distance_saved"), "6+4")
+            self.assertEqual(payload.get("run_type"), "Easy")
+
+    def test_plan_day_put_rejects_invalid_distance_format(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-22",
+                json={
+                    "distance": "6++4",
+                    "run_type": "Easy",
+                },
+            )
+            self.assertEqual(response.status_code, 400)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "error")
+            self.assertIn("distance", str(payload.get("error")))
+
+    def test_plan_day_put_accepts_is_complete_null_for_auto_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            first = self.client.put(
+                "/plan/day/2026-02-22",
+                json={
+                    "distance": "6",
+                    "run_type": "Easy",
+                    "is_complete": True,
+                },
+            )
+            self.assertEqual(first.status_code, 200)
+            second = self.client.put(
+                "/plan/day/2026-02-22",
+                json={
+                    "distance": "6",
+                    "run_type": "Easy",
+                    "is_complete": None,
+                },
+            )
+            self.assertEqual(second.status_code, 200)
+            payload = second.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertIsNone(payload.get("is_complete"))
+
+    def test_plan_day_put_accepts_sessions_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-23",
+                json={
+                    "sessions": [6, 4],
+                    "run_type": "Easy",
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(payload.get("session_count"), 2)
+            self.assertEqual(payload.get("distance_saved"), "6+4")
+
+    def test_plan_day_put_rejects_invalid_sessions_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.put(
+                "/plan/day/2026-02-23",
+                json={
+                    "sessions": "6+4",
+                    "run_type": "Easy",
+                },
+            )
+            self.assertEqual(response.status_code, 400)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "error")
+            self.assertIn("sessions", str(payload.get("error")))
 
     def test_setup_config_and_env_endpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

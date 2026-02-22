@@ -6,7 +6,7 @@ Base URL (local):
 Notes:
 - Use `Content-Type: application/json` for `POST`/`PUT` requests with a JSON body.
 - Most endpoints return JSON.
-- UI pages (`/dashboard`, `/editor`, `/setup`, `/control`) return HTML.
+- UI pages (`/dashboard`, `/plan`, `/editor`, `/setup`, `/control`) return HTML.
 
 ## Health and Runtime
 
@@ -85,6 +85,47 @@ curl http://localhost:1609/dashboard/data.json
 curl "http://localhost:1609/dashboard/data.json?force=true"
 curl "http://localhost:1609/dashboard/data.json?mode=summary"
 curl "http://localhost:1609/dashboard/data.json?mode=year&year=2026"
+```
+
+## Plan Data
+
+### GET `/plan/data.json`
+- Purpose: Plan sheet payload (rows + weekly/monthly/trailing metrics).
+- Query params:
+  - `center_date=YYYY-MM-DD` (optional, defaults to today in configured timezone)
+  - `window_days` (optional, clamped to `7..56`, default `14`)
+- Response notes:
+  - Includes `run_type_options`, `summary`, and `rows`.
+  - `rows` include editable fields (`planned_input`, `run_type`, `is_complete`, `notes`) and computed metrics.
+  - Invalid `center_date` returns `400`.
+- Examples:
+```bash
+curl http://localhost:1609/plan/data.json
+curl "http://localhost:1609/plan/data.json?center_date=2026-02-22&window_days=14"
+```
+
+### PUT `/plan/day/<date_local>`
+- Purpose: Upsert one plan day and optional sessions.
+- Path param:
+  - `date_local` in `YYYY-MM-DD` format.
+- Accepted JSON fields:
+  - `distance`: string (`"6"`, `"6.5"`, `"6+4"`).
+  - `planned_total_miles`: number or distance string.
+  - `sessions`: array of numbers/objects (replaces all sessions for the day).
+  - `run_type`: string.
+  - `notes`: string.
+  - `is_complete`: `true`, `false`, or `null` (`null` resets to auto mode).
+- Response notes:
+  - Returns saved `planned_total_miles`, normalized `distance_saved`, `session_count`, `sessions`, and effective completion state.
+- Examples:
+```bash
+curl -X PUT http://localhost:1609/plan/day/2026-02-22 \
+  -H "Content-Type: application/json" \
+  -d '{"distance":"6+4","run_type":"Easy","is_complete":false}'
+
+curl -X PUT http://localhost:1609/plan/day/2026-02-23 \
+  -H "Content-Type: application/json" \
+  -d '{"sessions":[6,4],"run_type":"SOS","is_complete":null}'
 ```
 
 ## Sources / Setup API
@@ -286,6 +327,8 @@ curl http://localhost:1609/ready
 curl -X POST http://localhost:1609/rerun/latest
 curl -X POST http://localhost:1609/rerun/activity/17455368360
 curl http://localhost:1609/dashboard/data.json
+curl "http://localhost:1609/plan/data.json?center_date=2026-02-22&window_days=14"
+curl -X PUT http://localhost:1609/plan/day/2026-02-22 -H "Content-Type: application/json" -d '{"distance":"6+4","run_type":"Easy"}'
 curl "http://localhost:1609/dashboard/data.json?force=true"
 curl http://localhost:1609/setup/api/config
 curl http://localhost:1609/editor/profiles
