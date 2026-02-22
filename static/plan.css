@@ -47,38 +47,14 @@ body.plan-page {
   color: var(--dg-muted);
 }
 
-.plan-hero {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  background:
-    linear-gradient(120deg, rgba(252, 76, 2, 0.11), rgba(252, 76, 2, 0.08)),
-    var(--dg-panel);
+.plan-heading {
+  padding: 2px 4px 0;
 }
 
-.plan-hero-copy {
-  min-width: 0;
-}
-
-.plan-hero h1 {
+.plan-heading h1 {
   margin: 0 0 4px;
-  font-size: clamp(1.4rem, 2vw, 1.9rem);
+  font-size: clamp(1.34rem, 1.8vw, 1.8rem);
   letter-spacing: 0.01em;
-}
-
-.plan-meta {
-  color: #f4f6f8;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 0.76rem;
-  line-height: 1.4;
-  text-align: right;
-  border: 1px solid rgba(252, 76, 2, 0.32);
-  border-radius: 999px;
-  background: rgba(12, 12, 12, 0.72);
-  padding: 8px 12px;
-  white-space: nowrap;
 }
 
 .plan-summary {
@@ -227,12 +203,13 @@ body.plan-page {
 }
 
 .plan-table {
-  --plan-col-done: 72px;
+  --plan-col-done: 44px;
   --plan-col-date: 178px;
-  --plan-col-distance: 292px;
+  --plan-col-distance: 184px;
+  --plan-col-run-type: 176px;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 1540px;
+  min-width: 1460px;
   width: 100%;
   font-size: 0.9rem;
 }
@@ -291,7 +268,12 @@ body.plan-page {
 .plan-table tbody td:nth-child(3) {
   min-width: var(--plan-col-distance);
   width: var(--plan-col-distance);
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.plan-table thead th:nth-child(4),
+.plan-table tbody td:nth-child(4) {
+  min-width: var(--plan-col-run-type);
+  width: var(--plan-col-run-type);
 }
 
 .plan-table tbody tr:nth-child(odd) td {
@@ -314,24 +296,27 @@ body.plan-page {
   border-bottom: 2px solid color-mix(in srgb, var(--plan-neon-pink) 50%, transparent);
 }
 
-.plan-table tbody tr.week-block-odd td:first-child {
-  border-left: 2px solid color-mix(in srgb, var(--plan-neon-blue) 38%, transparent);
+.plan-table tbody tr {
+  position: relative;
 }
 
-.plan-table tbody tr.week-block-even td:first-child {
-  border-left: 2px solid color-mix(in srgb, var(--plan-neon-pink) 36%, transparent);
+.plan-table tbody tr.is-today::after,
+.plan-table tbody tr:focus-within::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 2px;
 }
 
-.plan-table tbody tr.is-today td {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--plan-neon-blue) 66%, transparent),
-    0 0 12px -10px var(--plan-neon-blue);
+.plan-table tbody tr.is-today::after {
+  border: 1px solid color-mix(in srgb, var(--plan-neon-blue) 64%, transparent);
+  box-shadow: 0 0 12px -10px var(--plan-neon-blue);
 }
 
-.plan-table tbody tr:focus-within td {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--plan-neon-green) 46%, transparent),
-    0 0 10px -10px var(--plan-neon-green);
+.plan-table tbody tr:focus-within::after {
+  border: 1px solid color-mix(in srgb, var(--plan-neon-green) 48%, transparent);
+  box-shadow: 0 0 10px -10px var(--plan-neon-green);
 }
 
 .plan-table tbody td:nth-child(2),
@@ -351,31 +336,34 @@ body.plan-page {
   align-items: center;
   display: flex;
   justify-content: center;
+  padding-inline: 4px;
 }
 
 .done-chip {
-  align-items: center;
+  aspect-ratio: 1 / 1;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  display: inline-flex;
-  font-size: 0.78rem;
-  font-weight: 700;
-  height: 22px;
-  justify-content: center;
-  line-height: 1;
-  min-width: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  display: inline-block;
+  height: 11px;
+  width: 11px;
 }
 
 .done-chip.done {
-  border-color: color-mix(in srgb, var(--plan-neon-green) 62%, transparent);
-  background: color-mix(in srgb, var(--plan-neon-green) 20%, transparent);
-  color: #dcfff0;
+  border-color: color-mix(in srgb, var(--plan-neon-green) 72%, transparent);
+  background: color-mix(in srgb, var(--plan-neon-green) 52%, transparent);
+  box-shadow: 0 0 10px -3px var(--plan-neon-green);
+}
+
+.done-chip.missed {
+  border-color: color-mix(in srgb, var(--plan-neon-pink) 72%, transparent);
+  background: color-mix(in srgb, var(--plan-neon-pink) 52%, transparent);
+  box-shadow: 0 0 10px -3px var(--plan-neon-pink);
 }
 
 .done-chip.pending {
-  border-color: color-mix(in srgb, var(--plan-neon-blue) 44%, transparent);
-  background: color-mix(in srgb, var(--plan-neon-blue) 14%, transparent);
-  color: #d9f3ff;
+  border-color: color-mix(in srgb, var(--plan-neon-neutral) 60%, transparent);
+  background: color-mix(in srgb, var(--plan-neon-neutral) 26%, transparent);
+  box-shadow: 0 0 8px -4px var(--plan-neon-neutral);
 }
 
 .date-cell {
@@ -399,7 +387,7 @@ body.plan-page {
 
 .week-badge {
   display: inline-block;
-  margin-top: 3px;
+  margin-top: 2px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--plan-neon-blue) 60%, transparent);
   background: color-mix(in srgb, var(--plan-neon-blue) 16%, transparent);
@@ -418,14 +406,11 @@ body.plan-page {
 
 .session-editor {
   display: grid;
-  gap: 5px;
+  gap: 4px;
 }
 
 .plan-session-row {
-  align-items: center;
-  display: grid;
-  gap: 5px;
-  grid-template-columns: minmax(100px, 1fr) minmax(110px, 0.8fr);
+  min-height: 24px;
 }
 
 .session-distance-wrap {
@@ -484,7 +469,7 @@ body.plan-page {
 }
 
 .plan-session-type {
-  min-width: 108px;
+  min-width: var(--plan-col-run-type);
 }
 
 .plan-distance-input:focus,
@@ -554,16 +539,6 @@ body.plan-page {
     width: calc(100% - 20px);
   }
 
-  .plan-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .plan-meta {
-    text-align: left;
-    white-space: normal;
-  }
-
   .plan-grid-tools {
     align-items: flex-start;
     flex-direction: column;
@@ -617,10 +592,5 @@ body.plan-page {
   .plan-table thead th:nth-child(3),
   .plan-table tbody td:nth-child(3) {
     border-right: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .plan-table tbody tr.week-block-odd td:first-child,
-  .plan-table tbody tr.week-block-even td:first-child {
-    border-left-width: 1px;
   }
 }

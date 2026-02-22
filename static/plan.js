@@ -211,10 +211,15 @@
   }
 
   function collectSessionPayloadForDate(dateLocal) {
-    const rows = Array.from(bodyEl.querySelectorAll(`.plan-session-row[data-date="${dateLocal}"]`));
-    const raw = rows.map((rowEl) => {
-      const distanceInput = rowEl.querySelector(".plan-session-distance");
-      const runTypeSelect = rowEl.querySelector(".plan-session-type");
+    const distanceInputs = Array.from(bodyEl.querySelectorAll(`.plan-session-distance[data-date="${dateLocal}"]`));
+    distanceInputs.sort(
+      (a, b) => Number.parseInt(a.dataset.sessionIndex || "0", 10) - Number.parseInt(b.dataset.sessionIndex || "0", 10),
+    );
+    const raw = distanceInputs.map((distanceInput) => {
+      const sessionIndex = Number.parseInt(distanceInput.dataset.sessionIndex || "0", 10);
+      const runTypeSelect = bodyEl.querySelector(
+        `.plan-session-type[data-date="${dateLocal}"][data-session-index="${sessionIndex}"]`,
+      );
       return {
         planned_miles: distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : "",
         run_type: runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : "",
@@ -224,9 +229,6 @@
   }
 
   function resolveDayRunType(dateLocal, fallback) {
-    const dayRunTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${dateLocal}"]`);
-    const selected = dayRunTypeSelect && typeof dayRunTypeSelect.value === "string" ? dayRunTypeSelect.value : "";
-    if (selected.trim()) return selected.trim();
     const sessions = collectSessionPayloadForDate(dateLocal);
     for (const session of sessions) {
       if (!session || typeof session !== "object") continue;
@@ -253,7 +255,7 @@
   function setPendingFocus(dateValue, field) {
     pendingFocus = {
       date: String(dateValue || ""),
-      field: field === "run_type" ? field : "distance",
+      field: "distance",
     };
   }
 
@@ -271,13 +273,14 @@
       setPendingFocus(nextFocusDate, nextField);
       await loadPlan(centerDateEl.value);
     } catch (err) {
-      metaEl.textContent = String(err && err.message ? err.message : "Failed to save plan row");
+      if (metaEl) {
+        metaEl.textContent = String(err && err.message ? err.message : "Failed to save plan row");
+      }
     }
   }
 
   function selectorForField(field, dateValue) {
     const dateEscaped = String(dateValue || "");
-    if (field === "run_type") return `.plan-run-type[data-date="${dateEscaped}"]`;
     return `.plan-session-distance[data-date="${dateEscaped}"][data-session-index="0"]`;
   }
 
@@ -293,44 +296,36 @@
     return true;
   }
 
-  function buildRunTypeSelect(row, index, rows) {
+  function buildSessionTypeSelect(row, index, rows, session, sessionIndex) {
     const select = document.createElement("select");
-    select.className = "plan-run-type";
+    select.className = "plan-run-type plan-session-type";
     select.dataset.date = row.date;
+    select.dataset.sessionIndex = String(sessionIndex);
     for (const optionValue of runTypeOptions) {
       const option = document.createElement("option");
       option.value = optionValue;
       option.textContent = optionValue || "--";
-      if (optionValue === String(row.run_type || "")) {
+      if (optionValue === String(session && session.run_type ? session.run_type : "")) {
         option.selected = true;
       }
       select.appendChild(option);
     }
     select.addEventListener("change", () => {
-      const sessions = collectSessionPayloadForDate(row.date);
-      void savePlanRow(
-        row.date,
-        {
-          sessions,
-          run_type: select.value,
-        },
-        row.date,
-        "run_type",
-      );
+      saveSessionPayload(row, index, rows, row.date, "distance");
     });
     select.addEventListener("keydown", (event) => {
       if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
         return;
       }
       event.preventDefault();
-      focusNeighbor(rows, index, "run_type", event.key === "ArrowDown" ? 1 : -1);
+      focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
     });
     return select;
   }
 
-  function buildSessionEditor(row, index, rows) {
+  function buildSessionDistanceEditor(row, index, rows) {
     const editor = document.createElement("div");
-    editor.className = "session-editor";
+    editor.className = "session-editor session-distance-editor";
     const sessions = sessionDetailsFromRow(row);
     const nonEmptySessions = sessions.filter((item) => Number.isFinite(Number(item.planned_miles)) && Number(item.planned_miles) > 0);
     const rowsToRender = nonEmptySessions.length > 0 ? nonEmptySessions : sessions.slice(0, 1);
@@ -365,12 +360,10 @@
           const mapped = runTypeHotkeys[String(event.key || "").toLowerCase()];
           if (mapped && runTypeOptions.includes(mapped)) {
             event.preventDefault();
-            const sessionTypeSelect = rowEl.querySelector(".plan-session-type");
+            const sessionTypeSelect = bodyEl.querySelector(
+              `.plan-session-type[data-date="${row.date}"][data-session-index="${sessionIndex}"]`,
+            );
             if (sessionTypeSelect) sessionTypeSelect.value = mapped;
-            const dayRunTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-            if (dayRunTypeSelect && (!dayRunTypeSelect.value || dayRunTypeSelect.value === "--")) {
-              dayRunTypeSelect.value = mapped;
-            }
             saveSessionPayload(row, index, rows, row.date, "distance");
             return;
           }
@@ -416,28 +409,25 @@
       }
 
       rowEl.appendChild(distanceWrap);
+      editor.appendChild(rowEl);
+    }
+    return editor;
+  }
 
-      const sessionType = document.createElement("select");
-      sessionType.className = "plan-run-type plan-session-type";
-      sessionType.dataset.date = row.date;
-      sessionType.dataset.sessionIndex = String(sessionIndex);
-      for (const optionValue of runTypeOptions) {
-        const option = document.createElement("option");
-        option.value = optionValue;
-        option.textContent = optionValue || "--";
-        if (optionValue === String(session.run_type || "")) {
-          option.selected = true;
-        }
-        sessionType.appendChild(option);
-      }
-      sessionType.addEventListener("change", () => {
-        const dayRunTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-        if (dayRunTypeSelect && !String(dayRunTypeSelect.value || "").trim()) {
-          dayRunTypeSelect.value = sessionType.value;
-        }
-        saveSessionPayload(row, index, rows, row.date, "distance");
-      });
-      rowEl.appendChild(sessionType);
+  function buildSessionTypeEditor(row, index, rows) {
+    const editor = document.createElement("div");
+    editor.className = "session-editor session-type-editor";
+    const sessions = sessionDetailsFromRow(row);
+    const nonEmptySessions = sessions.filter((item) => Number.isFinite(Number(item.planned_miles)) && Number(item.planned_miles) > 0);
+    const rowsToRender = nonEmptySessions.length > 0 ? nonEmptySessions : sessions.slice(0, 1);
+
+    for (let sessionIndex = 0; sessionIndex < rowsToRender.length; sessionIndex += 1) {
+      const session = rowsToRender[sessionIndex];
+      const rowEl = document.createElement("div");
+      rowEl.className = "plan-session-row";
+      rowEl.dataset.date = row.date;
+      rowEl.dataset.sessionIndex = String(sessionIndex);
+      rowEl.appendChild(buildSessionTypeSelect(row, index, rows, session, sessionIndex));
       editor.appendChild(rowEl);
     }
     return editor;
@@ -470,12 +460,27 @@
       const doneChip = document.createElement("span");
       doneChip.className = "done-chip";
       const actualMiles = asNumber(row && row.actual_miles);
-      const isAutoDone = !!(row && row.is_past_or_today && actualMiles !== null && actualMiles > 0);
-      doneChip.classList.add(isAutoDone ? "done" : "pending");
-      doneChip.textContent = isAutoDone ? "✓" : "·";
-      doneChip.title = isAutoDone
-        ? "Completed automatically from detected activity."
-        : "Pending: no detected activity for this date.";
+      const plannedMiles = asNumber(row && row.planned_miles);
+      const isPast = !!(row && row.is_past_or_today && !row.is_today);
+      const isTodayPending = !!(row && row.is_today && (actualMiles === null || actualMiles <= 0));
+      let doneState = "pending";
+      if (actualMiles !== null && actualMiles > 0) {
+        doneState = "done";
+      } else if (isPast && (plannedMiles !== null && plannedMiles > 0)) {
+        doneState = "missed";
+      } else if (isPast) {
+        doneState = "done";
+      } else if (isTodayPending) {
+        doneState = "pending";
+      }
+      doneChip.classList.add(doneState);
+      doneChip.title = (
+        doneState === "done"
+          ? "Compliant day based on detected activity and planned mileage."
+          : doneState === "missed"
+            ? "Planned run without detected activity."
+            : "Future/today pending activity."
+      );
       doneTd.appendChild(doneChip);
       tr.appendChild(doneTd);
 
@@ -500,11 +505,12 @@
 
       const distanceTd = document.createElement("td");
       distanceTd.className = "distance-cell";
-      distanceTd.appendChild(buildSessionEditor(row, index, rows));
+      distanceTd.appendChild(buildSessionDistanceEditor(row, index, rows));
       tr.appendChild(distanceTd);
 
       const runTypeTd = document.createElement("td");
-      runTypeTd.appendChild(buildRunTypeSelect(row, index, rows));
+      runTypeTd.className = "run-type-cell";
+      runTypeTd.appendChild(buildSessionTypeEditor(row, index, rows));
       tr.appendChild(runTypeTd);
 
       if (row && row.show_week_metrics) {
@@ -534,6 +540,7 @@
   }
 
   function setMeta(payload) {
+    if (!metaEl) return;
     if (!payload || payload.status !== "ok") {
       metaEl.textContent = "Data unavailable";
       return;
@@ -616,13 +623,13 @@
     }
 
     try {
-      metaEl.textContent = "Loading...";
+      if (metaEl) metaEl.textContent = "Loading...";
       const response = await fetch(`/plan/data.json?${params.toString()}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok || payload.status !== "ok") {
         const error = String((payload && payload.error) || "Failed to load plan data");
         bodyEl.innerHTML = `<tr><td colspan="15">${error}</td></tr>`;
-        metaEl.textContent = "Load failed";
+        if (metaEl) metaEl.textContent = "Load failed";
         return;
       }
       if (typeof payload.center_date === "string" && payload.center_date) {
@@ -635,7 +642,7 @@
       applyPendingFocus();
     } catch (_err) {
       bodyEl.innerHTML = "<tr><td colspan=\"15\">Network error while loading plan data.</td></tr>";
-      metaEl.textContent = "Network error";
+      if (metaEl) metaEl.textContent = "Network error";
     }
   }
 
