@@ -66,3 +66,4 @@ http://localhost:1609
 - API docs: [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
 - Dashboard metrics reference: [`docs/DASHBOARD_METRICS.md`](docs/DASHBOARD_METRICS.md)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)
+- Module boundaries: [`docs/MODULE_BOUNDARIES.md`](docs/MODULE_BOUNDARIES.md)

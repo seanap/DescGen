@@ -166,6 +166,12 @@ class Settings:
     max_optional_service_calls_per_cycle: int
     enable_service_result_cache: bool
     service_cache_ttl_seconds: int
+    runtime_cleanup_interval_seconds: int
+    runtime_retention_service_cache_seconds: int
+    runtime_retention_transient_runtime_seconds: int
+    runtime_retention_config_snapshots: int
+    runtime_retention_terminal_job_days: int
+    runtime_retention_expired_lock_seconds: int
 
     state_dir: Path
     processed_log_file: Path
@@ -272,6 +278,42 @@ class Settings:
             max_optional_service_calls_per_cycle=_int_env("MAX_OPTIONAL_SERVICE_CALLS_PER_CYCLE", 10, minimum=0, maximum=50),
             enable_service_result_cache=_bool_env("ENABLE_SERVICE_RESULT_CACHE", True),
             service_cache_ttl_seconds=_int_env("SERVICE_CACHE_TTL_SECONDS", 600, minimum=0, maximum=86400),
+            runtime_cleanup_interval_seconds=_int_env(
+                "RUNTIME_CLEANUP_INTERVAL_SECONDS",
+                21600,
+                minimum=0,
+                maximum=604800,
+            ),
+            runtime_retention_service_cache_seconds=_int_env(
+                "RUNTIME_RETENTION_SERVICE_CACHE_SECONDS",
+                259200,
+                minimum=0,
+                maximum=31536000,
+            ),
+            runtime_retention_transient_runtime_seconds=_int_env(
+                "RUNTIME_RETENTION_TRANSIENT_RUNTIME_SECONDS",
+                604800,
+                minimum=0,
+                maximum=31536000,
+            ),
+            runtime_retention_config_snapshots=_int_env(
+                "RUNTIME_RETENTION_CONFIG_SNAPSHOTS",
+                50,
+                minimum=1,
+                maximum=1000,
+            ),
+            runtime_retention_terminal_job_days=_int_env(
+                "RUNTIME_RETENTION_TERMINAL_JOB_DAYS",
+                30,
+                minimum=1,
+                maximum=3650,
+            ),
+            runtime_retention_expired_lock_seconds=_int_env(
+                "RUNTIME_RETENTION_EXPIRED_LOCK_SECONDS",
+                86400,
+                minimum=0,
+                maximum=31536000,
+            ),
             state_dir=state_dir,
             processed_log_file=processed_log_file,
             latest_json_file=latest_json_file,

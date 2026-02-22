@@ -96,6 +96,199 @@ class TestDashboardData(unittest.TestCase):
             self.assertEqual(payload["generated_at"], now_iso)
             mock_build.assert_not_called()
 
+    def test_in_memory_cache_reuses_payload_until_file_marker_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            data_path = dashboard_data_path(settings)
+            dashboard_data._PAYLOAD_MEMORY_CACHE.clear()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            initial = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+            }
+            write_json(data_path, initial)
+
+            with mock.patch("chronicle.dashboard_data.read_json", wraps=dashboard_data.read_json) as read_json_mock:
+                first = get_dashboard_payload(settings, max_age_seconds=3600)
+                second = get_dashboard_payload(settings, max_age_seconds=3600)
+                self.assertEqual(first["generated_at"], second["generated_at"])
+                self.assertEqual(read_json_mock.call_count, 1)
+
+                replacement = dict(initial)
+                replacement["generated_at"] = datetime.now(timezone.utc).isoformat()
+                replacement["validated_at"] = replacement["generated_at"]
+                write_json(data_path, replacement)
+
+                third = get_dashboard_payload(settings, max_age_seconds=3600)
+                self.assertEqual(read_json_mock.call_count, 2)
+                self.assertEqual(third["generated_at"], replacement["generated_at"])
+
+    def test_response_mode_summary_omits_activities(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": ["Run"],
+                "type_meta": {"Run": {"label": "Run", "accent": "#3fa8ff"}},
+                "other_bucket": "OtherSports",
+                "aggregates": {"2026": {"Run": {}}},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [
+                    {
+                        "id": "1001",
+                        "date": "2026-02-01",
+                        "year": 2026,
+                        "type": "Run",
+                        "raw_type": "Run",
+                        "start_date_local": "2026-02-01T10:15:00+00:00",
+                        "hour": 10,
+                        "distance": 5000.0,
+                        "moving_time": 1500.0,
+                        "elevation_gain": 42.0,
+                        "url": "https://www.strava.com/activities/1001",
+                    }
+                ],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {"2026": {"Run": {"avg_fitness": 70.0}}},
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+
+            payload = get_dashboard_payload(settings, max_age_seconds=3600, response_mode="summary")
+            self.assertEqual(payload.get("response_mode"), "summary")
+            self.assertEqual(payload.get("activity_count"), 1)
+            self.assertEqual(payload.get("activities"), [])
+            self.assertIn("2026", payload.get("aggregates", {}))
+
+    def test_response_mode_year_filters_payload_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2025, 2026],
+                "types": ["Run", "Ride"],
+                "type_meta": {
+                    "Run": {"label": "Run", "accent": "#3fa8ff"},
+                    "Ride": {"label": "Ride", "accent": "#39d98a"},
+                },
+                "other_bucket": "OtherSports",
+                "aggregates": {
+                    "2025": {"Ride": {"2025-02-01": {"count": 1, "activity_ids": ["9001"]}}},
+                    "2026": {"Run": {"2026-02-01": {"count": 1, "activity_ids": ["1001"]}}},
+                },
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [
+                    {
+                        "id": "9001",
+                        "date": "2025-02-01",
+                        "year": 2025,
+                        "type": "Ride",
+                        "raw_type": "Ride",
+                        "start_date_local": "2025-02-01T10:15:00+00:00",
+                        "hour": 10,
+                        "distance": 12000.0,
+                        "moving_time": 1800.0,
+                        "elevation_gain": 100.0,
+                        "url": "https://www.strava.com/activities/9001",
+                    },
+                    {
+                        "id": "1001",
+                        "date": "2026-02-01",
+                        "year": 2026,
+                        "type": "Run",
+                        "raw_type": "Run",
+                        "start_date_local": "2026-02-01T10:15:00+00:00",
+                        "hour": 10,
+                        "distance": 5000.0,
+                        "moving_time": 1500.0,
+                        "elevation_gain": 42.0,
+                        "url": "https://www.strava.com/activities/1001",
+                    },
+                ],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {
+                    "2025": {"Ride": {"avg_fitness": 68.0}},
+                    "2026": {"Run": {"avg_fitness": 72.0}},
+                },
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+
+            payload = get_dashboard_payload(
+                settings,
+                max_age_seconds=3600,
+                response_mode="year",
+                response_year=2026,
+            )
+            self.assertEqual(payload.get("response_mode"), "year")
+            self.assertEqual(payload.get("response_year"), 2026)
+            self.assertEqual(payload.get("years"), [2026])
+            self.assertEqual(set(payload.get("aggregates", {}).keys()), {"2026"})
+            self.assertEqual(set(payload.get("intervals_year_type_metrics", {}).keys()), {"2026"})
+            self.assertEqual(payload.get("types"), ["Run"])
+            self.assertEqual(len(payload.get("activities", [])), 1)
+            self.assertEqual(payload["activities"][0]["id"], "1001")
+
+    def test_response_mode_year_requires_year_parameter(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": [],
+                "type_meta": {},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {},
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+            with self.assertRaises(ValueError):
+                get_dashboard_payload(settings, max_age_seconds=3600, response_mode="year")
+
+    def test_normalizes_type_meta_for_legacy_cached_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = self._settings_for(td)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cached_payload = {
+                "generated_at": now_iso,
+                "validated_at": now_iso,
+                "years": [2026],
+                "types": ["HighIntensityIntervalTraining", "Workout", "Run"],
+                "type_meta": {"Run": {"label": "Run"}},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [],
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {},
+            }
+            write_json(dashboard_data_path(settings), cached_payload)
+            payload = get_dashboard_payload(settings, max_age_seconds=3600)
+            type_meta = payload.get("type_meta", {})
+            self.assertEqual(type_meta.get("HighIntensityIntervalTraining", {}).get("label"), "HITT")
+            self.assertEqual(type_meta.get("Workout", {}).get("label"), "Other Workout")
+            self.assertEqual(type_meta.get("Run", {}).get("accent"), "#3fa8ff")
+
     def test_returns_stale_cache_if_rebuild_fails(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             settings = self._settings_for(td)
@@ -355,6 +548,135 @@ class TestDashboardData(unittest.TestCase):
             self.assertIsInstance(cache_payload, dict)
             assert isinstance(cache_payload, dict)
             self.assertEqual(cache_payload.get("last_fetch_mode"), "incremental")
+
+    def test_smart_revalidate_uses_incremental_activity_merge(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = replace(self._settings_for(td), enable_intervals=False)
+            data_path = dashboard_data_path(settings)
+            cached_payload = {
+                "generated_at": "2026-02-08T10:00:00+00:00",
+                "validated_at": "2026-02-08T10:00:00+00:00",
+                "years": [2026],
+                "types": ["Run"],
+                "type_meta": {"Run": {"label": "Run", "accent": "#3fa8ff"}},
+                "other_bucket": "OtherSports",
+                "aggregates": {
+                    "2026": {
+                        "Run": {
+                            "2026-02-08": {
+                                "count": 1,
+                                "distance": 5000.0,
+                                "moving_time": 1500.0,
+                                "elevation_gain": 50.0,
+                                "activity_ids": ["1001"],
+                            }
+                        }
+                    }
+                },
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [
+                    {
+                        "id": "1001",
+                        "date": "2026-02-08",
+                        "year": 2026,
+                        "type": "Run",
+                        "raw_type": "Run",
+                        "start_date_local": "2026-02-08T10:00:00+00:00",
+                        "hour": 10,
+                        "distance": 5000.0,
+                        "moving_time": 1500.0,
+                        "elevation_gain": 50.0,
+                        "url": "https://www.strava.com/activities/1001",
+                    }
+                ],
+                "latest_activity_id": "1001",
+                "latest_activity_start_date": "2026-02-08T10:00:00+00:00",
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {},
+            }
+            write_json(data_path, cached_payload)
+
+            recent_raw = [
+                {
+                    "id": 1003,
+                    "start_date_local": "2026-02-10T10:00:00+00:00",
+                    "sport_type": "Run",
+                    "distance": 6000.0,
+                    "moving_time": 1800,
+                    "total_elevation_gain": 65.0,
+                    "name": "Progression Run",
+                }
+            ]
+
+            with mock.patch(
+                "chronicle.dashboard_data._fetch_latest_activity_marker",
+                return_value=("1003", "2026-02-10T10:00:00+00:00"),
+            ), mock.patch("chronicle.dashboard_data.StravaClient") as mock_client_cls, mock.patch(
+                "chronicle.dashboard_data.build_dashboard_payload",
+                side_effect=AssertionError("full rebuild should not run"),
+            ):
+                mock_client = mock_client_cls.return_value
+                mock_client.get_activities_after.return_value = recent_raw
+                refreshed = dashboard_data._smart_revalidate_payload(settings, data_path, cached_payload)
+
+            self.assertEqual(refreshed.get("sync_mode"), "incremental")
+            self.assertEqual(refreshed.get("latest_activity_id"), "1003")
+            self.assertEqual(len(refreshed.get("activities", [])), 2)
+            ids = [item.get("id") for item in refreshed["activities"]]
+            self.assertEqual(ids, ["1001", "1003"])
+            call_args = mock_client.get_activities_after.call_args
+            self.assertIsNotNone(call_args)
+            assert call_args is not None
+            self.assertIsInstance(call_args.args[0], datetime)
+            self.assertEqual(call_args.kwargs.get("per_page"), 200)
+
+    def test_smart_revalidate_falls_back_to_full_rebuild_for_legacy_cached_activities(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            settings = replace(self._settings_for(td), enable_intervals=False)
+            data_path = dashboard_data_path(settings)
+            legacy_cached_payload = {
+                "generated_at": "2026-02-08T10:00:00+00:00",
+                "validated_at": "2026-02-08T10:00:00+00:00",
+                "years": [2026],
+                "types": ["Run"],
+                "type_meta": {"Run": {"label": "Run", "accent": "#3fa8ff"}},
+                "other_bucket": "OtherSports",
+                "aggregates": {},
+                "units": {"distance": "mi", "elevation": "ft"},
+                "week_start": "sunday",
+                "activities": [
+                    {
+                        "date": "2026-02-08",
+                        "year": 2026,
+                        "type": "Run",
+                        "raw_type": "Run",
+                        "start_date_local": "2026-02-08T10:00:00+00:00",
+                        "hour": 10,
+                        "url": "https://www.strava.com/activities/1001",
+                    }
+                ],
+                "latest_activity_id": "1001",
+                "latest_activity_start_date": "2026-02-08T10:00:00+00:00",
+                "intervals": {"enabled": False, "records": 0, "matched_activities": 0},
+                "intervals_year_type_metrics": {},
+            }
+            write_json(data_path, legacy_cached_payload)
+            full_payload = dict(legacy_cached_payload)
+            full_payload["activities"] = []
+            full_payload["latest_activity_id"] = "1002"
+
+            with mock.patch(
+                "chronicle.dashboard_data._fetch_latest_activity_marker",
+                return_value=("1002", "2026-02-09T10:00:00+00:00"),
+            ), mock.patch(
+                "chronicle.dashboard_data.build_dashboard_payload",
+                return_value=full_payload,
+            ) as build_payload:
+                refreshed = dashboard_data._smart_revalidate_payload(settings, data_path, legacy_cached_payload)
+
+            build_payload.assert_called_once()
+            self.assertEqual(refreshed.get("latest_activity_id"), "1002")
 
 
 if __name__ == "__main__":

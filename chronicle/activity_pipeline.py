@@ -5,34 +5,26 @@ import hashlib
 import json
 import logging
 import math
+import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Settings
+from .pipeline_context_collectors import (
+    collect_crono_context as _collect_crono_context_impl,
+    collect_smashrun_context as _collect_smashrun_context_impl,
+    collect_weather_context as _collect_weather_context_impl,
+)
 from .numeric_utils import (
     as_float as _shared_as_float,
     meters_to_feet_int as _shared_meters_to_feet_int,
     mps_to_mph as _shared_mps_to_mph,
 )
 from .stat_modules import beers_earned, period_stats
-from .stat_modules.crono_api import format_crono_line, get_crono_summary_for_activity
 from .stat_modules.intervals_data import get_intervals_activity_data
-from .stat_modules.misery_index import (
-    get_misery_index_details_for_activity,
-    get_misery_index_for_activity,
-)
-from .stat_modules.smashrun import (
-    aggregate_elevation_totals,
-    get_activity_record,
-    get_activity_elevation_feet,
-    get_activities as get_smashrun_activities,
-    get_badges as get_smashrun_badges,
-    get_notables,
-    get_stats as get_smashrun_stats,
-)
 from .stat_modules.garmin_metrics import default_metrics as default_garmin_metrics
 from .stat_modules.garmin_metrics import fetch_training_status_and_scores
 from .stat_modules.garmin_metrics import get_activity_context_for_strava_activity
@@ -44,6 +36,7 @@ from .storage import (
     enqueue_activity_job,
     get_runtime_lock_owner,
     get_runtime_value,
+    get_runtime_values,
     is_activity_processed,
     mark_activity_processed,
     record_activity_output,
@@ -51,6 +44,7 @@ from .storage import (
     release_runtime_lock,
     start_activity_job_run,
     set_runtime_value,
+    set_runtime_values,
     write_config_snapshot,
     write_json,
 )
@@ -60,6 +54,10 @@ from .strava_client import StravaClient, get_gap_speed_mps, mps_to_pace
 
 
 logger = logging.getLogger(__name__)
+
+
+PERIOD_STATS_ACTIVITIES_CACHE_KEY = "cycle.period_stats.activities_cache"
+DEFAULT_STRAVA_PERIOD_STATS_INCREMENTAL_OVERLAP_HOURS = 48
 
 
 def _configure_logging(level: str) -> None:
@@ -77,19 +75,22 @@ def _record_cycle_status(
     activity_id: int | None = None,
 ) -> None:
     now_iso = datetime.now(timezone.utc).isoformat()
-    set_runtime_value(settings.processed_log_file, "cycle.last_status", status)
-    set_runtime_value(settings.processed_log_file, "cycle.last_status_at_utc", now_iso)
+    updates: dict[str, Any] = {
+        "cycle.last_status": status,
+        "cycle.last_status_at_utc": now_iso,
+    }
     if activity_id is not None:
-        set_runtime_value(settings.processed_log_file, "cycle.last_activity_id", activity_id)
+        updates["cycle.last_activity_id"] = activity_id
     if status in {"updated", "already_processed", "no_activities"}:
-        set_runtime_value(settings.processed_log_file, "cycle.last_success_at_utc", now_iso)
+        updates["cycle.last_success_at_utc"] = now_iso
         if error:
-            set_runtime_value(settings.processed_log_file, "cycle.last_error", error)
+            updates["cycle.last_error"] = error
         else:
             delete_runtime_value(settings.processed_log_file, "cycle.last_error")
     elif error:
-        set_runtime_value(settings.processed_log_file, "cycle.last_error", error)
-        set_runtime_value(settings.processed_log_file, "cycle.last_error_at_utc", now_iso)
+        updates["cycle.last_error"] = error
+        updates["cycle.last_error_at_utc"] = now_iso
+    set_runtime_values(settings.processed_log_file, updates)
 
 
 def _persist_cycle_service_state(settings: Settings, service_state: dict[str, Any] | None) -> None:
@@ -143,13 +144,38 @@ def _service_cycle_bucket(service_state: dict[str, Any] | None, service_name: st
 
 
 def _service_counter_inc(settings: Settings, service_name: str, key_suffix: str, by: int = 1) -> None:
-    runtime_key = _service_key(service_name, key_suffix)
-    current = get_runtime_value(settings.processed_log_file, runtime_key, 0)
-    try:
-        current_val = int(current)
-    except (TypeError, ValueError):
-        current_val = 0
-    set_runtime_value(settings.processed_log_file, runtime_key, current_val + int(by))
+    updates = _service_counter_updates(settings, service_name, {key_suffix: by})
+    if updates:
+        set_runtime_values(settings.processed_log_file, updates)
+
+
+def _service_counter_updates(
+    settings: Settings,
+    service_name: str,
+    increments: dict[str, int],
+) -> dict[str, int]:
+    runtime_increments: dict[str, int] = {}
+    for key_suffix, by in increments.items():
+        try:
+            delta = int(by)
+        except (TypeError, ValueError):
+            continue
+        if delta == 0:
+            continue
+        runtime_increments[_service_key(service_name, key_suffix)] = delta
+    if not runtime_increments:
+        return {}
+
+    existing = get_runtime_values(settings.processed_log_file, list(runtime_increments.keys()))
+    updates: dict[str, int] = {}
+    for runtime_key, delta in runtime_increments.items():
+        current = existing.get(runtime_key, 0)
+        try:
+            current_val = int(current)
+        except (TypeError, ValueError):
+            current_val = 0
+        updates[runtime_key] = current_val + delta
+    return updates
 
 
 def _record_service_status(
@@ -160,39 +186,25 @@ def _record_service_status(
     duration_ms: int | None = None,
     error: str | None = None,
 ) -> None:
-    _service_counter_inc(settings, service_name, "events_total", 1)
-    _service_counter_inc(settings, service_name, f"events.{status}", 1)
-    set_runtime_value(
-        settings.processed_log_file,
-        _service_key(service_name, "last_status"),
-        status,
-    )
+    increments: dict[str, int] = {
+        "events_total": 1,
+        f"events.{status}": 1,
+    }
     now_iso = datetime.now(timezone.utc).isoformat()
-    set_runtime_value(
-        settings.processed_log_file,
-        _service_key(service_name, "last_status_at_utc"),
-        now_iso,
-    )
+    updates: dict[str, Any] = {
+        _service_key(service_name, "last_status"): status,
+        _service_key(service_name, "last_status_at_utc"): now_iso,
+    }
     if duration_ms is not None:
         duration_value = max(0, int(duration_ms))
-        _service_counter_inc(settings, service_name, "duration_count", 1)
-        _service_counter_inc(settings, service_name, "duration_total_ms", duration_value)
-        set_runtime_value(
-            settings.processed_log_file,
-            _service_key(service_name, "last_duration_ms"),
-            duration_value,
-        )
+        increments["duration_count"] = 1
+        increments["duration_total_ms"] = duration_value
+        updates[_service_key(service_name, "last_duration_ms")] = duration_value
     if error:
-        set_runtime_value(
-            settings.processed_log_file,
-            _service_key(service_name, "last_error"),
-            error,
-        )
-        set_runtime_value(
-            settings.processed_log_file,
-            _service_key(service_name, "last_error_at_utc"),
-            now_iso,
-        )
+        updates[_service_key(service_name, "last_error")] = error
+        updates[_service_key(service_name, "last_error_at_utc")] = now_iso
+    updates.update(_service_counter_updates(settings, service_name, increments))
+    set_runtime_values(settings.processed_log_file, updates)
 
 
 def _service_cache_runtime_key(service_name: str, cache_key: str) -> str:
@@ -277,18 +289,26 @@ def _set_service_cooldown(settings: Settings, service_name: str, failure_count: 
         settings.service_cooldown_max_seconds,
     )
     cooldown_until = datetime.now(timezone.utc).timestamp() + delay
-    set_runtime_value(
+    set_runtime_values(
         settings.processed_log_file,
-        _service_key(service_name, "cooldown_until_utc"),
-        datetime.fromtimestamp(cooldown_until, tz=timezone.utc).isoformat(),
+        {
+            _service_key(service_name, "cooldown_until_utc"): datetime.fromtimestamp(
+                cooldown_until, tz=timezone.utc
+            ).isoformat(),
+        },
     )
     return delay
 
 
 def _reset_service_cooldown(settings: Settings, service_name: str) -> None:
     delete_runtime_value(settings.processed_log_file, _service_key(service_name, "cooldown_until_utc"))
-    set_runtime_value(settings.processed_log_file, _service_key(service_name, "failures"), 0)
-    set_runtime_value(settings.processed_log_file, _service_key(service_name, "last_success_utc"), datetime.now(timezone.utc).isoformat())
+    set_runtime_values(
+        settings.processed_log_file,
+        {
+            _service_key(service_name, "failures"): 0,
+            _service_key(service_name, "last_success_utc"): datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 
 def _run_service_call(
@@ -1283,142 +1303,6 @@ def _merge_hr_cadence_from_strava(training: dict[str, Any], detailed_activity: d
     return average_hr, running_cadence
 
 
-def _build_description(
-    detailed_activity: dict[str, Any],
-    training: dict[str, Any],
-    intervals_payload: dict[str, Any] | None,
-    week: dict[str, Any],
-    month: dict[str, Any],
-    year: dict[str, Any],
-    longest_streak: int | None,
-    notables: list[str],
-    latest_elevation_feet: float | None,
-    misery_index: float | None,
-    misery_index_description: str | None,
-    air_quality_index: int | None,
-    aqi_description: str | None,
-    crono_line: str | None = None,
-) -> str:
-    achievements = intervals_payload.get("achievements", []) if intervals_payload else []
-    norm_power = intervals_payload.get("norm_power", "N/A") if intervals_payload else "N/A"
-    work = intervals_payload.get("work", "N/A") if intervals_payload else "N/A"
-    efficiency = intervals_payload.get("efficiency", "N/A") if intervals_payload else "N/A"
-    icu_summary = intervals_payload.get("icu_summary", "N/A") if intervals_payload else "N/A"
-    icu_fitness = intervals_payload.get("fitness", "N/A") if intervals_payload else "N/A"
-    icu_fatigue = intervals_payload.get("fatigue", "N/A") if intervals_payload else "N/A"
-    icu_load = intervals_payload.get("load", intervals_payload.get("training_load", "N/A")) if intervals_payload else "N/A"
-    icu_ramp = intervals_payload.get("ramp_display", intervals_payload.get("ramp", "N/A")) if intervals_payload else "N/A"
-    icu_form_percent = intervals_payload.get("form_percent_display", "N/A") if intervals_payload else "N/A"
-    icu_form_class = intervals_payload.get("form_class", "N/A") if intervals_payload else "N/A"
-    icu_form_emoji = intervals_payload.get("form_class_emoji", "⚪") if intervals_payload else "⚪"
-
-    distance_miles = round(float(detailed_activity.get("distance", 0) or 0) / 1609.34, 2)
-    elapsed_seconds = int(
-        detailed_activity.get("moving_time")
-        or detailed_activity.get("elapsed_time")
-        or 0
-    )
-    activity_time = _format_activity_time(elapsed_seconds)
-    beers = beers_earned.calculate_beers(detailed_activity)
-
-    gap_speed = get_gap_speed_mps(detailed_activity)
-    if gap_speed is None:
-        garmin_gap_speed = training.get("avg_grade_adjusted_speed")
-        if isinstance(garmin_gap_speed, (int, float)) and garmin_gap_speed > 0:
-            gap_speed = float(garmin_gap_speed)
-    if gap_speed is None:
-        average_speed = detailed_activity.get("average_speed")
-        if isinstance(average_speed, (int, float)) and average_speed > 0:
-            gap_speed = float(average_speed)
-    gap_pace = mps_to_pace(gap_speed)
-
-    elevation_feet = latest_elevation_feet
-    if elevation_feet is None:
-        strava_elevation_m = detailed_activity.get("total_elevation_gain")
-        if isinstance(strava_elevation_m, (int, float)):
-            elevation_feet = float(strava_elevation_m) * 3.28084
-
-    average_hr, running_cadence = _merge_hr_cadence_from_strava(training, detailed_activity)
-
-    misery_display = misery_index if misery_index is not None else "N/A"
-    misery_desc_display = misery_index_description or ""
-    aqi_display = air_quality_index if air_quality_index is not None else "N/A"
-    aqi_desc_display = aqi_description or ""
-
-    vo2_value = training.get("vo2max")
-    vo2_display = _display_number(vo2_value, decimals=1) if isinstance(vo2_value, (int, float)) else str(vo2_value)
-
-    description = ""
-    description += f"🏆 {longest_streak if longest_streak is not None else 'N/A'} days in a row\n"
-
-    if notables:
-        description += "\n".join([f"🏅 {notable}" for notable in notables]) + "\n"
-
-    if achievements:
-        description += "\n".join([f"🏅 {achievement}" for achievement in achievements]) + "\n"
-
-    description += f"🌤️🌡️ Misery Index: {misery_display} {misery_desc_display} | 🏭 AQI: {aqi_display}{aqi_desc_display}\n"
-    if crono_line:
-        description += f"{crono_line}\n"
-    description += (
-        f"🌤️🚦 Training Readiness: {training.get('training_readiness_score', 'N/A')} "
-        f"{training.get('training_readiness_emoji', '⚪')} | "
-        f"💗 {training.get('resting_hr', 'N/A')} | 💤 {training.get('sleep_score', 'N/A')}\n"
-    )
-
-    description += (
-        f"👟🏃 {gap_pace} | 🗺️ {distance_miles} | "
-        f"🏔️ {int(round(elevation_feet)) if elevation_feet is not None else 'N/A'}' | "
-        f"🕓 {activity_time} | 🍺 {beers:.1f}\n"
-    )
-
-    description += (
-        f"👟👣 {running_cadence if running_cadence != 'N/A' else 'N/A'}spm | "
-        f"💼 {work} | ⚡ {norm_power} | "
-        f"💓 {average_hr if average_hr != 'N/A' else 'N/A'} | ⚙️{efficiency}\n"
-    )
-
-    description += (
-        f"🚄 {training.get('training_status_emoji', '⚪')} {training.get('training_status_key', 'N/A')} | "
-        f"{training.get('aerobic_training_effect', 'N/A')} : {training.get('anaerobic_training_effect', 'N/A')} - "
-        f"{training.get('training_effect_label', 'N/A')}\n"
-    )
-
-    description += f"🚄 {icu_summary}\n"
-    description += (
-        f"🚄 🏋️ {icu_fitness} | 💦 {icu_fatigue} | 🎯 {icu_load} | 📈 {icu_ramp} | "
-        f"🗿 {icu_form_percent} - {icu_form_class} {icu_form_emoji}\n"
-    )
-
-    description += (
-        f"❤️‍🔥 {vo2_display} | ♾ Endur: {training.get('endurance_overall_score', 'N/A')} | "
-        f"🗻 Hill: {training.get('hill_overall_score', 'N/A')}\n\n"
-    )
-
-    description += "7️⃣ Past 7 days:\n"
-    description += (
-        f"🏃 {week['gap']} | 🗺️ {week['distance']:.1f} | "
-        f"🏔️ {int(round(week['elevation']))}' | 🕓 {week['duration']} | "
-        f"🍺 {week['beers_earned']:.0f}\n"
-    )
-
-    description += "📅 Past 30 days:\n"
-    description += (
-        f"🏃 {month['gap']} | 🗺️ {month['distance']:.0f} | "
-        f"🏔️ {int(round(month['elevation']))}' | 🕓 {month['duration']} | "
-        f"🍺 {month['beers_earned']:.0f}\n"
-    )
-
-    description += "🌍 This Year:\n"
-    description += (
-        f"🏃 {year['gap']} | 🗺️ {year['distance']:.0f} | "
-        f"🏔️ {int(round(year['elevation']))}' | 🕓 {year['duration']} | "
-        f"🍺 {year['beers_earned']:.0f}\n"
-    )
-
-    return description
-
-
 def _build_description_context(
     *,
     detailed_activity: dict[str, Any],
@@ -1875,6 +1759,268 @@ def _resolve_cycle_time_context(settings: Settings) -> tuple[timezone | ZoneInfo
     return local_tz, now_local, now_utc, year_start_utc
 
 
+def _strava_period_stats_incremental_overlap_hours() -> int:
+    raw = str(
+        os.getenv(
+            "STRAVA_PERIOD_STATS_INCREMENTAL_OVERLAP_HOURS",
+            str(DEFAULT_STRAVA_PERIOD_STATS_INCREMENTAL_OVERLAP_HOURS),
+        )
+    ).strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return DEFAULT_STRAVA_PERIOD_STATS_INCREMENTAL_OVERLAP_HOURS
+    return max(1, min(parsed, 24 * 14))
+
+
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _normalize_period_stats_activity(activity: dict[str, Any]) -> dict[str, Any] | None:
+    raw_id = activity.get("id")
+    if raw_id is None:
+        return None
+    activity_id = str(raw_id).strip()
+    if not activity_id:
+        return None
+
+    start_date_raw = activity.get("start_date") or activity.get("start_date_local")
+    if not isinstance(start_date_raw, str) or not start_date_raw.strip():
+        return None
+    start_date = start_date_raw.strip()
+    if _parse_utc_datetime(start_date) is None:
+        return None
+
+    raw_type = activity.get("sport_type")
+    if not isinstance(raw_type, str) or not raw_type.strip():
+        raw_type = activity.get("type")
+    activity_type = str(raw_type or "Unknown").strip() or "Unknown"
+
+    normalized: dict[str, Any] = {
+        "id": activity_id,
+        "start_date": start_date,
+        "sport_type": activity_type,
+        "type": activity_type,
+        "distance": float(_as_float(activity.get("distance")) or 0.0),
+        "moving_time": float(_as_float(activity.get("moving_time")) or 0.0),
+        "calories": float(_as_float(activity.get("calories")) or 0.0),
+    }
+    average_speed = _as_float(activity.get("average_speed"))
+    if average_speed is not None and average_speed > 0:
+        normalized["average_speed"] = float(average_speed)
+    gap_speed = _as_float(activity.get("average_grade_adjusted_speed"))
+    if gap_speed is not None and gap_speed > 0:
+        normalized["average_grade_adjusted_speed"] = float(gap_speed)
+    legacy_gap_speed = _as_float(activity.get("avgGradeAdjustedSpeed"))
+    if legacy_gap_speed is not None and legacy_gap_speed > 0:
+        normalized["avgGradeAdjustedSpeed"] = float(legacy_gap_speed)
+    return normalized
+
+
+def _filter_period_stats_history(
+    activities: list[dict[str, Any]],
+    *,
+    year_start_utc: datetime,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for item in activities:
+        start_utc = _parse_utc_datetime(item.get("start_date"))
+        if start_utc is None or start_utc < year_start_utc:
+            continue
+        filtered.append(item)
+    return sorted(filtered, key=lambda value: (str(value.get("start_date")), str(value.get("id"))))
+
+
+def _normalize_period_stats_activities(
+    raw_activities: list[dict[str, Any]],
+    *,
+    year_start_utc: datetime,
+) -> list[dict[str, Any]]:
+    deduped_by_id: dict[str, dict[str, Any]] = {}
+    for raw in raw_activities:
+        if not isinstance(raw, dict):
+            continue
+        normalized = _normalize_period_stats_activity(raw)
+        if normalized is None:
+            continue
+        deduped_by_id[normalized["id"]] = normalized
+    return _filter_period_stats_history(list(deduped_by_id.values()), year_start_utc=year_start_utc)
+
+
+def _period_stats_cache_marker(cache_payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    raw_id = cache_payload.get("latest_activity_id")
+    raw_start = cache_payload.get("latest_activity_start_date")
+    marker_id = str(raw_id).strip() if raw_id is not None else ""
+    marker_start = str(raw_start).strip() if raw_start is not None else ""
+    return marker_id or None, marker_start or None
+
+
+def _load_period_stats_cached_activities(
+    settings: Settings,
+    *,
+    year_start_utc: datetime,
+) -> tuple[list[dict[str, Any]] | None, tuple[str | None, str | None], int]:
+    cached = get_runtime_value(settings.processed_log_file, PERIOD_STATS_ACTIVITIES_CACHE_KEY)
+    if not isinstance(cached, dict):
+        return None, (None, None), 0
+    expected_year_start = year_start_utc.isoformat()
+    if str(cached.get("year_start_utc") or "").strip() != expected_year_start:
+        return None, _period_stats_cache_marker(cached), 0
+    activities_raw = cached.get("activities")
+    if not isinstance(activities_raw, list):
+        return None, _period_stats_cache_marker(cached), 0
+    normalized = _normalize_period_stats_activities(activities_raw, year_start_utc=year_start_utc)
+    return normalized, _period_stats_cache_marker(cached), len(activities_raw)
+
+
+def _save_period_stats_cache(
+    settings: Settings,
+    *,
+    year_start_utc: datetime,
+    latest_marker: tuple[str | None, str | None],
+    activities: list[dict[str, Any]],
+) -> None:
+    latest_id, latest_start = latest_marker
+    payload = {
+        "year_start_utc": year_start_utc.isoformat(),
+        "latest_activity_id": latest_id or "",
+        "latest_activity_start_date": latest_start or "",
+        "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "activities": activities,
+    }
+    set_runtime_value(settings.processed_log_file, PERIOD_STATS_ACTIVITIES_CACHE_KEY, payload)
+
+
+def _fetch_period_stats_activities_full(
+    settings: Settings,
+    strava_client: StravaClient,
+    *,
+    year_start_utc: datetime,
+    latest_marker: tuple[str | None, str | None],
+    service_state: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    raw = _run_required_call(
+        settings,
+        "strava.get_activities_after",
+        strava_client.get_activities_after,
+        year_start_utc,
+        service_state=service_state,
+    )
+    activities = _normalize_period_stats_activities(raw, year_start_utc=year_start_utc)
+    _save_period_stats_cache(
+        settings,
+        year_start_utc=year_start_utc,
+        latest_marker=latest_marker,
+        activities=activities,
+    )
+    return activities, {
+        "mode": "full",
+        "fetched_records": int(len(raw)),
+        "cached_records": int(len(activities)),
+    }
+
+
+def _get_period_stats_activities(
+    settings: Settings,
+    strava_client: StravaClient,
+    *,
+    year_start_utc: datetime,
+    latest_marker: tuple[str | None, str | None],
+    service_state: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    latest_id, latest_start = latest_marker
+    cached_activities, cached_marker, cached_count = _load_period_stats_cached_activities(
+        settings,
+        year_start_utc=year_start_utc,
+    )
+    cached_latest_id, _cached_latest_start = cached_marker
+
+    if cached_activities is not None and latest_id and latest_id == cached_latest_id:
+        return cached_activities, {
+            "mode": "cache_hit",
+            "fetched_records": 0,
+            "cached_records": int(len(cached_activities)),
+        }
+
+    if cached_activities is None:
+        return _fetch_period_stats_activities_full(
+            settings,
+            strava_client,
+            year_start_utc=year_start_utc,
+            latest_marker=latest_marker,
+            service_state=service_state,
+        )
+
+    latest_start_utc = _parse_utc_datetime(latest_start)
+    if not latest_id or latest_start_utc is None:
+        return _fetch_period_stats_activities_full(
+            settings,
+            strava_client,
+            year_start_utc=year_start_utc,
+            latest_marker=latest_marker,
+            service_state=service_state,
+        )
+
+    overlap_hours = _strava_period_stats_incremental_overlap_hours()
+    fetch_after = latest_start_utc - timedelta(hours=overlap_hours)
+    if fetch_after < year_start_utc:
+        fetch_after = year_start_utc
+
+    raw_recent = _run_required_call(
+        settings,
+        "strava.get_activities_after",
+        strava_client.get_activities_after,
+        fetch_after,
+        service_state=service_state,
+    )
+    merged_by_id: dict[str, dict[str, Any]] = {item["id"]: dict(item) for item in cached_activities}
+    for raw in raw_recent:
+        if not isinstance(raw, dict):
+            continue
+        normalized = _normalize_period_stats_activity(raw)
+        if normalized is None:
+            continue
+        merged_by_id[normalized["id"]] = normalized
+
+    merged_activities = _filter_period_stats_history(
+        list(merged_by_id.values()),
+        year_start_utc=year_start_utc,
+    )
+    if latest_id not in merged_by_id:
+        full_activities, full_sync = _fetch_period_stats_activities_full(
+            settings,
+            strava_client,
+            year_start_utc=year_start_utc,
+            latest_marker=latest_marker,
+            service_state=service_state,
+        )
+        full_sync["fallback_reason"] = "incremental_missing_latest_marker"
+        return full_activities, full_sync
+
+    _save_period_stats_cache(
+        settings,
+        year_start_utc=year_start_utc,
+        latest_marker=latest_marker,
+        activities=merged_activities,
+    )
+    return merged_activities, {
+        "mode": "incremental",
+        "fetch_after": fetch_after.isoformat(),
+        "fetched_records": int(len(raw_recent)),
+        "cached_records": int(cached_count),
+        "merged_records": int(len(merged_activities)),
+    }
+
+
 def _select_strava_activity(
     settings: Settings,
     activities: list[dict[str, Any]],
@@ -1919,82 +2065,17 @@ def _collect_smashrun_context(
     now_utc: datetime,
     service_state: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    context: dict[str, Any] = {
-        "longest_streak": None,
-        "notables": [],
-        "latest_elevation_feet": None,
-        "smashrun_elevation_totals": {"week": 0.0, "month": 0.0, "year": 0.0},
-        "smashrun_activity_record": None,
-        "smashrun_stats": None,
-        "smashrun_badges": [],
-    }
-
-    if not (settings.enable_smashrun and settings.smashrun_access_token):
-        return context
-
-    smashrun_activities = _run_service_call(
+    return _collect_smashrun_context_impl(
         settings,
-        "smashrun.activities",
-        get_smashrun_activities,
-        settings.smashrun_access_token,
+        detailed_activity,
+        selected_activity_id=selected_activity_id,
+        latest_activity_id=latest_activity_id,
+        now_utc=now_utc,
         service_state=service_state,
-        cache_key="smashrun.activities:default",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
+        run_service_call=_run_service_call,
+        as_float=_as_float,
+        logger=logger,
     )
-
-    if smashrun_activities:
-        context["smashrun_activity_record"] = get_activity_record(smashrun_activities, detailed_activity)
-        context["latest_elevation_feet"] = get_activity_elevation_feet(smashrun_activities, detailed_activity)
-        context["smashrun_elevation_totals"] = aggregate_elevation_totals(
-            smashrun_activities,
-            now_utc,
-            timezone_name=settings.timezone,
-        )
-        if selected_activity_id == latest_activity_id:
-            latest_smashrun_activity_id = smashrun_activities[0].get("activityId") if smashrun_activities else None
-            notables_payload = _run_service_call(
-                settings,
-                "smashrun.notables",
-                get_notables,
-                settings.smashrun_access_token,
-                latest_activity_id=latest_smashrun_activity_id,
-                service_state=service_state,
-                cache_key=f"smashrun.notables:{latest_smashrun_activity_id or 'latest'}",
-                cache_ttl_seconds=settings.service_cache_ttl_seconds,
-            )
-            if isinstance(notables_payload, list):
-                context["notables"] = [str(item) for item in notables_payload if str(item).strip()]
-        else:
-            logger.info("Skipping Smashrun notables because selected activity is not latest.")
-
-    smashrun_stats_payload = _run_service_call(
-        settings,
-        "smashrun.stats",
-        get_smashrun_stats,
-        settings.smashrun_access_token,
-        service_state=service_state,
-        cache_key="smashrun.stats:default",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-    )
-    if isinstance(smashrun_stats_payload, dict):
-        context["smashrun_stats"] = smashrun_stats_payload
-        streak_numeric = _as_float(smashrun_stats_payload.get("longestStreak"))
-        if streak_numeric is not None:
-            context["longest_streak"] = int(round(streak_numeric))
-
-    smashrun_badges_payload = _run_service_call(
-        settings,
-        "smashrun.badges",
-        get_smashrun_badges,
-        settings.smashrun_access_token,
-        service_state=service_state,
-        cache_key="smashrun.badges:default",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-    )
-    if isinstance(smashrun_badges_payload, list):
-        context["smashrun_badges"] = [item for item in smashrun_badges_payload if isinstance(item, dict)]
-
-    return context
 
 
 def _collect_weather_context(
@@ -2004,47 +2085,13 @@ def _collect_weather_context(
     selected_activity_id: int,
     service_state: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    context = {
-        "weather_details": None,
-        "misery_index": None,
-        "misery_desc": None,
-        "aqi": None,
-        "aqi_desc": None,
-    }
-    if not settings.enable_weather:
-        return context
-
-    weather_details = _run_service_call(
+    return _collect_weather_context_impl(
         settings,
-        "weather.details",
-        get_misery_index_details_for_activity,
         detailed_activity,
-        settings.weather_api_key,
+        selected_activity_id=selected_activity_id,
         service_state=service_state,
-        cache_key=f"weather.details:{selected_activity_id}",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
+        run_service_call=_run_service_call,
     )
-    context["weather_details"] = weather_details
-    if weather_details:
-        context["misery_index"] = weather_details.get("misery_index")
-        context["misery_desc"] = weather_details.get("misery_description")
-        context["aqi"] = weather_details.get("aqi")
-        context["aqi_desc"] = weather_details.get("aqi_description")
-        return context
-
-    fallback_weather = _run_service_call(
-        settings,
-        "weather.fallback",
-        get_misery_index_for_activity,
-        detailed_activity,
-        settings.weather_api_key,
-        service_state=service_state,
-        cache_key=f"weather.fallback:{selected_activity_id}",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-    )
-    if isinstance(fallback_weather, tuple) and len(fallback_weather) == 4:
-        context["misery_index"], context["misery_desc"], context["aqi"], context["aqi_desc"] = fallback_weather
-    return context
 
 
 def _collect_crono_context(
@@ -2054,22 +2101,13 @@ def _collect_crono_context(
     selected_activity_id: int,
     service_state: dict[str, Any] | None,
 ) -> tuple[dict[str, Any] | None, str | None]:
-    if not settings.enable_crono_api:
-        return None, None
-    crono_summary = _run_service_call(
+    return _collect_crono_context_impl(
         settings,
-        "crono.summary",
-        get_crono_summary_for_activity,
+        detailed_activity,
+        selected_activity_id=selected_activity_id,
         service_state=service_state,
-        cache_key=f"crono.summary:{selected_activity_id}:{settings.timezone}:7",
-        cache_ttl_seconds=settings.service_cache_ttl_seconds,
-        activity=detailed_activity,
-        timezone_name=settings.timezone,
-        base_url=settings.crono_api_base_url,
-        api_key=settings.crono_api_key,
-        days=7,
+        run_service_call=_run_service_call,
     )
-    return crono_summary, format_crono_line(crono_summary)
 
 
 def _is_retryable_run_error(exc: Exception) -> bool:
@@ -2257,11 +2295,15 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
 
         _local_tz, now_local, now_utc, year_start = _resolve_cycle_time_context(settings)
 
-        strava_activities = _run_required_call(
+        latest_marker = (
+            str(latest.get("id")).strip() if latest.get("id") is not None else None,
+            str(latest.get("start_date") or latest.get("start_date_local") or "").strip() or None,
+        )
+        strava_activities, period_stats_sync = _get_period_stats_activities(
             settings,
-            "strava.get_activities_after",
-            strava_client.get_activities_after,
-            year_start,
+            strava_client,
+            year_start_utc=year_start,
+            latest_marker=latest_marker,
             service_state=service_state,
         )
 
@@ -2412,6 +2454,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             "description": description,
             "source": "standard",
             "period_stats": period_summaries,
+            "period_stats_sync": period_stats_sync,
             "weather": weather_details,
             "template_context": description_context,
             "service_calls": service_state,
