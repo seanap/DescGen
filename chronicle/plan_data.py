@@ -310,6 +310,7 @@ def get_plan_payload(
 
     dates_full = _date_range(calc_start, calc_end)
     planned_miles: dict[str, float] = {}
+    planned_sessions_clean: dict[str, list[float]] = {}
     actual_miles_by_day: dict[str, float] = {}
     effective_miles: dict[str, float] = {}
     run_type_by_date: dict[str, str] = {}
@@ -327,6 +328,7 @@ def get_plan_payload(
         )
         planned_from_day = _as_float(plan_row.get("planned_total_miles")) or 0.0
         session_total = 0.0
+        session_values: list[float] = []
         if isinstance(sessions_for_day, list):
             for session in sessions_for_day:
                 if not isinstance(session, dict):
@@ -335,6 +337,7 @@ def get_plan_payload(
                 if planned_piece is None or planned_piece <= 0:
                     continue
                 session_total += planned_piece
+                session_values.append(planned_piece)
         planned = session_total if session_total > 0 else planned_from_day
         actual = _as_float(actual_miles.get(day_key)) or 0.0
         run_type = str(plan_row.get("run_type") or "").strip()
@@ -354,6 +357,7 @@ def get_plan_payload(
             completion_source = "auto"
 
         planned_miles[day_key] = planned
+        planned_sessions_clean[day_key] = session_values
         actual_miles_by_day[day_key] = actual
         effective_miles[day_key] = effective
         run_type_by_date[day_key] = run_type
@@ -459,6 +463,7 @@ def get_plan_payload(
                 "run_type": run_type_by_date.get(day_key, ""),
                 "notes": notes_by_date.get(day_key, ""),
                 "planned_miles": planned_value,
+                "planned_sessions": list(planned_sessions_clean.get(day_key, [])),
                 "planned_input": _planned_input_for_day(
                     planned_total=float(planned_miles.get(day_key, 0.0)),
                     sessions=(

@@ -181,7 +181,7 @@
 }
 
 .distance-cell {
-  min-width: 130px;
+  min-width: 185px;
 }
 
 .distance-main {
@@ -194,6 +194,40 @@
   display: block;
   font-size: 0.75rem;
   margin-top: 2px;
+}
+
+.session-actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.session-label {
+  color: var(--dg-text-dim);
+  font-size: 0.72rem;
+  min-width: 48px;
+  text-align: left;
+}
+
+.session-btn {
+  background: var(--dg-bg-soft);
+  border: 1px solid var(--dg-border-soft);
+  border-radius: 6px;
+  color: var(--dg-text-main);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  padding: 3px 6px;
+}
+
+.session-btn:hover {
+  border-color: var(--dg-accent);
+}
+
+.session-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .plan-distance-input,
