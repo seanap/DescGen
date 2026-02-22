@@ -330,8 +330,12 @@ def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object
     sessions: list[dict[str, object]] = []
     total = 0.0
     for idx, item in enumerate(raw_value):
+        run_type: str | None = None
+        workout_code: str | None = None
         if isinstance(item, dict):
             planned_raw = item.get("planned_miles")
+            run_type = str(item.get("run_type") or "").strip() or None
+            workout_code = str(item.get("workout_code") or "").strip() or None
         else:
             planned_raw = item
         try:
@@ -346,6 +350,8 @@ def _parse_plan_sessions_input(raw_value: object) -> tuple[list[dict[str, object
             {
                 "ordinal": idx + 1,
                 "planned_miles": planned,
+                "run_type": run_type,
+                "workout_code": workout_code,
             }
         )
         total += planned
@@ -522,11 +528,19 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
             return {"status": "error", "error": "is_complete must be boolean or null."}, 400
 
     sessions: list[dict[str, object]] | None = None
+    run_type_from_sessions: str | None = None
     if "sessions" in body:
         try:
             sessions, planned_total_miles = _parse_plan_sessions_input(body.get("sessions"))
         except ValueError as exc:
             return {"status": "error", "error": str(exc)}, 400
+        for item in sessions:
+            if not isinstance(item, dict):
+                continue
+            candidate = str(item.get("run_type") or "").strip()
+            if candidate:
+                run_type_from_sessions = candidate
+                break
     elif "distance" in body:
         try:
             sessions, planned_total_miles = _parse_plan_distance_input(body.get("distance"))
@@ -539,6 +553,9 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
             return {"status": "error", "error": str(exc)}, 400
     else:
         planned_total_miles = existing_day.get("planned_total_miles")
+
+    if "run_type" not in body and run_type_from_sessions:
+        run_type = run_type_from_sessions
 
     saved = upsert_plan_day(
         current.processed_log_file,

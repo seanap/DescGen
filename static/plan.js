@@ -148,32 +148,112 @@
     return values;
   }
 
-  function sessionsFromRow(row, distanceValue) {
+  function sessionDetailsFromRow(row) {
+    const fromDetail = Array.isArray(row && row.planned_sessions_detail) ? row.planned_sessions_detail : [];
+    const normalized = [];
+    for (let idx = 0; idx < fromDetail.length; idx += 1) {
+      const item = fromDetail[idx];
+      if (!item || typeof item !== "object") continue;
+      const planned = Number.parseFloat(String(item.planned_miles));
+      if (!Number.isFinite(planned) || planned <= 0) continue;
+      normalized.push({
+        ordinal: idx + 1,
+        planned_miles: planned,
+        run_type: String(item.run_type || ""),
+      });
+    }
+    if (normalized.length > 0) return normalized;
+
     const explicit = Array.isArray(row && row.planned_sessions) ? row.planned_sessions : [];
-    const cleanExplicit = explicit
-      .map((value) => Number.parseFloat(String(value)))
-      .filter((value) => Number.isFinite(value) && value > 0);
-    if (cleanExplicit.length > 0) return cleanExplicit;
-
-    const parsed = parseDistanceExpression(distanceValue);
-    if (parsed.length > 0) return parsed;
-    const fallback = Number.parseFloat(String(row && row.planned_miles));
-    return Number.isFinite(fallback) && fallback > 0 ? [fallback] : [];
-  }
-
-  function serializeSessionsForApi(values) {
-    return values
-      .map((value, index) => ({
-        ordinal: index + 1,
-        planned_miles: value,
+    const fromExplicit = explicit
+      .map((value, idx) => ({
+        ordinal: idx + 1,
+        planned_miles: Number.parseFloat(String(value)),
+        run_type: idx === 0 ? String((row && row.run_type) || "") : "",
       }))
       .filter((item) => Number.isFinite(item.planned_miles) && item.planned_miles > 0);
+    if (fromExplicit.length > 0) return fromExplicit;
+
+    const parsed = parseDistanceExpression(row && row.planned_input);
+    if (parsed.length > 0) {
+      return parsed.map((value, idx) => ({
+        ordinal: idx + 1,
+        planned_miles: value,
+        run_type: idx === 0 ? String((row && row.run_type) || "") : "",
+      }));
+    }
+
+    const fallback = Number.parseFloat(String(row && row.planned_miles));
+    if (Number.isFinite(fallback) && fallback > 0) {
+      return [{ ordinal: 1, planned_miles: fallback, run_type: String((row && row.run_type) || "") }];
+    }
+    return [{ ordinal: 1, planned_miles: null, run_type: String((row && row.run_type) || "") }];
+  }
+
+  function serializeSessionsForApi(sessionDetails) {
+    const payload = [];
+    for (let idx = 0; idx < sessionDetails.length; idx += 1) {
+      const session = sessionDetails[idx];
+      if (!session || typeof session !== "object") continue;
+      const planned = Number.parseFloat(String(session.planned_miles));
+      if (!Number.isFinite(planned) || planned <= 0) continue;
+      const runType = String(session.run_type || "").trim();
+      const item = {
+        ordinal: payload.length + 1,
+        planned_miles: planned,
+      };
+      if (runType) {
+        item.run_type = runType;
+      }
+      payload.push(item);
+    }
+    return payload;
+  }
+
+  function collectSessionPayloadForDate(dateLocal) {
+    const rows = Array.from(bodyEl.querySelectorAll(`.plan-session-row[data-date="${dateLocal}"]`));
+    const raw = rows.map((rowEl) => {
+      const distanceInput = rowEl.querySelector(".plan-session-distance");
+      const runTypeSelect = rowEl.querySelector(".plan-session-type");
+      return {
+        planned_miles: distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : "",
+        run_type: runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : "",
+      };
+    });
+    return serializeSessionsForApi(raw);
+  }
+
+  function resolveDayRunType(dateLocal, fallback) {
+    const dayRunTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${dateLocal}"]`);
+    const selected = dayRunTypeSelect && typeof dayRunTypeSelect.value === "string" ? dayRunTypeSelect.value : "";
+    if (selected.trim()) return selected.trim();
+    const sessions = collectSessionPayloadForDate(dateLocal);
+    for (const session of sessions) {
+      if (!session || typeof session !== "object") continue;
+      const candidate = String(session.run_type || "").trim();
+      if (candidate) return candidate;
+    }
+    return String(fallback || "").trim();
+  }
+
+  function saveSessionPayload(row, index, rows, nextFocusDate, nextField, sessionsOverride) {
+    const sessions = Array.isArray(sessionsOverride) ? sessionsOverride : collectSessionPayloadForDate(row.date);
+    const runType = resolveDayRunType(row.date, row && row.run_type);
+    void savePlanRow(
+      row.date,
+      {
+        sessions,
+        run_type: runType,
+      },
+      nextFocusDate || row.date,
+      nextField || "distance",
+    );
   }
 
   function setPendingFocus(dateValue, field) {
     pendingFocus = {
       date: String(dateValue || ""),
-      field: field === "run_type" || field === "complete" ? field : "distance",
+      field: field === "run_type" ? field : "distance",
     };
   }
 
@@ -198,8 +278,7 @@
   function selectorForField(field, dateValue) {
     const dateEscaped = String(dateValue || "");
     if (field === "run_type") return `.plan-run-type[data-date="${dateEscaped}"]`;
-    if (field === "complete") return `.plan-complete-toggle[data-date="${dateEscaped}"]`;
-    return `.plan-distance-input[data-date="${dateEscaped}"]`;
+    return `.plan-session-distance[data-date="${dateEscaped}"][data-session-index="0"]`;
   }
 
   function focusNeighbor(rows, index, field, delta) {
@@ -228,12 +307,11 @@
       select.appendChild(option);
     }
     select.addEventListener("change", () => {
-      const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
-      const distanceValue = distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : String(row.planned_input || "");
+      const sessions = collectSessionPayloadForDate(row.date);
       void savePlanRow(
         row.date,
         {
-          distance: distanceValue,
+          sessions,
           run_type: select.value,
         },
         row.date,
@@ -250,132 +328,119 @@
     return select;
   }
 
-  function buildDistanceInput(row, index, rows) {
-    const input = document.createElement("input");
-    input.className = "plan-distance-input";
-    input.type = "text";
-    input.dataset.date = row.date;
-    input.value = String(row.planned_input || "");
-    input.title = "Use single mileage (6.2) or doubles/triples syntax (6+4 or 5+3+2). Hotkeys: Ctrl+Shift+E/R/S/L/M/T/X/H/1/2.";
+  function buildSessionEditor(row, index, rows) {
+    const editor = document.createElement("div");
+    editor.className = "session-editor";
+    const sessions = sessionDetailsFromRow(row);
+    const nonEmptySessions = sessions.filter((item) => Number.isFinite(Number(item.planned_miles)) && Number(item.planned_miles) > 0);
+    const rowsToRender = nonEmptySessions.length > 0 ? nonEmptySessions : sessions.slice(0, 1);
 
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
-        return;
-      }
+    for (let sessionIndex = 0; sessionIndex < rowsToRender.length; sessionIndex += 1) {
+      const session = rowsToRender[sessionIndex];
+      const rowEl = document.createElement("div");
+      rowEl.className = "plan-session-row";
+      rowEl.dataset.date = row.date;
+      rowEl.dataset.sessionIndex = String(sessionIndex);
 
-      if (event.ctrlKey && event.shiftKey) {
-        const mapped = runTypeHotkeys[String(event.key || "").toLowerCase()];
-        if (mapped && runTypeOptions.includes(mapped)) {
+      const distanceWrap = document.createElement("div");
+      distanceWrap.className = "session-distance-wrap";
+      const input = document.createElement("input");
+      input.className = "plan-distance-input plan-session-distance";
+      input.type = "text";
+      input.dataset.date = row.date;
+      input.dataset.sessionIndex = String(sessionIndex);
+      input.value = Number.isFinite(Number(session.planned_miles)) && Number(session.planned_miles) > 0
+        ? formatSessionValue(Number(session.planned_miles))
+        : "";
+      input.placeholder = "mi";
+      input.title = "Distance for this session. Press Enter to save.";
+      input.addEventListener("keydown", (event) => {
+        if (sessionIndex === 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
           event.preventDefault();
-          const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-          if (runTypeSelect) runTypeSelect.value = mapped;
-          void savePlanRow(
-            row.date,
-            {
-              distance: input.value,
-              run_type: mapped,
-            },
-            row.date,
-            "distance",
-          );
+          focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
           return;
         }
+
+        if (event.ctrlKey && event.shiftKey) {
+          const mapped = runTypeHotkeys[String(event.key || "").toLowerCase()];
+          if (mapped && runTypeOptions.includes(mapped)) {
+            event.preventDefault();
+            const sessionTypeSelect = rowEl.querySelector(".plan-session-type");
+            if (sessionTypeSelect) sessionTypeSelect.value = mapped;
+            const dayRunTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
+            if (dayRunTypeSelect && (!dayRunTypeSelect.value || dayRunTypeSelect.value === "--")) {
+              dayRunTypeSelect.value = mapped;
+            }
+            saveSessionPayload(row, index, rows, row.date, "distance");
+            return;
+          }
+        }
+
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const nextRow = rowAt(rows, index + 1);
+        saveSessionPayload(row, index, rows, nextRow ? nextRow.date : "", "distance");
+      });
+      distanceWrap.appendChild(input);
+
+      if (sessionIndex === 0) {
+        const inlineActions = document.createElement("div");
+        inlineActions.className = "session-inline-actions";
+
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "session-inline-btn";
+        addBtn.textContent = "+";
+        addBtn.title = "Add session";
+        addBtn.addEventListener("click", () => {
+          const current = collectSessionPayloadForDate(row.date);
+          current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "" });
+          saveSessionPayload(row, index, rows, row.date, "distance", current);
+        });
+        inlineActions.appendChild(addBtn);
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "session-inline-btn";
+        removeBtn.textContent = "-";
+        removeBtn.title = "Remove last session";
+        removeBtn.disabled = nonEmptySessions.length <= 1;
+        removeBtn.addEventListener("click", () => {
+          const current = collectSessionPayloadForDate(row.date);
+          if (current.length > 0) current.pop();
+          saveSessionPayload(row, index, rows, row.date, "distance", current);
+        });
+        inlineActions.appendChild(removeBtn);
+
+        distanceWrap.appendChild(inlineActions);
       }
 
-      if (event.key !== "Enter") {
-        return;
+      rowEl.appendChild(distanceWrap);
+
+      const sessionType = document.createElement("select");
+      sessionType.className = "plan-run-type plan-session-type";
+      sessionType.dataset.date = row.date;
+      sessionType.dataset.sessionIndex = String(sessionIndex);
+      for (const optionValue of runTypeOptions) {
+        const option = document.createElement("option");
+        option.value = optionValue;
+        option.textContent = optionValue || "--";
+        if (optionValue === String(session.run_type || "")) {
+          option.selected = true;
+        }
+        sessionType.appendChild(option);
       }
-      event.preventDefault();
-      const nextRow = rowAt(rows, index + 1);
-      const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-      const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
-      void savePlanRow(
-        row.date,
-        {
-          distance: input.value,
-          run_type: runTypeValue,
-        },
-        nextRow ? nextRow.date : "",
-        "distance",
-      );
-    });
-    return input;
-  }
-
-  function buildSessionControls(row, index, rows) {
-    const controls = document.createElement("div");
-    controls.className = "session-actions";
-
-    const label = document.createElement("span");
-    label.className = "session-label";
-    const baseSessions = sessionsFromRow(row, row && row.planned_input);
-    label.textContent = baseSessions.length > 0 ? baseSessions.map((item) => formatSessionValue(item)).join(" + ") : "single";
-    controls.appendChild(label);
-
-    const addBtn = document.createElement("button");
-    addBtn.type = "button";
-    addBtn.className = "session-btn";
-    addBtn.textContent = "+ Sess";
-    addBtn.title = "Add another session to this day.";
-    addBtn.addEventListener("click", () => {
-      const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
-      const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-      const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
-      const currentSessions = sessionsFromRow(row, distanceInput ? distanceInput.value : row.planned_input);
-      currentSessions.push(1.0);
-      const nextPayload = serializeSessionsForApi(currentSessions);
-      void savePlanRow(
-        row.date,
-        {
-          sessions: nextPayload,
-          run_type: runTypeValue,
-        },
-        row.date,
-        "distance",
-      );
-    });
-    controls.appendChild(addBtn);
-
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "session-btn";
-    removeBtn.textContent = "- Sess";
-    removeBtn.title = "Remove the last session from this day.";
-    removeBtn.disabled = baseSessions.length <= 1;
-    removeBtn.addEventListener("click", () => {
-      const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
-      const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-      const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
-      const currentSessions = sessionsFromRow(row, distanceInput ? distanceInput.value : row.planned_input);
-      currentSessions.pop();
-      const nextPayload = serializeSessionsForApi(currentSessions);
-      if (nextPayload.length === 0) {
-        void savePlanRow(
-          row.date,
-          {
-            distance: "",
-            run_type: runTypeValue,
-          },
-          row.date,
-          "distance",
-        );
-        return;
-      }
-      void savePlanRow(
-        row.date,
-        {
-          sessions: nextPayload,
-          run_type: runTypeValue,
-        },
-        row.date,
-        "distance",
-      );
-    });
-    controls.appendChild(removeBtn);
-
-    return controls;
+      sessionType.addEventListener("change", () => {
+        const dayRunTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
+        if (dayRunTypeSelect && !String(dayRunTypeSelect.value || "").trim()) {
+          dayRunTypeSelect.value = sessionType.value;
+        }
+        saveSessionPayload(row, index, rows, row.date, "distance");
+      });
+      rowEl.appendChild(sessionType);
+      editor.appendChild(rowEl);
+    }
+    return editor;
   }
 
   function renderRows(rows) {
@@ -402,57 +467,16 @@
 
       const doneTd = document.createElement("td");
       doneTd.className = "done-cell";
-      const doneInput = document.createElement("input");
-      doneInput.type = "checkbox";
-      doneInput.checked = !!(row && row.is_complete);
-      doneInput.className = "plan-complete-toggle";
-      doneInput.dataset.date = row.date;
-      doneInput.addEventListener("change", () => {
-        const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
-        const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-        const distanceValue = distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : String(row.planned_input || "");
-        const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
-        void savePlanRow(
-          row.date,
-          {
-            distance: distanceValue,
-            run_type: runTypeValue,
-            is_complete: doneInput.checked,
-          },
-          row.date,
-          "complete",
-        );
-      });
-      doneInput.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-        event.preventDefault();
-        focusNeighbor(rows, index, "complete", event.key === "ArrowDown" ? 1 : -1);
-      });
-      doneTd.appendChild(doneInput);
-      if (row && row.completion_source === "manual") {
-        const autoBtn = document.createElement("button");
-        autoBtn.type = "button";
-        autoBtn.className = "auto-reset-btn";
-        autoBtn.textContent = "Auto";
-        autoBtn.title = "Reset completion to auto-sync with actual mileage";
-        autoBtn.addEventListener("click", () => {
-          const distanceInput = bodyEl.querySelector(`.plan-distance-input[data-date="${row.date}"]`);
-          const runTypeSelect = bodyEl.querySelector(`.plan-run-type[data-date="${row.date}"]`);
-          const distanceValue = distanceInput && typeof distanceInput.value === "string" ? distanceInput.value : String(row.planned_input || "");
-          const runTypeValue = runTypeSelect && typeof runTypeSelect.value === "string" ? runTypeSelect.value : String(row.run_type || "");
-          void savePlanRow(
-            row.date,
-            {
-              distance: distanceValue,
-              run_type: runTypeValue,
-              is_complete: null,
-            },
-            row.date,
-            "complete",
-          );
-        });
-        doneTd.appendChild(autoBtn);
-      }
+      const doneChip = document.createElement("span");
+      doneChip.className = "done-chip";
+      const actualMiles = asNumber(row && row.actual_miles);
+      const isAutoDone = !!(row && row.is_past_or_today && actualMiles !== null && actualMiles > 0);
+      doneChip.classList.add(isAutoDone ? "done" : "pending");
+      doneChip.textContent = isAutoDone ? "✓" : "·";
+      doneChip.title = isAutoDone
+        ? "Completed automatically from detected activity."
+        : "Pending: no detected activity for this date.";
+      doneTd.appendChild(doneChip);
       tr.appendChild(doneTd);
 
       const dateTd = document.createElement("td");
@@ -461,6 +485,10 @@
       dateMain.className = "plan-date-main";
       dateMain.textContent = String((row && row.date) || "--");
       dateTd.appendChild(dateMain);
+      const dateDetail = document.createElement("span");
+      dateDetail.className = "date-detail";
+      dateDetail.textContent = `A ${formatMiles(row && row.actual_miles, 1)} | E ${formatMiles(row && row.effective_miles, 1)} | Δ ${formatSigned(row && row.day_delta, 1)}`;
+      dateTd.appendChild(dateDetail);
       if (isWeekStart && weekInfo.weekKey) {
         const badge = document.createElement("span");
         badge.className = "week-badge";
@@ -472,12 +500,7 @@
 
       const distanceTd = document.createElement("td");
       distanceTd.className = "distance-cell";
-      distanceTd.appendChild(buildDistanceInput(row, index, rows));
-      distanceTd.appendChild(buildSessionControls(row, index, rows));
-      const detail = document.createElement("span");
-      detail.className = "distance-detail";
-      detail.textContent = `A ${formatMiles(row && row.actual_miles, 1)} | E ${formatMiles(row && row.effective_miles, 1)} | Δ ${formatSigned(row && row.day_delta, 1)}`;
-      distanceTd.appendChild(detail);
+      distanceTd.appendChild(buildSessionEditor(row, index, rows));
       tr.appendChild(distanceTd);
 
       const runTypeTd = document.createElement("td");

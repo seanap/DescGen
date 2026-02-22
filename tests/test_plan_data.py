@@ -110,6 +110,13 @@ class TestPlanData(unittest.TestCase):
         self.assertAlmostEqual(row["planned_miles"], 10.0, places=3)
         self.assertEqual(row["planned_input"], "6+4")
         self.assertEqual(row["planned_sessions"], [6.0, 4.0])
+        self.assertEqual(
+            row["planned_sessions_detail"],
+            [
+                {"ordinal": 1, "planned_miles": 6.0, "run_type": "", "workout_code": ""},
+                {"ordinal": 2, "planned_miles": 4.0, "run_type": "", "workout_code": ""},
+            ],
+        )
         self.assertAlmostEqual(row["day_delta"], -10.0, places=3)
 
     def test_get_plan_payload_rejects_invalid_center_date(self) -> None:

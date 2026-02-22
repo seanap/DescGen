@@ -227,9 +227,9 @@ body.plan-page {
 }
 
 .plan-table {
-  --plan-sticky-done: 78px;
-  --plan-sticky-date: 146px;
-  --plan-sticky-distance: 236px;
+  --plan-col-done: 72px;
+  --plan-col-date: 178px;
+  --plan-col-distance: 292px;
   border-collapse: separate;
   border-spacing: 0;
   min-width: 1540px;
@@ -265,7 +265,7 @@ body.plan-page {
 .plan-table tbody td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 8px 10px;
+  padding: 6px 8px;
   text-align: center;
   vertical-align: top;
   white-space: nowrap;
@@ -277,20 +277,21 @@ body.plan-page {
 
 .plan-table thead th:nth-child(1),
 .plan-table tbody td:nth-child(1) {
-  min-width: var(--plan-sticky-done);
-  width: var(--plan-sticky-done);
+  min-width: var(--plan-col-done);
+  width: var(--plan-col-done);
 }
 
 .plan-table thead th:nth-child(2),
 .plan-table tbody td:nth-child(2) {
-  min-width: var(--plan-sticky-date);
-  width: var(--plan-sticky-date);
+  min-width: var(--plan-col-date);
+  width: var(--plan-col-date);
 }
 
 .plan-table thead th:nth-child(3),
 .plan-table tbody td:nth-child(3) {
-  min-width: var(--plan-sticky-distance);
-  width: var(--plan-sticky-distance);
+  min-width: var(--plan-col-distance);
+  width: var(--plan-col-distance);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .plan-table tbody tr:nth-child(odd) td {
@@ -303,47 +304,6 @@ body.plan-page {
 
 .plan-table tbody tr:hover td:not([class^="metric-"]):not([class*=" metric-"]) {
   background: color-mix(in srgb, var(--plan-neon-blue) 10%, transparent);
-}
-
-.plan-table thead th:nth-child(1),
-.plan-table tbody td:nth-child(1) {
-  left: 0;
-  position: sticky;
-}
-
-.plan-table thead th:nth-child(2),
-.plan-table tbody td:nth-child(2) {
-  left: var(--plan-sticky-done);
-  position: sticky;
-}
-
-.plan-table thead th:nth-child(3),
-.plan-table tbody td:nth-child(3) {
-  left: calc(var(--plan-sticky-done) + var(--plan-sticky-date));
-  position: sticky;
-}
-
-.plan-table thead th:nth-child(1) {
-  z-index: 8;
-}
-
-.plan-table thead th:nth-child(2) {
-  z-index: 7;
-}
-
-.plan-table thead th:nth-child(3) {
-  z-index: 6;
-}
-
-.plan-table tbody td:nth-child(1),
-.plan-table tbody td:nth-child(2),
-.plan-table tbody td:nth-child(3) {
-  z-index: 2;
-}
-
-.plan-table thead th:nth-child(3),
-.plan-table tbody td:nth-child(3) {
-  border-right: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .plan-table tbody tr.week-start td {
@@ -374,7 +334,6 @@ body.plan-page {
     0 0 10px -10px var(--plan-neon-green);
 }
 
-.plan-table tbody td:first-child,
 .plan-table tbody td:nth-child(2),
 .plan-table tbody td:nth-child(3),
 .plan-table tbody td:nth-child(4) {
@@ -391,42 +350,51 @@ body.plan-page {
 .done-cell {
   align-items: center;
   display: flex;
-  gap: 6px;
   justify-content: center;
 }
 
-.plan-complete-toggle {
-  accent-color: #fc4c02;
-  cursor: pointer;
-  height: 18px;
-  width: 18px;
-}
-
-.done-cell .auto-reset-btn {
-  background: rgba(14, 14, 14, 0.84);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: var(--dg-muted);
-  cursor: pointer;
-  font-size: 0.67rem;
+.done-chip {
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
   line-height: 1;
-  padding: 3px 6px;
+  min-width: 22px;
 }
 
-.done-cell .auto-reset-btn:hover {
-  border-color: rgba(252, 76, 2, 0.82);
-  color: var(--dg-text);
+.done-chip.done {
+  border-color: color-mix(in srgb, var(--plan-neon-green) 62%, transparent);
+  background: color-mix(in srgb, var(--plan-neon-green) 20%, transparent);
+  color: #dcfff0;
+}
+
+.done-chip.pending {
+  border-color: color-mix(in srgb, var(--plan-neon-blue) 44%, transparent);
+  background: color-mix(in srgb, var(--plan-neon-blue) 14%, transparent);
+  color: #d9f3ff;
 }
 
 .date-cell {
-  min-width: var(--plan-sticky-date);
+  min-width: var(--plan-col-date);
 }
 
 .plan-date-main {
   display: block;
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   letter-spacing: -0.01em;
+}
+
+.date-detail {
+  color: #aeb7c0;
+  display: block;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.66rem;
+  margin-top: 2px;
 }
 
 .week-badge {
@@ -445,47 +413,61 @@ body.plan-page {
 }
 
 .distance-cell {
-  min-width: var(--plan-sticky-distance);
+  min-width: var(--plan-col-distance);
 }
 
-.distance-detail {
-  color: #aeb7c0;
-  display: block;
-  font-size: 0.7rem;
-  margin-top: 3px;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+.session-editor {
+  display: grid;
+  gap: 5px;
 }
 
-.session-actions {
+.plan-session-row {
   align-items: center;
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(100px, 1fr) minmax(110px, 0.8fr);
 }
 
-.session-label {
-  color: var(--dg-muted);
-  font-size: 0.7rem;
-  min-width: 56px;
-  text-align: left;
+.session-distance-wrap {
+  position: relative;
 }
 
-.session-btn {
-  background: rgba(14, 14, 14, 0.84);
+.plan-session-distance {
+  padding-right: 46px;
+}
+
+.session-inline-actions {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  gap: 2px;
+}
+
+.session-inline-btn {
+  align-items: center;
+  background: rgba(12, 12, 12, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
+  border-radius: 5px;
   color: var(--dg-text);
   cursor: pointer;
-  font-size: 0.7rem;
-  line-height: 1.1;
-  padding: 3px 7px;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  height: 20px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 18px;
 }
 
-.session-btn:hover {
-  border-color: rgba(252, 76, 2, 0.82);
+.session-inline-btn:hover {
+  border-color: color-mix(in srgb, var(--plan-neon-blue) 70%, transparent);
+  color: #eff8ff;
 }
 
-.session-btn:disabled {
+.session-inline-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -497,8 +479,12 @@ body.plan-page {
   border-radius: 8px;
   background: rgba(9, 9, 9, 0.9);
   color: var(--dg-text);
-  font-size: 0.87rem;
-  padding: 5px 7px;
+  font-size: 0.83rem;
+  padding: 4px 6px;
+}
+
+.plan-session-type {
+  min-width: 108px;
 }
 
 .plan-distance-input:focus,
@@ -626,16 +612,6 @@ body.plan-page {
   .plan-table {
     min-width: 1320px;
     font-size: 0.84rem;
-  }
-
-  .plan-table thead th:nth-child(1),
-  .plan-table thead th:nth-child(2),
-  .plan-table thead th:nth-child(3),
-  .plan-table tbody td:nth-child(1),
-  .plan-table tbody td:nth-child(2),
-  .plan-table tbody td:nth-child(3) {
-    left: auto;
-    position: static;
   }
 
   .plan-table thead th:nth-child(3),
