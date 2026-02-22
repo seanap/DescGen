@@ -12,6 +12,7 @@
 
   let runTypeOptions = [""];
   let pendingFocus = { date: "", field: "distance" };
+  let rowsByDate = new Map();
 
   const runTypeHotkeys = {
     e: "Easy",
@@ -256,11 +257,47 @@
     return payload;
   }
 
+  function sessionsFromRunTypeEditors(dateLocal) {
+    const runTypeSelects = Array.from(bodyEl.querySelectorAll(`.plan-session-type[data-date="${dateLocal}"]`));
+    runTypeSelects.sort(
+      (a, b) => Number.parseInt(a.dataset.sessionIndex || "0", 10) - Number.parseInt(b.dataset.sessionIndex || "0", 10),
+    );
+    if (runTypeSelects.length === 0) return [];
+    const fallbackRow = rowsByDate.get(dateLocal);
+    const fallbackSessions = sessionDetailsFromRow(fallbackRow);
+    const raw = runTypeSelects.map((runTypeSelect, sessionIndex) => {
+      const fallbackSession = fallbackSessions[sessionIndex] || {};
+      const workoutInput = bodyEl.querySelector(
+        `.plan-session-workout[data-date="${dateLocal}"][data-session-index="${sessionIndex}"]`,
+      );
+      const fallbackWorkout = runTypeSelect.dataset
+        ? String(runTypeSelect.dataset.plannedWorkout || fallbackSession.planned_workout || "")
+        : String(fallbackSession.planned_workout || "");
+      const workoutValue = workoutInput && typeof workoutInput.value === "string"
+        ? workoutInput.value
+        : fallbackWorkout;
+      if (runTypeSelect.dataset) {
+        runTypeSelect.dataset.plannedWorkout = String(workoutValue || "");
+      }
+      return {
+        planned_miles: fallbackSession.planned_miles,
+        run_type: runTypeSelect && typeof runTypeSelect.value === "string"
+          ? runTypeSelect.value
+          : String(fallbackSession.run_type || ""),
+        planned_workout: workoutValue,
+      };
+    });
+    return serializeSessionsForApi(raw);
+  }
+
   function collectSessionPayloadForDate(dateLocal) {
     const distanceInputs = Array.from(bodyEl.querySelectorAll(`.plan-session-distance[data-date="${dateLocal}"]`));
     distanceInputs.sort(
       (a, b) => Number.parseInt(a.dataset.sessionIndex || "0", 10) - Number.parseInt(b.dataset.sessionIndex || "0", 10),
     );
+    if (distanceInputs.length === 0) {
+      return sessionsFromRunTypeEditors(dateLocal);
+    }
     const raw = distanceInputs.map((distanceInput) => {
       const sessionIndex = Number.parseInt(distanceInput.dataset.sessionIndex || "0", 10);
       const runTypeSelect = bodyEl.querySelector(
@@ -283,6 +320,29 @@
       };
     });
     return serializeSessionsForApi(raw);
+  }
+
+  function buildPastDistanceSummary(row) {
+    const summary = document.createElement("div");
+    summary.className = "plan-aed-summary";
+
+    function appendMetric(symbol, value) {
+      const part = document.createElement("span");
+      part.className = "plan-aed-part";
+      const symbolEl = document.createElement("strong");
+      symbolEl.className = "plan-aed-symbol";
+      symbolEl.textContent = `${symbol}:`;
+      part.appendChild(symbolEl);
+      part.appendChild(document.createTextNode(` ${value}`));
+      summary.appendChild(part);
+    }
+
+    appendMetric("Λ", formatMiles(row && row.actual_miles, 1));
+    summary.appendChild(document.createTextNode("\u00A0\u00A0|\u00A0\u00A0"));
+    appendMetric("Σ", formatMiles(row && row.planned_miles, 1));
+    summary.appendChild(document.createTextNode("\u00A0\u00A0|\u00A0\u00A0"));
+    appendMetric("Δ", formatSigned(row && row.day_delta, 1));
+    return summary;
   }
 
   function resolveDayRunType(dateLocal, fallback) {
@@ -532,10 +592,14 @@
 
   function renderRows(rows) {
     bodyEl.textContent = "";
+    rowsByDate = new Map();
     let weekIndex = -1;
     let currentWeekKey = "";
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
+      if (row && typeof row.date === "string" && row.date) {
+        rowsByDate.set(row.date, row);
+      }
       const tr = document.createElement("tr");
       const weekInfo = weekInfoForDate(row && row.date);
       const prevWeekInfo = weekInfoForDate(rowAt(rows, index - 1) && rowAt(rows, index - 1).date);
@@ -588,15 +652,15 @@
       dateMain.textContent = formatDisplayDate(row && row.date);
       dateMain.title = String((row && row.date) || "--");
       dateTd.appendChild(dateMain);
-      const dateDetail = document.createElement("span");
-      dateDetail.className = "date-detail";
-      dateDetail.textContent = `A ${formatMiles(row && row.actual_miles, 1)} | E ${formatMiles(row && row.effective_miles, 1)} | Δ ${formatSigned(row && row.day_delta, 1)}`;
-      dateTd.appendChild(dateDetail);
       tr.appendChild(dateTd);
 
       const distanceTd = document.createElement("td");
       distanceTd.className = "distance-cell";
-      distanceTd.appendChild(buildSessionDistanceEditor(row, index, rows));
+      if (row && row.is_past_or_today && !row.is_today) {
+        distanceTd.appendChild(buildPastDistanceSummary(row));
+      } else {
+        distanceTd.appendChild(buildSessionDistanceEditor(row, index, rows));
+      }
       tr.appendChild(distanceTd);
 
       const runTypeTd = document.createElement("td");
