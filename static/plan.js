@@ -655,6 +655,8 @@
         rowIndex,
         renderedRows,
         nextRow ? nextRow.date : addDaysIso(row.date, 1),
+        undefined,
+        { preserveFocus: true },
       );
       appliedCount += 1;
     }
@@ -798,17 +800,49 @@
       refreshQueuedAfterFlight = true;
       return;
     }
-    if (!isIsoDateString(loadedEndDate)) return;
-    const startDate = isIsoDateString(refreshFromDate) ? refreshFromDate : loadedStartDate;
+    if (!isIsoDateString(loadedStartDate) || !isIsoDateString(loadedEndDate)) return;
+    const activeEl = document.activeElement;
+    const activeIsInput = activeEl instanceof HTMLInputElement || activeEl instanceof HTMLSelectElement;
+    const activeClassName = activeIsInput ? String(activeEl.className || "") : "";
+    const activeDate = activeIsInput && activeEl.dataset ? String(activeEl.dataset.date || "") : "";
+    const activeSessionIndex = activeIsInput && activeEl.dataset
+      ? String(activeEl.dataset.sessionIndex || "0")
+      : "0";
+    const restoreSelector = (
+      activeIsInput
+      && isIsoDateString(activeDate)
+      && (
+        activeClassName.includes("plan-session-distance")
+        || activeClassName.includes("plan-session-type")
+        || activeClassName.includes("plan-session-workout")
+      )
+    )
+      ? `.${activeClassName.split(/\s+/).find((name) => name.startsWith("plan-session-"))}[data-date="${activeDate}"][data-session-index="${activeSessionIndex}"]`
+      : "";
+    const prevScrollTop = tableWrapEl ? tableWrapEl.scrollTop : 0;
+    const prevScrollLeft = tableWrapEl ? tableWrapEl.scrollLeft : 0;
     refreshFromDate = "";
     refreshInFlight = true;
     try {
       await loadPlanRange({
-        startDate,
+        startDate: loadedStartDate,
         endDate: loadedEndDate,
         centerDateOverride: centerDateEl.value,
-        append: true,
+        append: false,
       });
+      if (tableWrapEl) {
+        tableWrapEl.scrollTop = prevScrollTop;
+        tableWrapEl.scrollLeft = prevScrollLeft;
+      }
+      if (restoreSelector) {
+        const restoreTarget = bodyEl.querySelector(restoreSelector);
+        if (restoreTarget instanceof HTMLElement) {
+          restoreTarget.focus();
+          if (restoreTarget instanceof HTMLInputElement && typeof restoreTarget.select === "function") {
+            restoreTarget.select();
+          }
+        }
+      }
     } finally {
       refreshInFlight = false;
       if (refreshQueuedAfterFlight || isIsoDateString(refreshFromDate)) {
@@ -1042,15 +1076,14 @@
         && batchMaxNextFocusDate > loadedEndDate
       );
       if (needsAppendFuture) {
-        const anchorDate = isIsoDateString(minSavedDate) ? minSavedDate : loadedEndDate;
-        const appendStart = overlapStartForDate(anchorDate, loadedStartDate);
         const appendTarget = addDaysIso(loadedEndDate, PLAN_APPEND_FUTURE_DAYS);
         const appendEnd = batchMaxNextFocusDate > appendTarget ? batchMaxNextFocusDate : appendTarget;
+        const fullStart = isIsoDateString(loadedStartDate) ? loadedStartDate : overlapStartForDate(minSavedDate, "");
         await loadPlanRange({
-          startDate: appendStart,
+          startDate: fullStart,
           endDate: appendEnd,
           centerDateOverride: centerDateEl.value,
-          append: true,
+          append: false,
         });
       } else if (
         isIsoDateString(minSavedDate)
