@@ -570,6 +570,82 @@
     return values;
   }
 
+  function parseMileagePasteValues(rawText) {
+    const normalized = String(rawText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    if (!normalized.trim()) return { values: [] };
+    const lines = normalized.split("\n");
+    while (lines.length > 0 && !String(lines[lines.length - 1] || "").trim()) {
+      lines.pop();
+    }
+    const values = [];
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const cells = String(lines[lineIndex] || "").split("\t");
+      for (let cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
+        const rawCell = String(cells[cellIndex] || "").trim();
+        if (!rawCell) {
+          values.push("");
+          continue;
+        }
+        const parsed = Number.parseFloat(rawCell.replace(/,/g, ""));
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return {
+            error: `Invalid mileage "${rawCell}" at line ${lineIndex + 1}.`,
+            values: [],
+          };
+        }
+        values.push(parsed > 0 ? formatSessionValue(parsed) : "");
+      }
+    }
+    return { values };
+  }
+
+  async function applyDistancePaste(targetInput, rawText) {
+    const parsed = parseMileagePasteValues(rawText);
+    if (parsed.error) {
+      if (metaEl) metaEl.textContent = parsed.error;
+      return false;
+    }
+    const values = Array.isArray(parsed.values) ? parsed.values : [];
+    if (values.length <= 1) {
+      return false;
+    }
+
+    const startDate = String(targetInput && targetInput.dataset ? targetInput.dataset.date || "" : "");
+    const startIndex = rowIndexByDate(startDate);
+    if (!isIsoDateString(startDate) || startIndex < 0) {
+      return false;
+    }
+
+    const lastNeededDate = addDaysIso(startDate, values.length - 1);
+    if (isIsoDateString(lastNeededDate)) {
+      await ensureDateLoadedForCenter(lastNeededDate);
+    }
+
+    let appliedCount = 0;
+    for (let offset = 0; offset < values.length; offset += 1) {
+      const row = rowAt(renderedRows, startIndex + offset);
+      if (!row || !isIsoDateString(row.date)) break;
+      const rowIndex = rowIndexByDate(row.date);
+      if (rowIndex < 0) continue;
+      const inputEl = bodyEl.querySelector(distanceSelectorForDate(row.date));
+      if (!(inputEl instanceof HTMLInputElement)) continue;
+      inputEl.value = String(values[offset] || "");
+      const nextRow = rowAt(renderedRows, rowIndex + 1);
+      saveSessionPayload(
+        row,
+        rowIndex,
+        renderedRows,
+        nextRow ? nextRow.date : addDaysIso(row.date, 1),
+      );
+      appliedCount += 1;
+    }
+
+    if (appliedCount > 0 && metaEl) {
+      metaEl.textContent = `Pasted ${appliedCount} day(s) starting ${startDate}.`;
+    }
+    return appliedCount > 0;
+  }
+
   function sessionDetailsFromRow(row) {
     const fromDetail = Array.isArray(row && row.planned_sessions_detail) ? row.planned_sessions_detail : [];
     const normalized = [];
@@ -1746,6 +1822,25 @@
   }
 
   if (bodyEl) {
+    bodyEl.addEventListener("paste", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (!target.matches(".plan-session-distance")) return;
+      const rawText = event.clipboardData ? event.clipboardData.getData("text/plain") : "";
+      if (!rawText) return;
+      const parsed = parseMileagePasteValues(rawText);
+      if (parsed.error) {
+        event.preventDefault();
+        if (metaEl) metaEl.textContent = parsed.error;
+        return;
+      }
+      if (!Array.isArray(parsed.values) || parsed.values.length <= 1) {
+        return;
+      }
+      event.preventDefault();
+      void applyDistancePaste(target, rawText);
+    });
+
     bodyEl.addEventListener("change", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
