@@ -1052,7 +1052,10 @@
           centerDateOverride: centerDateEl.value,
           append: true,
         });
-      } else if (isIsoDateString(minSavedDate) && renderedRows.length <= PLAN_MAX_AUTO_REFRESH_ROWS) {
+      } else if (
+        isIsoDateString(minSavedDate)
+        && (renderedRows.length <= PLAN_MAX_AUTO_REFRESH_ROWS || savedDays.length > 1)
+      ) {
         queuePlanBackgroundRefresh(minSavedDate);
       }
       void refreshCenterSummaryLightweight();
@@ -1237,17 +1240,6 @@
 
       const distanceWrap = document.createElement("div");
       distanceWrap.className = "session-distance-wrap";
-      const input = document.createElement("input");
-      input.className = "plan-distance-input plan-session-distance";
-      input.type = "text";
-      input.dataset.date = row.date;
-      input.dataset.sessionIndex = String(sessionIndex);
-      input.value = Number.isFinite(Number(session.planned_miles)) && Number(session.planned_miles) > 0
-        ? formatSessionValue(Number(session.planned_miles))
-        : "";
-      input.placeholder = "mi";
-      input.title = "Distance for this session. Press Enter to save.";
-      distanceWrap.appendChild(input);
 
       if (sessionIndex === 0) {
         const inlineActions = document.createElement("div");
@@ -1280,6 +1272,18 @@
 
         distanceWrap.appendChild(inlineActions);
       }
+
+      const input = document.createElement("input");
+      input.className = "plan-distance-input plan-session-distance";
+      input.type = "text";
+      input.dataset.date = row.date;
+      input.dataset.sessionIndex = String(sessionIndex);
+      input.value = Number.isFinite(Number(session.planned_miles)) && Number(session.planned_miles) > 0
+        ? formatSessionValue(Number(session.planned_miles))
+        : "";
+      input.placeholder = "mi";
+      input.title = "Distance for this session. Press Enter to save.";
+      distanceWrap.appendChild(input);
 
       rowEl.appendChild(distanceWrap);
       editor.appendChild(rowEl);

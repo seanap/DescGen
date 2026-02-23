@@ -803,22 +803,22 @@ body.plan-page.plan-pace-open .plan-pace-handles {
 }
 
 .session-distance-wrap {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
   margin: 0 auto;
-  max-width: 124px;
-  position: relative;
+  max-width: 156px;
+  width: 100%;
 }
 
 .plan-session-distance {
-  padding-right: 46px;
+  flex: 1 1 auto;
 }
 
 .session-inline-actions {
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  transform: translateY(-50%);
   display: inline-flex;
   gap: 2px;
+  flex: 0 0 auto;
 }
 
 .session-inline-btn {
@@ -888,6 +888,7 @@ body.plan-page.plan-pace-open .plan-pace-handles {
 
 .plan-distance-input {
   text-align: center;
+  min-width: 58px;
 }
 
 .plan-workout-field {
