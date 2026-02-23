@@ -501,13 +501,6 @@ body.plan-page.plan-pace-open .plan-pace-handles {
   box-shadow: 0 0 12px -9px var(--plan-neon-pink);
 }
 
-.legend-neutral {
-  border-color: color-mix(in srgb, var(--plan-neon-neutral) 62%, transparent);
-  background: var(--plan-neon-neutral-soft);
-  color: #d7ebfd;
-  box-shadow: 0 0 12px -11px var(--plan-neon-neutral);
-}
-
 .plan-table-wrap {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
@@ -1007,11 +1000,6 @@ body.plan-page.plan-pace-open .plan-pace-handles {
 .metric-long-block {
   font-size: 0.95rem;
   font-weight: 700;
-}
-
-.metric-block-cont {
-  color: transparent !important;
-  text-shadow: none !important;
 }
 
 .metric-block-center {

@@ -1681,6 +1681,135 @@ def replace_plan_sessions_for_day(
         return False
 
 
+def upsert_plan_days_bulk(
+    path: Path,
+    *,
+    days: list[dict[str, Any]],
+) -> bool:
+    if not isinstance(days, list) or not days:
+        return False
+
+    normalized_days: list[dict[str, Any]] = []
+    for item in days:
+        if not isinstance(item, dict):
+            return False
+        parsed = _parse_plan_date(item.get("date_local"))
+        if parsed is None:
+            return False
+        date_key = parsed.isoformat()
+        sessions_raw = item.get("sessions", "__missing__")
+        sessions: list[dict[str, Any]] | None = None
+        if sessions_raw != "__missing__":
+            if not isinstance(sessions_raw, list):
+                return False
+            sessions = [session for session in sessions_raw if isinstance(session, dict)]
+        normalized_days.append(
+            {
+                "date_local": date_key,
+                "timezone": str(item.get("timezone_name") or "").strip() or None,
+                "run_type": str(item.get("run_type") or "").strip() or None,
+                "planned_total_miles": _optional_float(item.get("planned_total_miles")),
+                "actual_total_miles": _optional_float(item.get("actual_total_miles")),
+                "is_complete": (
+                    None
+                    if item.get("is_complete") is None
+                    else (1 if bool(item.get("is_complete")) else 0)
+                ),
+                "notes": str(item.get("notes") or "").strip() or None,
+                "sessions": sessions,
+            }
+        )
+
+    now_iso = _utc_now_iso()
+    try:
+        with _connect_runtime_db(path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            for day in normalized_days:
+                conn.execute(
+                    """
+                    INSERT INTO plan_days (
+                        date_local,
+                        timezone,
+                        run_type,
+                        planned_total_miles,
+                        actual_total_miles,
+                        is_complete,
+                        notes,
+                        updated_at_utc
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(date_local) DO UPDATE SET
+                        timezone = excluded.timezone,
+                        run_type = excluded.run_type,
+                        planned_total_miles = excluded.planned_total_miles,
+                        actual_total_miles = excluded.actual_total_miles,
+                        is_complete = excluded.is_complete,
+                        notes = excluded.notes,
+                        updated_at_utc = excluded.updated_at_utc
+                    """,
+                    (
+                        day["date_local"],
+                        day["timezone"],
+                        day["run_type"],
+                        day["planned_total_miles"],
+                        day["actual_total_miles"],
+                        day["is_complete"],
+                        day["notes"],
+                        now_iso,
+                    ),
+                )
+                sessions = day["sessions"]
+                if sessions is None:
+                    continue
+                conn.execute("DELETE FROM plan_sessions WHERE date_local = ?", (day["date_local"],))
+                if not sessions:
+                    continue
+                rows: list[tuple[str, str, int, float | None, float | None, str | None, str | None, str | None, str]] = []
+                for idx, session in enumerate(sessions):
+                    planned = _optional_float(session.get("planned_miles"))
+                    actual = _optional_float(session.get("actual_miles"))
+                    run_type = str(session.get("run_type") or "").strip() or None
+                    workout_code = str(session.get("workout_code") or "").strip() or None
+                    source_activity_id = str(session.get("source_activity_id") or "").strip() or None
+                    rows.append(
+                        (
+                            uuid.uuid4().hex,
+                            str(day["date_local"]),
+                            (
+                                int(session.get("ordinal"))
+                                if isinstance(session.get("ordinal"), int)
+                                else (idx + 1)
+                            ),
+                            planned,
+                            actual,
+                            run_type,
+                            workout_code,
+                            source_activity_id,
+                            now_iso,
+                        )
+                    )
+                conn.executemany(
+                    """
+                    INSERT INTO plan_sessions (
+                        session_id,
+                        date_local,
+                        ordinal,
+                        planned_miles,
+                        actual_miles,
+                        run_type,
+                        workout_code,
+                        source_activity_id,
+                        updated_at_utc
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+        return True
+    except sqlite3.Error:
+        return False
+
+
 def list_plan_sessions(path: Path, *, start_date: str, end_date: str) -> dict[str, list[dict[str, Any]]]:
     start = _parse_plan_date(start_date)
     end = _parse_plan_date(end_date)

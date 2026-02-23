@@ -513,6 +513,32 @@ class TestApiServer(unittest.TestCase):
             days = payload.get("days") or []
             self.assertEqual(len(days), 2)
 
+    def test_plan_days_bulk_endpoint_is_atomic_on_invalid_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.post(
+                "/plan/days/bulk",
+                json={
+                    "days": [
+                        {"date_local": "2026-02-22", "sessions": [6, 4], "run_type": "Easy"},
+                        {"date_local": "bad-date", "sessions": [5], "run_type": "Recovery"},
+                    ]
+                },
+            )
+            self.assertEqual(response.status_code, 400)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "error")
+            self.assertIn("date_local", str(payload.get("error")))
+
+            from chronicle.storage import list_plan_days
+
+            rows = list_plan_days(
+                api_server.settings.processed_log_file,
+                start_date="2026-02-01",
+                end_date="2026-02-28",
+            )
+            self.assertEqual(rows, [])
+
     def test_plan_day_metrics_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)

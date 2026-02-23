@@ -33,6 +33,7 @@
   let loadedEndDate = "";
   let loadedTimezone = "";
   let refreshFromDate = "";
+  let refreshToDate = "";
   let refreshTimer = null;
   let refreshInFlight = false;
   let refreshQueuedAfterFlight = false;
@@ -41,6 +42,7 @@
   let saveFlushInFlight = false;
   let saveFlushQueuedAfterFlight = false;
   let saveMaxNextFocusDate = "";
+  let loadRequestVersion = 0;
   let hasLoadedPlanMeta = false;
   let paceCurrentGoal = "5:00:00";
   let paceDerivedGoal = "";
@@ -534,6 +536,16 @@
     return formatIsoDate(monthStart);
   }
 
+  function monthEndIso(value) {
+    const parsed = parseIsoDate(value);
+    if (!parsed) return "";
+    const monthEnd = new Date(parsed.getTime());
+    monthEnd.setUTCDate(1);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+    monthEnd.setUTCDate(0);
+    return formatIsoDate(monthEnd);
+  }
+
   function overlapStartForDate(anchorDate, floorDate = "") {
     const weekBoundaryStart = weekStartIso(anchorDate);
     const monthBoundaryStart = monthStartIso(anchorDate);
@@ -552,6 +564,26 @@
       appendStart = floorDate;
     }
     return appendStart;
+  }
+
+  function overlapEndForDate(anchorDate, ceilingDate = "") {
+    const monthBoundaryEnd = monthEndIso(anchorDate);
+    const trailingImpactEnd = addDaysIso(anchorDate, 35);
+    let appendEnd = "";
+    if (isIsoDateString(monthBoundaryEnd) && isIsoDateString(trailingImpactEnd)) {
+      appendEnd = monthBoundaryEnd > trailingImpactEnd ? monthBoundaryEnd : trailingImpactEnd;
+    } else if (isIsoDateString(monthBoundaryEnd)) {
+      appendEnd = monthBoundaryEnd;
+    } else if (isIsoDateString(trailingImpactEnd)) {
+      appendEnd = trailingImpactEnd;
+    }
+    if (!appendEnd && isIsoDateString(anchorDate)) {
+      appendEnd = anchorDate;
+    }
+    if (isIsoDateString(ceilingDate) && appendEnd > ceilingDate) {
+      appendEnd = ceilingDate;
+    }
+    return appendEnd;
   }
 
   function parseDistanceExpression(value) {
@@ -687,6 +719,12 @@
         refreshFromDate = candidate;
       }
     }
+    const candidateEnd = overlapEndForDate(anchor, loadedEndDate);
+    if (isIsoDateString(candidateEnd)) {
+      if (!isIsoDateString(refreshToDate) || candidateEnd > refreshToDate) {
+        refreshToDate = candidateEnd;
+      }
+    }
     if (refreshTimer !== null) {
       clearTimeout(refreshTimer);
     }
@@ -703,18 +741,20 @@
     }
     if (!isIsoDateString(loadedEndDate)) return;
     const startDate = isIsoDateString(refreshFromDate) ? refreshFromDate : loadedStartDate;
+    const endDate = isIsoDateString(refreshToDate) ? refreshToDate : loadedEndDate;
     refreshFromDate = "";
+    refreshToDate = "";
     refreshInFlight = true;
     try {
       await loadPlanRange({
         startDate,
-        endDate: loadedEndDate,
+        endDate,
         centerDateOverride: centerDateEl.value,
         append: true,
       });
     } finally {
       refreshInFlight = false;
-      if (refreshQueuedAfterFlight || isIsoDateString(refreshFromDate)) {
+      if (refreshQueuedAfterFlight || isIsoDateString(refreshFromDate) || isIsoDateString(refreshToDate)) {
         refreshQueuedAfterFlight = false;
         void runPlanBackgroundRefresh();
       }
@@ -819,7 +859,7 @@
     return String(fallback || "").trim();
   }
 
-  function saveSessionPayload(row, index, rows, nextFocusDate, nextField, sessionsOverride) {
+  function saveSessionPayload(row, index, rows, nextFocusDate, sessionsOverride) {
     const sessions = Array.isArray(sessionsOverride) ? sessionsOverride : collectSessionPayloadForDate(row.date);
     const runType = resolveDayRunType(row.date, row && row.run_type);
     const existingSessions = serializeSessionsForApi(sessionDetailsFromRow(row));
@@ -835,11 +875,10 @@
         run_type: runType,
       },
       nextFocusDate || row.date,
-      nextField || "distance",
     );
   }
 
-  function setPendingFocus(dateValue, field) {
+  function setPendingFocus(dateValue) {
     pendingFocus = {
       date: String(dateValue || ""),
       field: "distance",
@@ -873,7 +912,7 @@
     }
   }
 
-  function queuePlanSave(dateLocal, payload, nextFocusDate, nextField) {
+  function queuePlanSave(dateLocal, payload, nextFocusDate) {
     const dateKey = String(dateLocal || "").trim();
     if (!isIsoDateString(dateKey)) return;
     const nextPayload = mergeSavePayload(pendingPlanSaves.get(dateKey), payload || {});
@@ -883,7 +922,7 @@
         saveMaxNextFocusDate = nextFocusDate;
       }
     }
-    setPendingFocus(nextFocusDate, nextField);
+    setPendingFocus(nextFocusDate);
     if (saveFlushTimer !== null) {
       clearTimeout(saveFlushTimer);
     }
@@ -901,6 +940,8 @@
     if (!(pendingPlanSaves instanceof Map) || pendingPlanSaves.size === 0) return;
     const entries = Array.from(pendingPlanSaves.entries());
     pendingPlanSaves = new Map();
+    const batchMaxNextFocusDate = saveMaxNextFocusDate;
+    saveMaxNextFocusDate = "";
     saveFlushInFlight = true;
     try {
       const response = await fetch("/plan/days/bulk", {
@@ -936,15 +977,15 @@
       }
 
       const needsAppendFuture = (
-        isIsoDateString(saveMaxNextFocusDate)
+        isIsoDateString(batchMaxNextFocusDate)
         && isIsoDateString(loadedEndDate)
-        && saveMaxNextFocusDate > loadedEndDate
+        && batchMaxNextFocusDate > loadedEndDate
       );
       if (needsAppendFuture) {
         const anchorDate = isIsoDateString(minSavedDate) ? minSavedDate : loadedEndDate;
         const appendStart = overlapStartForDate(anchorDate, loadedStartDate);
         const appendTarget = addDaysIso(loadedEndDate, PLAN_APPEND_FUTURE_DAYS);
-        const appendEnd = saveMaxNextFocusDate > appendTarget ? saveMaxNextFocusDate : appendTarget;
+        const appendEnd = batchMaxNextFocusDate > appendTarget ? batchMaxNextFocusDate : appendTarget;
         await loadPlanRange({
           startDate: appendStart,
           endDate: appendEnd,
@@ -973,7 +1014,6 @@
         void flushQueuedPlanSaves();
       }, 300);
     } finally {
-      saveMaxNextFocusDate = "";
       saveFlushInFlight = false;
       if (saveFlushQueuedAfterFlight || pendingPlanSaves.size > 0) {
         saveFlushQueuedAfterFlight = false;
@@ -982,9 +1022,9 @@
     }
   }
 
-  async function savePlanRow(dateLocal, payload, nextFocusDate, nextField) {
+  async function savePlanRow(dateLocal, payload, nextFocusDate) {
     try {
-      queuePlanSave(dateLocal, payload || {}, nextFocusDate, nextField);
+      queuePlanSave(dateLocal, payload || {}, nextFocusDate);
     } catch (err) {
       if (metaEl) {
         metaEl.textContent = String(err && err.message ? err.message : "Failed to queue plan save");
@@ -992,7 +1032,7 @@
     }
   }
 
-  function selectorForField(field, dateValue) {
+  function distanceSelectorForDate(dateValue) {
     const dateEscaped = String(dateValue || "");
     return `.plan-session-distance[data-date="${dateEscaped}"][data-session-index="0"]`;
   }
@@ -1003,13 +1043,13 @@
     return renderedRows.findIndex((item) => item && item.date === dateKey);
   }
 
-  function focusNeighbor(rows, index, field, delta) {
+  function focusNeighbor(rows, index, delta) {
     const target = rowAt(rows, index + delta);
     if (!target) return false;
-    const element = bodyEl.querySelector(selectorForField(field, target.date));
+    const element = bodyEl.querySelector(distanceSelectorForDate(target.date));
     if (!element) return false;
     element.focus();
-    if (field === "distance" && typeof element.select === "function") {
+    if (typeof element.select === "function") {
       element.select();
     }
     return true;
@@ -1070,7 +1110,7 @@
         input.value = optionValue;
         runTypeSelect.dataset.plannedWorkout = String(optionValue || "");
         setWorkoutMenuOpen(field, menu, false);
-        saveSessionPayload(row, index, rows, row.date, "distance");
+        saveSessionPayload(row, index, rows, row.date);
       });
       menu.appendChild(option);
     }
@@ -1096,7 +1136,7 @@
     });
     input.addEventListener("change", () => {
       runTypeSelect.dataset.plannedWorkout = String(input.value || "");
-      saveSessionPayload(row, index, rows, row.date, "distance");
+      saveSessionPayload(row, index, rows, row.date);
     });
     input.addEventListener("keydown", (event) => {
       if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
@@ -1108,12 +1148,12 @@
         if (event.key === "Enter") {
           event.preventDefault();
           runTypeSelect.dataset.plannedWorkout = String(input.value || "");
-          saveSessionPayload(row, index, rows, row.date, "distance");
+          saveSessionPayload(row, index, rows, row.date);
         }
         return;
       }
       event.preventDefault();
-      focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+      focusNeighbor(rows, index, event.key === "ArrowDown" ? 1 : -1);
     });
     field.appendChild(input);
     field.appendChild(toggle);
@@ -1161,7 +1201,7 @@
         addBtn.addEventListener("click", () => {
           const current = collectSessionPayloadForDate(row.date);
           current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "", planned_workout: "" });
-          saveSessionPayload(row, index, rows, row.date, "distance", current);
+          saveSessionPayload(row, index, rows, row.date, current);
         });
         inlineActions.appendChild(addBtn);
 
@@ -1174,7 +1214,7 @@
         removeBtn.addEventListener("click", () => {
           const current = collectSessionPayloadForDate(row.date);
           if (current.length > 0) current.pop();
-          saveSessionPayload(row, index, rows, row.date, "distance", current);
+          saveSessionPayload(row, index, rows, row.date, current);
         });
         inlineActions.appendChild(removeBtn);
 
@@ -1572,7 +1612,7 @@
 
   function applyPendingFocus() {
     if (!pendingFocus.date) return;
-    const target = bodyEl.querySelector(selectorForField(pendingFocus.field, pendingFocus.date));
+    const target = bodyEl.querySelector(distanceSelectorForDate(pendingFocus.date));
     const field = pendingFocus.field;
     pendingFocus = { date: "", field: "distance" };
     if (!target) return;
@@ -1590,6 +1630,7 @@
     centerDateInView = "",
     centerBehavior = "auto",
   } = {}) {
+    const requestVersion = ++loadRequestVersion;
     const params = new URLSearchParams();
     params.set("window_days", "14");
     params.set("include_meta", hasLoadedPlanMeta ? "0" : "1");
@@ -1608,6 +1649,9 @@
       if (metaEl) metaEl.textContent = "Loading...";
       const response = await fetch(`/plan/data.json?${params.toString()}`, { cache: "no-store" });
       const payload = await response.json();
+      if (requestVersion !== loadRequestVersion) {
+        return;
+      }
       if (!response.ok || payload.status !== "ok") {
         const error = String((payload && payload.error) || "Failed to load plan data");
         bodyEl.innerHTML = `<tr><td colspan="15">${error}</td></tr>`;
@@ -1664,6 +1708,9 @@
         });
       }
     } catch (_err) {
+      if (requestVersion !== loadRequestVersion) {
+        return;
+      }
       bodyEl.innerHTML = "<tr><td colspan=\"15\">Network error while loading plan data.</td></tr>";
       if (metaEl) metaEl.textContent = "Network error";
     }
@@ -1742,7 +1789,7 @@
         if (!row) return;
         const index = rowIndexByDate(dateLocal);
         if (index < 0) return;
-        saveSessionPayload(row, index, renderedRows, dateLocal, "distance");
+        saveSessionPayload(row, index, renderedRows, dateLocal);
         return;
       }
       if (target.matches(".plan-session-distance")) {
@@ -1751,7 +1798,7 @@
         if (!row) return;
         const index = rowIndexByDate(dateLocal);
         if (index < 0) return;
-        saveSessionPayload(row, index, renderedRows, dateLocal, "distance");
+        saveSessionPayload(row, index, renderedRows, dateLocal);
       }
     });
 
@@ -1767,7 +1814,7 @@
         const index = rowIndexByDate(dateLocal);
         if (index < 0) return;
         event.preventDefault();
-        focusNeighbor(renderedRows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+        focusNeighbor(renderedRows, index, event.key === "ArrowDown" ? 1 : -1);
         return;
       }
 
@@ -1781,7 +1828,7 @@
       const sessionIndex = Number.parseInt(String(target.getAttribute("data-session-index") || "0"), 10);
       if (sessionIndex === 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
         event.preventDefault();
-        focusNeighbor(renderedRows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+        focusNeighbor(renderedRows, index, event.key === "ArrowDown" ? 1 : -1);
         return;
       }
 
@@ -1795,7 +1842,7 @@
           if (sessionTypeSelect instanceof HTMLSelectElement) {
             sessionTypeSelect.value = mapped;
           }
-          saveSessionPayload(row, index, renderedRows, dateLocal, "distance");
+          saveSessionPayload(row, index, renderedRows, dateLocal);
           return;
         }
       }
@@ -1804,14 +1851,13 @@
       event.preventDefault();
       const nextRow = rowAt(renderedRows, index + 1);
       if (nextRow) {
-        focusNeighbor(renderedRows, index, "distance", 1);
+        focusNeighbor(renderedRows, index, 1);
       }
       saveSessionPayload(
         row,
         index,
         renderedRows,
         nextRow ? nextRow.date : addDaysIso(dateLocal, 1),
-        "distance",
       );
     });
   }

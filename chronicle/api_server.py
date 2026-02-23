@@ -44,6 +44,7 @@ from .storage import (
     replace_plan_sessions_for_day,
     set_plan_setting,
     set_runtime_value,
+    upsert_plan_days_bulk,
     upsert_plan_day,
     write_json,
 )
@@ -307,7 +308,7 @@ def _load_plan_marathon_goal(path: Path) -> str:
         return DEFAULT_MARATHON_GOAL
 
 
-def _plan_pace_workshop_payload(path: Path, marathon_goal: str) -> dict[str, object]:
+def _plan_pace_workshop_payload(marathon_goal: str) -> dict[str, object]:
     training = training_paces_for_goal(marathon_goal)
     return {
         "status": "ok",
@@ -503,6 +504,25 @@ def _save_plan_day_record(
         ).get(date_key, [])
         sessions = existing_sessions if isinstance(existing_sessions, list) else []
 
+    return _plan_day_success_payload(
+        date_key=date_key,
+        planned_total_miles=planned_total_miles,
+        sessions=sessions or [],
+        run_type=run_type,
+        notes=notes,
+        is_complete=is_complete,
+    ), 200
+
+
+def _plan_day_success_payload(
+    *,
+    date_key: str,
+    planned_total_miles: float | int | str | None,
+    sessions: list[dict[str, object]],
+    run_type: str | None,
+    notes: str | None,
+    is_complete: bool | None,
+) -> dict[str, object]:
     distance_saved = ""
     if sessions:
         distance_saved = "+".join(
@@ -514,7 +534,7 @@ def _save_plan_day_record(
         distance_saved = _format_plan_miles_value(float(planned_total_miles))
 
     normalized_sessions = _normalize_plan_session_response(sessions or [])
-    payload: dict[str, object] = {
+    return {
         "status": "ok",
         "date_local": date_key,
         "planned_total_miles": float(planned_total_miles or 0.0),
@@ -525,7 +545,6 @@ def _save_plan_day_record(
         "notes": notes or "",
         "is_complete": is_complete,
     }
-    return payload, 200
 
 
 def _dashboard_min_plan_date(today: date) -> date:
@@ -735,7 +754,7 @@ def plan_data_get() -> tuple[dict, int]:
 def plan_pace_workshop_get() -> tuple[dict, int]:
     current = _effective_settings()
     goal = _load_plan_marathon_goal(current.processed_log_file)
-    return _plan_pace_workshop_payload(current.processed_log_file, goal), 200
+    return _plan_pace_workshop_payload(goal), 200
 
 
 @app.put("/plan/pace-workshop/goal")
@@ -753,7 +772,7 @@ def plan_pace_workshop_goal_put() -> tuple[dict, int]:
     saved = set_plan_setting(current.processed_log_file, PLAN_PACE_WORKSHOP_GOAL_KEY, goal_time)
     if not saved:
         return {"status": "error", "error": "Failed to persist marathon goal."}, 500
-    return _plan_pace_workshop_payload(current.processed_log_file, goal_time), 200
+    return _plan_pace_workshop_payload(goal_time), 200
 
 
 @app.post("/plan/pace-workshop/calculate")
@@ -802,7 +821,8 @@ def plan_days_bulk_post() -> tuple[dict, int]:
         return {"status": "error", "error": "days must be a non-empty array."}, 400
 
     current = _effective_settings()
-    results: list[dict[str, object]] = []
+    pending_days: list[dict[str, object]] = []
+    result_seed: list[dict[str, object]] = []
     for item in raw_days:
         if not isinstance(item, dict):
             return {"status": "error", "error": "each days entry must be an object."}, 400
@@ -811,15 +831,56 @@ def plan_days_bulk_post() -> tuple[dict, int]:
         except ValueError as exc:
             return {"status": "error", "error": str(exc)}, 400
         day_payload = {key: value for key, value in item.items() if key != "date_local"}
-        saved_payload, status_code = _save_plan_day_record(current, date_key=date_key, body=day_payload)
-        if status_code != 200:
-            return saved_payload, status_code
-        results.append(saved_payload)
+        existing_day = get_plan_day(current.processed_log_file, date_local=date_key) or {}
+        try:
+            run_type, notes, is_complete, planned_total_miles, sessions = _coerce_plan_day_payload(
+                day_payload,
+                existing_day=existing_day,
+            )
+        except ValueError as exc:
+            return {"status": "error", "error": str(exc)}, 400
+
+        pending_days.append(
+            {
+                "date_local": date_key,
+                "timezone_name": current.timezone,
+                "run_type": run_type,
+                "planned_total_miles": planned_total_miles,
+                "actual_total_miles": existing_day.get("actual_total_miles"),
+                "is_complete": is_complete,
+                "notes": notes,
+                **({"sessions": sessions} if sessions is not None else {}),
+            }
+        )
+
+        if sessions is None:
+            existing_sessions = list_plan_sessions(
+                current.processed_log_file,
+                start_date=date_key,
+                end_date=date_key,
+            ).get(date_key, [])
+            response_sessions = existing_sessions if isinstance(existing_sessions, list) else []
+        else:
+            response_sessions = sessions
+        result_seed.append(
+            _plan_day_success_payload(
+                date_key=date_key,
+                planned_total_miles=planned_total_miles,
+                sessions=response_sessions,
+                run_type=run_type,
+                notes=notes,
+                is_complete=is_complete,
+            )
+        )
+
+    saved = upsert_plan_days_bulk(current.processed_log_file, days=pending_days)
+    if not saved:
+        return {"status": "error", "error": "Failed to persist plan days."}, 500
 
     return {
         "status": "ok",
-        "saved_count": len(results),
-        "days": results,
+        "saved_count": len(result_seed),
+        "days": result_seed,
     }, 200
 
 
