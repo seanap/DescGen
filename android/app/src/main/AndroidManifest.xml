@@ -9,6 +9,7 @@
         android:icon="@drawable/chronicle_icon"
         android:label="@string/app_name"
         android:roundIcon="@drawable/chronicle_icon"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.ChronicleWidget">
 
