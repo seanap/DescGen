@@ -4,6 +4,7 @@
     <string name="widget_miles_desc">Chronicle miles planned today (1x1)</string>
     <string name="widget_detail_desc">Chronicle today plan details (resizable)</string>
     <string name="widget_icon_desc">Chronicle icon</string>
+    <string name="widget_brand_name">Chronicle</string>
     <string name="settings_saved">Saved and refreshing widgets.</string>
     <string name="refresh_queued">Refresh queued.</string>
     <string name="refresh">Refresh</string>

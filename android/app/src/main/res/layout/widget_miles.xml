@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_miles_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/chronicle_icon"
-    android:padding="3dp">
+    android:padding="2dp">
+
+    <ImageView
+        android:id="@+id/widget_miles_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/widget_miles_label"
+        android:adjustViewBounds="true"
+        android:contentDescription="@string/widget_icon_desc"
+        android:scaleType="fitCenter"
+        android:src="@drawable/chronicle_icon" />
 
     <TextView
         android:id="@+id/miles_value"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_gravity="center"
+        android:layout_above="@+id/widget_miles_label"
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
@@ -20,7 +29,22 @@
         android:shadowRadius="8"
         android:text="--"
         android:textColor="#F4FCFF"
-        android:textSize="40sp"
+        android:textSize="34sp"
         android:textStyle="bold" />
 
-</FrameLayout>
+    <TextView
+        android:id="@+id/widget_miles_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:includeFontPadding="false"
+        android:shadowColor="#A6000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="2"
+        android:text="@string/widget_brand_name"
+        android:textColor="#EEF4FF"
+        android:textSize="10sp" />
+
+</RelativeLayout>
