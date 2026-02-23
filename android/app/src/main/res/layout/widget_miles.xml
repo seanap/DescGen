@@ -3,17 +3,18 @@
     android:id="@+id/widget_miles_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="2dp">
+    android:padding="1dp">
 
     <FrameLayout
         android:id="@+id/widget_miles_icon_shell"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:layout_above="@+id/widget_miles_label"
+        android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
         android:background="@drawable/widget_miles_icon_shell_bg"
         android:clipToOutline="true"
-        android:padding="4dp">
+        android:padding="2dp">
 
         <ImageView
             android:id="@+id/widget_miles_icon"
@@ -27,9 +28,10 @@
 
     <TextView
         android:id="@+id/miles_value"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:layout_above="@+id/widget_miles_label"
+        android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
         android:adjustViewBounds="true"
         android:gravity="center"
@@ -41,7 +43,7 @@
         android:shadowRadius="14"
         android:text="--"
         android:textColor="#FFFFFF"
-        android:textSize="22sp"
+        android:textSize="28sp"
         android:textStyle="bold" />
 
     <TextView
@@ -50,7 +52,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="7dp"
         android:includeFontPadding="false"
         android:shadowColor="#A6000000"
         android:shadowDx="0"
@@ -58,6 +60,6 @@
         android:shadowRadius="2"
         android:text="@string/widget_brand_name"
         android:textColor="#EEF4FF"
-        android:textSize="12sp" />
+        android:textSize="14sp" />
 
 </RelativeLayout>
