@@ -47,6 +47,7 @@
   let paceDerivedGoal = "";
   const PLAN_INITIAL_FUTURE_DAYS = 365;
   const PLAN_APPEND_FUTURE_DAYS = 56;
+  const PLAN_MAX_AUTO_REFRESH_ROWS = 220;
 
   const runTypeHotkeys = {
     e: "Easy",
@@ -820,7 +821,7 @@
     return String(fallback || "").trim();
   }
 
-  function saveSessionPayload(row, index, rows, nextFocusDate, sessionsOverride) {
+  function saveSessionPayload(row, index, rows, nextFocusDate, sessionsOverride, saveOptions) {
     const sessions = Array.isArray(sessionsOverride) ? sessionsOverride : collectSessionPayloadForDate(row.date);
     const runType = resolveDayRunType(row.date, row && row.run_type);
     const existingSessions = serializeSessionsForApi(sessionDetailsFromRow(row));
@@ -836,6 +837,7 @@
         run_type: runType,
       },
       nextFocusDate || row.date,
+      saveOptions,
     );
   }
 
@@ -873,17 +875,19 @@
     }
   }
 
-  function queuePlanSave(dateLocal, payload, nextFocusDate) {
+  function queuePlanSave(dateLocal, payload, nextFocusDate, saveOptions) {
+    const options = (saveOptions && typeof saveOptions === "object") ? saveOptions : {};
+    const preserveFocus = Boolean(options.preserveFocus);
     const dateKey = String(dateLocal || "").trim();
     if (!isIsoDateString(dateKey)) return;
     const nextPayload = mergeSavePayload(pendingPlanSaves.get(dateKey), payload || {});
     pendingPlanSaves.set(dateKey, nextPayload);
-    if (isIsoDateString(nextFocusDate)) {
+    if (isIsoDateString(nextFocusDate) && !preserveFocus) {
       if (!isIsoDateString(saveMaxNextFocusDate) || nextFocusDate > saveMaxNextFocusDate) {
         saveMaxNextFocusDate = nextFocusDate;
       }
+      setPendingFocus(nextFocusDate);
     }
-    setPendingFocus(nextFocusDate);
     if (saveFlushTimer !== null) {
       clearTimeout(saveFlushTimer);
     }
@@ -953,7 +957,7 @@
           centerDateOverride: centerDateEl.value,
           append: true,
         });
-      } else if (isIsoDateString(minSavedDate)) {
+      } else if (isIsoDateString(minSavedDate) && renderedRows.length <= PLAN_MAX_AUTO_REFRESH_ROWS) {
         queuePlanBackgroundRefresh(minSavedDate);
       }
       void refreshCenterSummaryLightweight();
@@ -983,9 +987,9 @@
     }
   }
 
-  async function savePlanRow(dateLocal, payload, nextFocusDate) {
+  async function savePlanRow(dateLocal, payload, nextFocusDate, saveOptions) {
     try {
-      queuePlanSave(dateLocal, payload || {}, nextFocusDate);
+      queuePlanSave(dateLocal, payload || {}, nextFocusDate, saveOptions);
     } catch (err) {
       if (metaEl) {
         metaEl.textContent = String(err && err.message ? err.message : "Failed to queue plan save");
@@ -1071,7 +1075,7 @@
         input.value = optionValue;
         runTypeSelect.dataset.plannedWorkout = String(optionValue || "");
         setWorkoutMenuOpen(field, menu, false);
-        saveSessionPayload(row, index, rows, row.date);
+        saveSessionPayload(row, index, rows, row.date, undefined, { preserveFocus: true });
       });
       menu.appendChild(option);
     }
@@ -1097,7 +1101,7 @@
     });
     input.addEventListener("change", () => {
       runTypeSelect.dataset.plannedWorkout = String(input.value || "");
-      saveSessionPayload(row, index, rows, row.date);
+      saveSessionPayload(row, index, rows, row.date, undefined, { preserveFocus: true });
     });
     input.addEventListener("keydown", (event) => {
       if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
@@ -1109,7 +1113,7 @@
         if (event.key === "Enter") {
           event.preventDefault();
           runTypeSelect.dataset.plannedWorkout = String(input.value || "");
-          saveSessionPayload(row, index, rows, row.date);
+          saveSessionPayload(row, index, rows, row.date, undefined, { preserveFocus: true });
         }
         return;
       }
@@ -1162,7 +1166,7 @@
         addBtn.addEventListener("click", () => {
           const current = collectSessionPayloadForDate(row.date);
           current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "", planned_workout: "" });
-          saveSessionPayload(row, index, rows, row.date, current);
+          saveSessionPayload(row, index, rows, row.date, current, { preserveFocus: true });
         });
         inlineActions.appendChild(addBtn);
 
@@ -1175,7 +1179,7 @@
         removeBtn.addEventListener("click", () => {
           const current = collectSessionPayloadForDate(row.date);
           if (current.length > 0) current.pop();
-          saveSessionPayload(row, index, rows, row.date, current);
+          saveSessionPayload(row, index, rows, row.date, current, { preserveFocus: true });
         });
         inlineActions.appendChild(removeBtn);
 
@@ -1751,7 +1755,7 @@
         if (!row) return;
         const index = rowIndexByDate(dateLocal);
         if (index < 0) return;
-        saveSessionPayload(row, index, renderedRows, dateLocal);
+        saveSessionPayload(row, index, renderedRows, dateLocal, undefined, { preserveFocus: true });
         return;
       }
       if (target.matches(".plan-session-distance")) {
@@ -1760,7 +1764,7 @@
         if (!row) return;
         const index = rowIndexByDate(dateLocal);
         if (index < 0) return;
-        saveSessionPayload(row, index, renderedRows, dateLocal);
+        saveSessionPayload(row, index, renderedRows, dateLocal, undefined, { preserveFocus: true });
       }
     });
 
@@ -1804,7 +1808,7 @@
           if (sessionTypeSelect instanceof HTMLSelectElement) {
             sessionTypeSelect.value = mapped;
           }
-          saveSessionPayload(row, index, renderedRows, dateLocal);
+          saveSessionPayload(row, index, renderedRows, dateLocal, undefined, { preserveFocus: true });
           return;
         }
       }
