@@ -7,11 +7,11 @@
 
     <FrameLayout
         android:id="@+id/widget_miles_icon_shell"
-        android:layout_width="60dp"
-        android:layout_height="60dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="4dp"
         android:background="@drawable/widget_miles_icon_shell_bg"
         android:clipToOutline="true"
         android:padding="2dp">
@@ -28,11 +28,11 @@
 
     <FrameLayout
         android:id="@+id/widget_miles_value_stack"
-        android:layout_width="60dp"
-        android:layout_height="60dp"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="4dp"
         android:padding="2dp">
 
         <TextView
