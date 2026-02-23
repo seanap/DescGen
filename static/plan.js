@@ -33,7 +33,6 @@
   let loadedEndDate = "";
   let loadedTimezone = "";
   let refreshFromDate = "";
-  let refreshToDate = "";
   let refreshTimer = null;
   let refreshInFlight = false;
   let refreshQueuedAfterFlight = false;
@@ -536,16 +535,6 @@
     return formatIsoDate(monthStart);
   }
 
-  function monthEndIso(value) {
-    const parsed = parseIsoDate(value);
-    if (!parsed) return "";
-    const monthEnd = new Date(parsed.getTime());
-    monthEnd.setUTCDate(1);
-    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
-    monthEnd.setUTCDate(0);
-    return formatIsoDate(monthEnd);
-  }
-
   function overlapStartForDate(anchorDate, floorDate = "") {
     const weekBoundaryStart = weekStartIso(anchorDate);
     const monthBoundaryStart = monthStartIso(anchorDate);
@@ -564,26 +553,6 @@
       appendStart = floorDate;
     }
     return appendStart;
-  }
-
-  function overlapEndForDate(anchorDate, ceilingDate = "") {
-    const monthBoundaryEnd = monthEndIso(anchorDate);
-    const trailingImpactEnd = addDaysIso(anchorDate, 35);
-    let appendEnd = "";
-    if (isIsoDateString(monthBoundaryEnd) && isIsoDateString(trailingImpactEnd)) {
-      appendEnd = monthBoundaryEnd > trailingImpactEnd ? monthBoundaryEnd : trailingImpactEnd;
-    } else if (isIsoDateString(monthBoundaryEnd)) {
-      appendEnd = monthBoundaryEnd;
-    } else if (isIsoDateString(trailingImpactEnd)) {
-      appendEnd = trailingImpactEnd;
-    }
-    if (!appendEnd && isIsoDateString(anchorDate)) {
-      appendEnd = anchorDate;
-    }
-    if (isIsoDateString(ceilingDate) && appendEnd > ceilingDate) {
-      appendEnd = ceilingDate;
-    }
-    return appendEnd;
   }
 
   function parseDistanceExpression(value) {
@@ -719,12 +688,6 @@
         refreshFromDate = candidate;
       }
     }
-    const candidateEnd = overlapEndForDate(anchor, loadedEndDate);
-    if (isIsoDateString(candidateEnd)) {
-      if (!isIsoDateString(refreshToDate) || candidateEnd > refreshToDate) {
-        refreshToDate = candidateEnd;
-      }
-    }
     if (refreshTimer !== null) {
       clearTimeout(refreshTimer);
     }
@@ -741,20 +704,18 @@
     }
     if (!isIsoDateString(loadedEndDate)) return;
     const startDate = isIsoDateString(refreshFromDate) ? refreshFromDate : loadedStartDate;
-    const endDate = isIsoDateString(refreshToDate) ? refreshToDate : loadedEndDate;
     refreshFromDate = "";
-    refreshToDate = "";
     refreshInFlight = true;
     try {
       await loadPlanRange({
         startDate,
-        endDate,
+        endDate: loadedEndDate,
         centerDateOverride: centerDateEl.value,
         append: true,
       });
     } finally {
       refreshInFlight = false;
-      if (refreshQueuedAfterFlight || isIsoDateString(refreshFromDate) || isIsoDateString(refreshToDate)) {
+      if (refreshQueuedAfterFlight || isIsoDateString(refreshFromDate)) {
         refreshQueuedAfterFlight = false;
         void runPlanBackgroundRefresh();
       }
@@ -1719,9 +1680,10 @@
   async function loadPlan(centerDate, options = {}) {
     const centerInView = !!options.centerInView;
     const centerBehavior = String(options.centerBehavior || "auto");
-    const targetDate = String(centerDate || centerDateEl.value || todayIsoLocal()).trim();
-    const endDate = isIsoDateString(loadedEndDate) ? loadedEndDate : addDaysIso(todayIsoLocal(), PLAN_INITIAL_FUTURE_DAYS);
-    const startDate = isIsoDateString(loadedStartDate) ? loadedStartDate : "";
+    const today = todayIsoLocal();
+    const targetDate = String(centerDate || centerDateEl.value || today).trim();
+    const endDate = isIsoDateString(loadedEndDate) ? loadedEndDate : addDaysIso(today, PLAN_INITIAL_FUTURE_DAYS);
+    const startDate = isIsoDateString(loadedStartDate) ? loadedStartDate : addDaysIso(today, -365);
     await loadPlanRange({
       startDate,
       endDate,
