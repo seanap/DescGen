@@ -21,3 +21,8 @@ local/
 Thumbs.db
 Chronicle.png
 View_hero_layout.png
+
+# Android companion app build artifacts
+android/.gradle/
+android/**/build/
+android/local.properties

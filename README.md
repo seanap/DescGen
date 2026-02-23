@@ -66,4 +66,5 @@ http://localhost:1609
 
 ## Documentation
 - API docs: [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
+- Android widget companion: [`docs/ANDROID_WIDGET_COMPANION.md`](docs/ANDROID_WIDGET_COMPANION.md)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)

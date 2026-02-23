@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ChronicleWidget" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/night_bg</item>
+        <item name="colorPrimary">#13A3FF</item>
+        <item name="colorPrimaryVariant">#0A5F9C</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+    </style>
+</resources>
