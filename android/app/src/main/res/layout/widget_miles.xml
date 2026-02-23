@@ -3,38 +3,24 @@
     android:id="@+id/widget_miles_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_tile_background"
-    android:padding="4dp">
-
-    <ImageView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:alpha="0.2"
-        android:contentDescription="@string/widget_icon_desc"
-        android:scaleType="centerCrop"
-        android:src="@drawable/chronicle_icon" />
+    android:background="@drawable/chronicle_icon"
+    android:padding="3dp">
 
     <TextView
         android:id="@+id/miles_value"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:layout_gravity="center"
-        android:shadowColor="#D92DF2FF"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:shadowColor="#CC2DF2FF"
         android:shadowDx="0"
         android:shadowDy="0"
-        android:shadowRadius="16"
+        android:shadowRadius="8"
         android:text="--"
-        android:textColor="#E8FAFF"
-        android:textSize="28sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:text="mi"
-        android:textColor="#B9E7FF"
-        android:textSize="12sp"
+        android:textColor="#F4FCFF"
+        android:textSize="40sp"
         android:textStyle="bold" />
 
 </FrameLayout>
