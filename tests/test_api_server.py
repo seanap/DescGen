@@ -166,6 +166,63 @@ class TestApiServer(unittest.TestCase):
         response = self.client.get("/plan")
         self.assertEqual(response.status_code, 200)
 
+    def test_plan_pace_workshop_defaults_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.get("/plan/pace-workshop.json")
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(payload.get("marathon_goal"), "5:00:00")
+            supported = payload.get("supported_distances") or []
+            self.assertGreaterEqual(len(supported), 8)
+
+    def test_plan_pace_workshop_goal_persists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            put_response = self.client.put(
+                "/plan/pace-workshop/goal",
+                json={"marathon_goal": "3:30:00"},
+            )
+            self.assertEqual(put_response.status_code, 200)
+            put_payload = put_response.get_json()
+            self.assertEqual(put_payload.get("status"), "ok")
+            self.assertEqual(put_payload.get("marathon_goal"), "3:30:00")
+
+            get_response = self.client.get("/plan/pace-workshop.json")
+            self.assertEqual(get_response.status_code, 200)
+            get_payload = get_response.get_json()
+            self.assertEqual(get_payload.get("marathon_goal"), "3:30:00")
+
+    def test_plan_pace_workshop_calculate_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.post(
+                "/plan/pace-workshop/calculate",
+                json={"distance": "10k", "time": "0:44:45"},
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(payload.get("derived_marathon_goal"), "3:29:36")
+            self.assertEqual(payload.get("training", {}).get("matched_marathon_goal"), "3:30:00")
+            race_list = payload.get("race_equivalency") or []
+            distances = {item.get("distance"): item.get("time") for item in race_list if isinstance(item, dict)}
+            self.assertEqual(distances.get("10k"), "44:40")
+            self.assertEqual(distances.get("marathon"), "3:29:36")
+
+    def test_plan_pace_workshop_calculate_rejects_invalid_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.post(
+                "/plan/pace-workshop/calculate",
+                json={"distance": "foo", "time": "44:45"},
+            )
+            self.assertEqual(response.status_code, 400)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "error")
+            self.assertIn("distance", str(payload.get("error")))
+
     def test_dashboard_data_endpoint(self) -> None:
         api_server.get_dashboard_payload = lambda *_args, **_kwargs: {
             "generated_at": "2026-02-19T00:00:00+00:00",

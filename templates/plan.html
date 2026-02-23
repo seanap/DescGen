@@ -21,6 +21,50 @@
 <body class="plan-page">
   {% include "_app_shell_nav.html" %}
 
+  <aside id="planPaceDrawer" class="plan-pace-drawer" aria-hidden="true">
+    <div class="plan-pace-handles">
+      <button id="planPaceDrawerTab" class="plan-pace-tab" type="button" aria-label="Open pace workshop">Pace Workshop</button>
+    </div>
+    <div class="plan-pace-head">
+      <h2>Pace Workshop</h2>
+      <button id="planPaceDrawerClose" class="plan-pace-close" type="button">Close</button>
+    </div>
+    <div class="plan-pace-body">
+      <section class="plan-pace-section">
+        <h3>Current Marathon Goal</h3>
+        <p class="muted">Default is 5:00:00 on fresh install.</p>
+        <div class="plan-pace-inline">
+          <input id="planMarathonGoalInput" type="text" inputmode="numeric" placeholder="H:MM:SS" aria-label="Marathon goal time">
+          <button id="planMarathonGoalSetBtn" type="button">Set Goal</button>
+        </div>
+      </section>
+      <section class="plan-pace-section">
+        <h3>Pace Calculator</h3>
+        <p class="muted">Enter a recent race result to estimate race equivalencies and training paces.</p>
+        <div class="plan-pace-inline">
+          <select id="planPaceDistanceSelect" aria-label="Race distance"></select>
+          <input id="planPaceTimeInput" type="text" inputmode="numeric" placeholder="H:MM:SS" aria-label="Race finish time">
+          <button id="planPaceCalcBtn" type="button">Calculate</button>
+        </div>
+      </section>
+      <section class="plan-pace-section">
+        <div class="plan-pace-derived-row">
+          <h3>Race Equivalency</h3>
+          <button id="planPaceSetDerivedBtn" type="button" disabled>Set as Goal</button>
+        </div>
+        <p id="planPaceDerivedGoal" class="plan-pace-derived-goal">Marathon Equivalent: --</p>
+        <div id="planRaceEquivalencyList" class="plan-pace-grid"></div>
+      </section>
+      <section class="plan-pace-section">
+        <h3>Training Paces</h3>
+        <p class="muted">Calculated from nearest marathon-goal lookup row.</p>
+        <div id="planTrainingPacesList" class="plan-pace-grid"></div>
+      </section>
+      <p id="planPaceStatus" class="plan-pace-status" aria-live="polite"></p>
+    </div>
+  </aside>
+  <div id="planPaceBackdrop" class="plan-pace-backdrop" aria-hidden="true"></div>
+
   <div class="plan-shell">
     <section class="plan-heading">
       <div class="plan-heading-row">

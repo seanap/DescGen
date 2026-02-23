@@ -15,6 +15,7 @@ from chronicle.storage import (
     get_activity_job,
     get_activity_state,
     get_plan_day,
+    get_plan_setting,
     list_plan_days,
     list_plan_sessions,
     get_runtime_value,
@@ -30,6 +31,7 @@ from chronicle.storage import (
     register_activity_discovery,
     set_runtime_value,
     set_runtime_values,
+    set_plan_setting,
     set_worker_heartbeat,
     upsert_plan_day,
     write_json,
@@ -155,6 +157,16 @@ class TestStorage(unittest.TestCase):
 
             day = get_plan_day(path, date_local="2026-02-22")
             self.assertIsNotNone(day)
+
+    def test_plan_setting_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            self.assertTrue(set_plan_setting(path, "pace_workshop.marathon_goal", "3:30:00"))
+            self.assertEqual(
+                get_plan_setting(path, "pace_workshop.marathon_goal", "5:00:00"),
+                "3:30:00",
+            )
+            self.assertEqual(get_plan_setting(path, "pace_workshop.missing", "5:00:00"), "5:00:00")
 
     def test_runtime_schema_initializes_once_per_db_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
