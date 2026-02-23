@@ -1118,6 +1118,20 @@
     return true;
   }
 
+  async function rerenderRowsAfterSessionShapeChange(dateValue, sessionIndex = 0) {
+    await renderRows(renderedRows);
+    const dateKey = String(dateValue || "").trim();
+    if (!isIsoDateString(dateKey)) return;
+    const targetIndex = Math.max(0, Number.parseInt(String(sessionIndex || 0), 10) || 0);
+    const selector = `.plan-session-distance[data-date="${dateKey}"][data-session-index="${targetIndex}"]`;
+    const target = bodyEl.querySelector(selector) || bodyEl.querySelector(distanceSelectorForDate(dateKey));
+    if (!(target instanceof HTMLInputElement)) return;
+    target.focus();
+    if (typeof target.select === "function") {
+      target.select();
+    }
+  }
+
   function buildSessionTypeSelect(row, index, rows, session, sessionIndex) {
     const select = document.createElement("select");
     select.className = "plan-run-type plan-session-type";
@@ -1254,6 +1268,7 @@
           const current = collectSessionPayloadForDate(row.date);
           current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "", planned_workout: "" });
           saveSessionPayload(row, index, rows, row.date, current, { preserveFocus: true });
+          void rerenderRowsAfterSessionShapeChange(row.date, Math.max(0, current.length - 1));
         });
         inlineActions.appendChild(addBtn);
 
@@ -1267,6 +1282,7 @@
           const current = collectSessionPayloadForDate(row.date);
           if (current.length > 0) current.pop();
           saveSessionPayload(row, index, rows, row.date, current, { preserveFocus: true });
+          void rerenderRowsAfterSessionShapeChange(row.date, Math.max(0, current.length - 1));
         });
         inlineActions.appendChild(removeBtn);
 
