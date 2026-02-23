@@ -11,6 +11,7 @@ Chronicle automatically builds rich Strava activity descriptions by combining da
 - Writes description templates back to Strava based on activity profile.
 - Includes a polished local web app:
   - `View` (`/dashboard`) for long-term trends.
+  - `Plan` (`/plan`) for planning your next move.
   - `Build` (`/editor`) for template editing and preview.
   - `Sources` (`/setup`) for source credentials and OAuth.
   - `Control` (`/control`) for one-click API operations.
@@ -19,10 +20,10 @@ Chronicle automatically builds rich Strava activity descriptions by combining da
 
 ## Screenshots
 <img width="2387" height="1931" alt="Screenshot 2026-02-20 115406" src="https://github.com/user-attachments/assets/dc7746bf-d08b-4c40-844b-39b128888ae6" />
+<img width="2900" height="1922" alt="Screenshot 2026-02-22 231607" src="https://github.com/user-attachments/assets/35f5f8e6-4cc4-4787-9f08-c2a7687e2398" />
 <img width="2006" height="1943" alt="Screenshot 2026-02-20 115619" src="https://github.com/user-attachments/assets/ec734164-a7e0-4b60-8131-9c4968b4f858" />
 <img width="2399" height="926" alt="Screenshot 2026-02-20 115710" src="https://github.com/user-attachments/assets/9ef5e175-ea91-42b6-b430-faa68060493e" />
 <img width="2336" height="1939" alt="Screenshot 2026-02-20 115752 REDACTED" src="https://github.com/user-attachments/assets/6a4a2e88-c7c0-4692-ac33-5251b52d753d" />
-
 
 
 ## Quick Start (macOS)
@@ -54,6 +55,7 @@ http://localhost:1609
 ```
 
 - Dashboard (`View`): http://localhost:1609/dashboard
+- Plan (`Plan`): http://localhost:1609/plan
 - Template Editor (`Build`): http://localhost:1609/editor
 - Source Setup (`Sources`): http://localhost:1609/setup
 - API Control (`Control`): http://localhost:1609/control
@@ -66,4 +68,3 @@ http://localhost:1609
 - API docs: [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
 - Dashboard metrics reference: [`docs/DASHBOARD_METRICS.md`](docs/DASHBOARD_METRICS.md)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)
-- Module boundaries: [`docs/MODULE_BOUNDARIES.md`](docs/MODULE_BOUNDARIES.md)
