@@ -573,6 +573,25 @@
   function parseMileagePasteValues(rawText) {
     const normalized = String(rawText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     if (!normalized.trim()) return { values: [] };
+    const hasGridSeparators = normalized.includes("\n") || normalized.includes("\t");
+    if (!hasGridSeparators) {
+      const spaceTokens = normalized.trim().split(/\s+/).filter((item) => String(item || "").trim().length > 0);
+      if (spaceTokens.length > 1) {
+        const values = [];
+        for (let idx = 0; idx < spaceTokens.length; idx += 1) {
+          const rawCell = String(spaceTokens[idx] || "").trim();
+          const parsed = Number.parseFloat(rawCell.replace(/,/g, ""));
+          if (!Number.isFinite(parsed) || parsed < 0) {
+            return {
+              error: `Invalid mileage "${rawCell}" at position ${idx + 1}.`,
+              values: [],
+            };
+          }
+          values.push(parsed > 0 ? formatSessionValue(parsed) : "");
+        }
+        return { values };
+      }
+    }
     const lines = normalized.split("\n");
     while (lines.length > 0 && !String(lines[lines.length - 1] || "").trim()) {
       lines.pop();
