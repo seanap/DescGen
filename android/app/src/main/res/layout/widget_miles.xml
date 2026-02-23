@@ -11,7 +11,7 @@
         android:layout_height="66dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="7dp"
         android:background="@drawable/widget_miles_icon_shell_bg"
         android:clipToOutline="true"
         android:padding="2dp">
@@ -32,7 +32,7 @@
         android:layout_height="66dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="7dp"
         android:padding="2dp">
 
         <TextView
