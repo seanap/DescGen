@@ -7,8 +7,8 @@
 
     <FrameLayout
         android:id="@+id/widget_miles_icon_shell"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="2dp"
@@ -28,8 +28,8 @@
 
     <FrameLayout
         android:id="@+id/widget_miles_value_stack"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
         android:layout_marginTop="2dp"
@@ -88,6 +88,6 @@
         android:shadowRadius="2"
         android:text="@string/widget_brand_name"
         android:textColor="#EEF4FF"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
 </RelativeLayout>
