@@ -829,6 +829,7 @@
         endDate: loadedEndDate,
         centerDateOverride: centerDateEl.value,
         append: false,
+        suppressPendingFocus: true,
       });
       if (tableWrapEl) {
         tableWrapEl.scrollTop = prevScrollTop;
@@ -977,6 +978,10 @@
     };
   }
 
+  function clearPendingFocus() {
+    pendingFocus = { date: "", field: "distance" };
+  }
+
   function mergeSavePayload(existingPayload, incomingPayload) {
     const base = existingPayload && typeof existingPayload === "object" ? existingPayload : {};
     const next = incomingPayload && typeof incomingPayload === "object" ? incomingPayload : {};
@@ -1011,7 +1016,9 @@
     if (!isIsoDateString(dateKey)) return;
     const nextPayload = mergeSavePayload(pendingPlanSaves.get(dateKey), payload || {});
     pendingPlanSaves.set(dateKey, nextPayload);
-    if (isIsoDateString(nextFocusDate) && !preserveFocus) {
+    if (preserveFocus) {
+      clearPendingFocus();
+    } else if (isIsoDateString(nextFocusDate)) {
       if (!isIsoDateString(saveMaxNextFocusDate) || nextFocusDate > saveMaxNextFocusDate) {
         saveMaxNextFocusDate = nextFocusDate;
       }
@@ -1781,6 +1788,7 @@
     append = false,
     centerDateInView = "",
     centerBehavior = "auto",
+    suppressPendingFocus = false,
   } = {}) {
     const requestVersion = ++loadRequestVersion;
     const params = new URLSearchParams();
@@ -1852,7 +1860,9 @@
         if (isIsoDateString(payloadStart)) loadedStartDate = payloadStart;
         if (isIsoDateString(payloadEnd)) loadedEndDate = payloadEnd;
       }
-      applyPendingFocus();
+      if (!suppressPendingFocus) {
+        applyPendingFocus();
+      }
       const centerTarget = String(centerDateInView || "").trim();
       if (isIsoDateString(centerTarget)) {
         requestAnimationFrame(() => {
