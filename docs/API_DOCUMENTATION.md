@@ -104,6 +104,18 @@ curl http://localhost:1609/plan/data.json
 curl "http://localhost:1609/plan/data.json?center_date=2026-02-22&window_days=14"
 ```
 
+### GET `/plan/today.json`
+- Purpose: Lightweight payload for today's planned run only (widget/mobile companion usage).
+- Response fields:
+  - `date_local`: `YYYY-MM-DD`
+  - `run_type`: string
+  - `miles`: number (sum of planned sessions for today, or `planned_total_miles` fallback)
+  - `workout_shorthand`: optional string (included when present, typically for `SOS`)
+- Example:
+```bash
+curl http://localhost:1609/plan/today.json
+```
+
 ### PUT `/plan/day/<date_local>`
 - Purpose: Upsert one plan day and optional sessions.
 - Path param:

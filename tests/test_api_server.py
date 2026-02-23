@@ -350,6 +350,63 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(payload.get("status"), "error")
         self.assertIn("center_date", str(payload.get("error")))
 
+    def test_plan_today_endpoint_returns_today_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            initial = self.client.get("/plan/today.json")
+            self.assertEqual(initial.status_code, 200)
+            initial_payload = initial.get_json()
+            today_key = str(initial_payload.get("date_local") or "")
+            self.assertTrue(today_key)
+
+            seed = self.client.put(
+                f"/plan/day/{today_key}",
+                json={
+                    "sessions": [{"planned_miles": 7.0, "run_type": "Easy"}],
+                    "run_type": "Easy",
+                },
+            )
+            self.assertEqual(seed.status_code, 200)
+
+            response = self.client.get("/plan/today.json")
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("date_local"), today_key)
+            self.assertEqual(payload.get("run_type"), "Easy")
+            self.assertEqual(float(payload.get("miles") or 0.0), 7.0)
+            self.assertNotIn("workout_shorthand", payload)
+
+    def test_plan_today_endpoint_includes_sos_workout_shorthand(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            initial = self.client.get("/plan/today.json")
+            self.assertEqual(initial.status_code, 200)
+            today_key = str((initial.get_json() or {}).get("date_local") or "")
+            self.assertTrue(today_key)
+
+            seed = self.client.put(
+                f"/plan/day/{today_key}",
+                json={
+                    "sessions": [
+                        {
+                            "planned_miles": 9.0,
+                            "run_type": "SOS",
+                            "planned_workout": "2E + 20T + 2E",
+                        }
+                    ],
+                    "run_type": "SOS",
+                },
+            )
+            self.assertEqual(seed.status_code, 200)
+
+            response = self.client.get("/plan/today.json")
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("date_local"), today_key)
+            self.assertEqual(payload.get("run_type"), "SOS")
+            self.assertEqual(float(payload.get("miles") or 0.0), 9.0)
+            self.assertEqual(payload.get("workout_shorthand"), "2E + 20T + 2E")
+
     def test_plan_day_put_persists_distance_and_run_type(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             self._set_temp_state_dir(temp_dir)

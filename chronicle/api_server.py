@@ -750,6 +750,71 @@ def plan_data_get() -> tuple[dict, int]:
     return payload, 200
 
 
+@app.get("/plan/today.json")
+def plan_today_get() -> tuple[dict, int]:
+    current = _effective_settings()
+    try:
+        local_tz: ZoneInfo | timezone = ZoneInfo(current.timezone)
+    except ZoneInfoNotFoundError:
+        local_tz = timezone.utc
+    today_key = datetime.now(local_tz).date().isoformat()
+
+    day = get_plan_day(current.processed_log_file, date_local=today_key) or {}
+    sessions_by_day = list_plan_sessions(
+        current.processed_log_file,
+        start_date=today_key,
+        end_date=today_key,
+    )
+    sessions = sessions_by_day.get(today_key, []) if isinstance(sessions_by_day, dict) else []
+
+    planned_total = 0.0
+    run_type_from_sessions = ""
+    workout_shorthand = ""
+    for session in sessions:
+        if not isinstance(session, dict):
+            continue
+        try:
+            planned_piece = float(session.get("planned_miles") or 0.0)
+        except (TypeError, ValueError):
+            planned_piece = 0.0
+        if planned_piece > 0:
+            planned_total += planned_piece
+        if not run_type_from_sessions:
+            run_candidate = str(session.get("run_type") or "").strip()
+            if run_candidate:
+                run_type_from_sessions = run_candidate
+        if not workout_shorthand:
+            run_type_key = str(session.get("run_type") or "").strip().lower()
+            workout_candidate = str(session.get("workout_code") or "").strip()
+            if run_type_key == "sos" and workout_candidate:
+                workout_shorthand = workout_candidate
+
+    if planned_total <= 0:
+        try:
+            planned_total = float(day.get("planned_total_miles") or 0.0)
+        except (TypeError, ValueError):
+            planned_total = 0.0
+
+    run_type = str(day.get("run_type") or "").strip() or run_type_from_sessions
+    if not workout_shorthand and run_type.strip().lower() == "sos":
+        for session in sessions:
+            if not isinstance(session, dict):
+                continue
+            workout_candidate = str(session.get("workout_code") or "").strip()
+            if workout_candidate:
+                workout_shorthand = workout_candidate
+                break
+
+    payload: dict[str, object] = {
+        "date_local": today_key,
+        "run_type": run_type,
+        "miles": float(round(planned_total, 3)),
+    }
+    if workout_shorthand:
+        payload["workout_shorthand"] = workout_shorthand
+    return payload, 200
+
+
 @app.get("/plan/pace-workshop.json")
 def plan_pace_workshop_get() -> tuple[dict, int]:
     current = _effective_settings()
