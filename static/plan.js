@@ -267,6 +267,7 @@
     if (!(paceDrawer instanceof HTMLElement)) return;
     paceDrawer.classList.toggle("open", !!nextOpen);
     paceDrawer.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    document.body.classList.toggle("plan-pace-open", !!nextOpen);
     if (paceBackdrop instanceof HTMLElement) {
       paceBackdrop.classList.toggle("open", !!nextOpen);
       paceBackdrop.setAttribute("aria-hidden", nextOpen ? "false" : "true");
