@@ -25,6 +25,7 @@ object WidgetRenderService {
 
         val milesText = model?.let { milesFormat.format(it.miles) } ?: "--"
         val views = RemoteViews(context.packageName, R.layout.widget_miles)
+        views.setTextViewText(R.id.miles_value_halo, milesText)
         views.setTextViewText(R.id.miles_value, milesText)
         views.setOnClickPendingIntent(R.id.widget_miles_root, openPlanPendingIntent(context))
         manager.updateAppWidget(ids, views)

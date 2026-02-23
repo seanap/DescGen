@@ -26,25 +26,53 @@
             android:src="@drawable/chronicle_icon" />
     </FrameLayout>
 
-    <TextView
-        android:id="@+id/miles_value"
+    <FrameLayout
+        android:id="@+id/widget_miles_value_stack"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@+id/widget_miles_label"
         android:layout_alignParentTop="true"
         android:layout_centerHorizontal="true"
-        android:adjustViewBounds="true"
-        android:gravity="center"
-        android:includeFontPadding="false"
-        android:maxLines="1"
-        android:shadowColor="#F03AF3FF"
-        android:shadowDx="0"
-        android:shadowDy="0"
-        android:shadowRadius="14"
-        android:text="--"
-        android:textColor="#FFFFFF"
-        android:textSize="28sp"
-        android:textStyle="bold" />
+        android:padding="2dp">
+
+        <TextView
+            android:id="@+id/miles_value_halo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:autoSizeMaxTextSize="34sp"
+            android:autoSizeMinTextSize="16sp"
+            android:autoSizeStepGranularity="1sp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:shadowColor="#F03AF3FF"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="16"
+            android:text="--"
+            android:textColor="#F0FCFF"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/miles_value"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:autoSizeMaxTextSize="34sp"
+            android:autoSizeMinTextSize="16sp"
+            android:autoSizeStepGranularity="1sp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:shadowColor="#D0000000"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="3"
+            android:text="--"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/widget_miles_label"
