@@ -33,6 +33,7 @@ from chronicle.storage import (
     set_runtime_values,
     set_plan_setting,
     set_worker_heartbeat,
+    upsert_plan_days_bulk,
     upsert_plan_day,
     write_json,
     write_config_snapshot,
@@ -157,6 +158,63 @@ class TestStorage(unittest.TestCase):
 
             day = get_plan_day(path, date_local="2026-02-22")
             self.assertIsNotNone(day)
+
+    def test_plan_days_bulk_upsert_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            saved = upsert_plan_days_bulk(
+                path,
+                days=[
+                    {
+                        "date_local": "2026-02-22",
+                        "timezone_name": "UTC",
+                        "run_type": "Easy",
+                        "planned_total_miles": 10.0,
+                        "sessions": [
+                            {"ordinal": 1, "planned_miles": 6.0},
+                            {"ordinal": 2, "planned_miles": 4.0},
+                        ],
+                    },
+                    {
+                        "date_local": "2026-02-23",
+                        "timezone_name": "UTC",
+                        "run_type": "Recovery",
+                        "planned_total_miles": 5.0,
+                    },
+                ],
+            )
+            self.assertTrue(saved)
+
+            days = list_plan_days(path, start_date="2026-02-01", end_date="2026-02-28")
+            self.assertEqual(len(days), 2)
+            sessions = list_plan_sessions(path, start_date="2026-02-01", end_date="2026-02-28")
+            self.assertEqual(len(sessions.get("2026-02-22", [])), 2)
+            self.assertEqual(len(sessions.get("2026-02-23", [])), 0)
+
+    def test_plan_days_bulk_upsert_is_atomic_on_invalid_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "processed.log"
+            saved = upsert_plan_days_bulk(
+                path,
+                days=[
+                    {
+                        "date_local": "2026-02-22",
+                        "timezone_name": "UTC",
+                        "run_type": "Easy",
+                        "planned_total_miles": 10.0,
+                        "sessions": [{"ordinal": 1, "planned_miles": 10.0}],
+                    },
+                    {
+                        "date_local": "bad-date",
+                        "timezone_name": "UTC",
+                        "run_type": "Recovery",
+                        "planned_total_miles": 5.0,
+                    },
+                ],
+            )
+            self.assertFalse(saved)
+            days = list_plan_days(path, start_date="2026-02-01", end_date="2026-02-28")
+            self.assertEqual(days, [])
 
     def test_plan_setting_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
