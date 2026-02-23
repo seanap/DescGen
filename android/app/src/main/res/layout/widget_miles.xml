@@ -5,31 +5,43 @@
     android:layout_height="match_parent"
     android:padding="2dp">
 
-    <ImageView
-        android:id="@+id/widget_miles_icon"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+    <FrameLayout
+        android:id="@+id/widget_miles_icon_shell"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:layout_above="@+id/widget_miles_label"
-        android:adjustViewBounds="true"
-        android:contentDescription="@string/widget_icon_desc"
-        android:scaleType="fitCenter"
-        android:src="@drawable/chronicle_icon" />
+        android:layout_centerHorizontal="true"
+        android:background="@drawable/widget_miles_icon_shell_bg"
+        android:clipToOutline="true"
+        android:padding="4dp">
+
+        <ImageView
+            android:id="@+id/widget_miles_icon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/widget_icon_desc"
+            android:scaleType="fitCenter"
+            android:src="@drawable/chronicle_icon" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/miles_value"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:layout_above="@+id/widget_miles_label"
+        android:layout_centerHorizontal="true"
+        android:adjustViewBounds="true"
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
-        android:shadowColor="#CC2DF2FF"
+        android:shadowColor="#F03AF3FF"
         android:shadowDx="0"
         android:shadowDy="0"
-        android:shadowRadius="8"
+        android:shadowRadius="14"
         android:text="--"
-        android:textColor="#F4FCFF"
-        android:textSize="34sp"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
         android:textStyle="bold" />
 
     <TextView
@@ -38,6 +50,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
+        android:layout_marginBottom="4dp"
         android:includeFontPadding="false"
         android:shadowColor="#A6000000"
         android:shadowDx="0"
@@ -45,6 +58,6 @@
         android:shadowRadius="2"
         android:text="@string/widget_brand_name"
         android:textColor="#EEF4FF"
-        android:textSize="10sp" />
+        android:textSize="12sp" />
 
 </RelativeLayout>
