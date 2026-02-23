@@ -288,9 +288,11 @@ body.plan-page {
   --plan-col-date: 74px;
   --plan-col-distance: 184px;
   --plan-col-run-type: 176px;
+  --plan-col-metric-compact: 56px;
+  --plan-col-metric-wide: 62px;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 1460px;
+  min-width: 1320px;
   width: 100%;
   font-size: 0.9rem;
 }
@@ -357,6 +359,36 @@ body.plan-page {
   min-width: var(--plan-col-run-type);
   width: var(--plan-col-run-type);
   border-right: 0;
+}
+
+.plan-table thead th:nth-child(5),
+.plan-table tbody td:nth-child(5),
+.plan-table thead th:nth-child(8),
+.plan-table tbody td:nth-child(8),
+.plan-table thead th:nth-child(10),
+.plan-table tbody td:nth-child(10),
+.plan-table thead th:nth-child(12),
+.plan-table tbody td:nth-child(12),
+.plan-table thead th:nth-child(14),
+.plan-table tbody td:nth-child(14) {
+  min-width: var(--plan-col-metric-wide);
+  width: var(--plan-col-metric-wide);
+}
+
+.plan-table thead th:nth-child(6),
+.plan-table tbody td:nth-child(6),
+.plan-table thead th:nth-child(7),
+.plan-table tbody td:nth-child(7),
+.plan-table thead th:nth-child(9),
+.plan-table tbody td:nth-child(9),
+.plan-table thead th:nth-child(11),
+.plan-table tbody td:nth-child(11),
+.plan-table thead th:nth-child(13),
+.plan-table tbody td:nth-child(13),
+.plan-table thead th:nth-child(15),
+.plan-table tbody td:nth-child(15) {
+  min-width: var(--plan-col-metric-compact);
+  width: var(--plan-col-metric-compact);
 }
 
 .plan-table tbody tr.week-block-odd td:not([class^="metric-"]):not([class*=" metric-"]) {
@@ -731,7 +763,7 @@ body.plan-page {
 .metric-long-block,
 .metric-month-block,
 .metric-mom-block {
-  min-width: 72px;
+  min-width: 56px;
 }
 
 .metric-long-block {
@@ -844,7 +876,7 @@ body.plan-page {
   }
 
   .plan-table {
-    min-width: 1320px;
+    min-width: 1180px;
     font-size: 0.84rem;
   }
 
