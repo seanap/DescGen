@@ -121,6 +121,19 @@ class TestPlanData(unittest.TestCase):
         )
         self.assertAlmostEqual(row["day_delta"], -10.0, places=3)
 
+    def test_get_plan_payload_can_omit_meta(self) -> None:
+        payload = get_plan_payload(
+            _settings(),
+            center_date="2026-02-22",
+            window_days=14,
+            today_local=date(2026, 2, 22),
+            dashboard_payload={"activities": []},
+            plan_day_rows=[],
+            include_meta=False,
+        )
+        self.assertEqual(payload["status"], "ok")
+        self.assertNotIn("run_type_options", payload)
+
     def test_get_plan_payload_includes_planned_workout_alias(self) -> None:
         payload = get_plan_payload(
             _settings(),

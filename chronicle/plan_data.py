@@ -6,8 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Settings
-from .dashboard_data import get_dashboard_payload
-from .storage import list_plan_days, list_plan_sessions
+from .storage import list_plan_days, list_plan_sessions, read_json
 
 
 METERS_PER_MILE = 1609.34
@@ -303,6 +302,7 @@ def get_plan_payload(
     dashboard_payload: dict[str, Any] | None = None,
     plan_day_rows: list[dict[str, Any]] | None = None,
     plan_sessions_by_day: dict[str, list[dict[str, Any]]] | None = None,
+    include_meta: bool = True,
 ) -> dict[str, Any]:
     try:
         local_tz = ZoneInfo(settings.timezone)
@@ -343,14 +343,7 @@ def get_plan_payload(
     calc_end = max(display_end, _month_end(display_end))
 
     if dashboard_payload is None:
-        try:
-            dashboard_payload = get_dashboard_payload(
-                settings,
-                force_refresh=False,
-                response_mode="full",
-            )
-        except Exception:
-            dashboard_payload = {}
+        dashboard_payload = read_json(settings.latest_json_file) or {}
 
     activities_raw = dashboard_payload.get("activities") if isinstance(dashboard_payload, dict) else []
     activities = activities_raw if isinstance(activities_raw, list) else []
@@ -626,7 +619,7 @@ def get_plan_payload(
         "month_adherence_ratio": anchor_row.get("monthly_adherence_ratio"),
     }
 
-    return {
+    payload = {
         "status": "ok",
         "timezone": settings.timezone,
         "today": today.isoformat(),
@@ -636,7 +629,9 @@ def get_plan_payload(
         "window_days": window,
         "start_date": display_start.isoformat(),
         "end_date": display_end.isoformat(),
-        "run_type_options": list(RUN_TYPE_OPTIONS),
         "summary": summary,
         "rows": rows,
     }
+    if include_meta:
+        payload["run_type_options"] = list(RUN_TYPE_OPTIONS)
+    return payload
