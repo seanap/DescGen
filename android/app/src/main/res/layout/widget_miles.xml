@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_tile_background"
-    android:padding="8dp">
+    android:padding="4dp">
 
     <ImageView
         android:layout_width="match_parent"
@@ -25,7 +25,7 @@
         android:shadowRadius="16"
         android:text="--"
         android:textColor="#E8FAFF"
-        android:textSize="36sp"
+        android:textSize="28sp"
         android:textStyle="bold" />
 
     <TextView
