@@ -6,6 +6,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import Settings
+from .dashboard_data import dashboard_data_path
 from .storage import list_plan_days, list_plan_sessions, read_json
 
 
@@ -343,7 +344,13 @@ def get_plan_payload(
     calc_end = max(display_end, _month_end(display_end))
 
     if dashboard_payload is None:
-        dashboard_payload = read_json(settings.latest_json_file) or {}
+        dashboard_payload = {}
+        try:
+            cached_dashboard = read_json(dashboard_data_path(settings))
+            if isinstance(cached_dashboard, dict):
+                dashboard_payload = cached_dashboard
+        except Exception:
+            dashboard_payload = {}
 
     activities_raw = dashboard_payload.get("activities") if isinstance(dashboard_payload, dict) else []
     activities = activities_raw if isinstance(activities_raw, list) else []
