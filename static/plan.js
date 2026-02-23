@@ -1118,10 +1118,49 @@
     return true;
   }
 
-  async function rerenderRowsAfterSessionShapeChange(dateValue, sessionIndex = 0) {
-    await renderRows(renderedRows);
+  function rerenderEditedRowAfterSessionShapeChange(dateValue, sessionIndex = 0) {
     const dateKey = String(dateValue || "").trim();
     if (!isIsoDateString(dateKey)) return;
+    const rowIndex = rowIndexByDate(dateKey);
+    if (rowIndex < 0) return;
+    const row = rowAt(renderedRows, rowIndex);
+    if (!row) return;
+    const tr = bodyEl.querySelector(`tr[data-date="${dateKey}"]`);
+    if (!(tr instanceof HTMLTableRowElement)) return;
+
+    const distanceTd = tr.children.item(2);
+    if (distanceTd instanceof HTMLTableCellElement) {
+      distanceTd.className = "distance-cell";
+      distanceTd.textContent = "";
+      let distanceMileage = null;
+      if (row && row.is_past_or_today && !row.is_today) {
+        distanceMileage = asNumber(row.actual_miles);
+        if (distanceMileage === null) distanceMileage = asNumber(row.planned_miles);
+      } else {
+        distanceMileage = asNumber(row && row.planned_miles);
+      }
+      const distanceTone = distanceColorForMiles(distanceMileage);
+      if (distanceTone) {
+        distanceTd.classList.add("distance-gradient-cell");
+        distanceTd.style.setProperty("--distance-mile-color", distanceTone);
+      } else {
+        distanceTd.classList.remove("distance-gradient-cell");
+        distanceTd.style.removeProperty("--distance-mile-color");
+      }
+      if (row && row.is_past_or_today && !row.is_today) {
+        distanceTd.appendChild(buildPastDistanceSummary(row));
+      } else {
+        distanceTd.appendChild(buildSessionDistanceEditor(row, rowIndex, renderedRows));
+      }
+    }
+
+    const runTypeTd = tr.children.item(3);
+    if (runTypeTd instanceof HTMLTableCellElement) {
+      runTypeTd.className = "run-type-cell";
+      runTypeTd.textContent = "";
+      runTypeTd.appendChild(buildSessionTypeEditor(row, rowIndex, renderedRows));
+    }
+
     const targetIndex = Math.max(0, Number.parseInt(String(sessionIndex || 0), 10) || 0);
     const selector = `.plan-session-distance[data-date="${dateKey}"][data-session-index="${targetIndex}"]`;
     const target = bodyEl.querySelector(selector) || bodyEl.querySelector(distanceSelectorForDate(dateKey));
@@ -1268,7 +1307,7 @@
           const current = collectSessionPayloadForDate(row.date);
           current.push({ ordinal: current.length + 1, planned_miles: 1.0, run_type: "", planned_workout: "" });
           saveSessionPayload(row, index, rows, row.date, current, { preserveFocus: true });
-          void rerenderRowsAfterSessionShapeChange(row.date, Math.max(0, current.length - 1));
+          rerenderEditedRowAfterSessionShapeChange(row.date, Math.max(0, current.length - 1));
         });
         inlineActions.appendChild(addBtn);
 
@@ -1282,7 +1321,7 @@
           const current = collectSessionPayloadForDate(row.date);
           if (current.length > 0) current.pop();
           saveSessionPayload(row, index, rows, row.date, current, { preserveFocus: true });
-          void rerenderRowsAfterSessionShapeChange(row.date, Math.max(0, current.length - 1));
+          rerenderEditedRowAfterSessionShapeChange(row.date, Math.max(0, current.length - 1));
         });
         inlineActions.appendChild(removeBtn);
 
