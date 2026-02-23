@@ -404,6 +404,130 @@ def _normalize_plan_session_response(sessions: object) -> list[dict[str, object]
     return payload
 
 
+def _coerce_plan_day_payload(
+    body: dict[str, object],
+    *,
+    existing_day: dict[str, object],
+) -> tuple[str | None, str | None, bool | None, float | int | str | None, list[dict[str, object]] | None]:
+    raw_run_type = body.get("run_type", existing_day.get("run_type"))
+    run_type = str(raw_run_type or "").strip() or None
+    raw_notes = body.get("notes", existing_day.get("notes"))
+    notes = str(raw_notes or "").strip() or None
+
+    existing_is_complete = existing_day.get("is_complete")
+    is_complete: bool | None = existing_is_complete if isinstance(existing_is_complete, bool) else None
+    if "is_complete" in body:
+        raw_complete = body.get("is_complete")
+        if raw_complete is None:
+            is_complete = None
+        elif isinstance(raw_complete, bool):
+            is_complete = raw_complete
+        elif isinstance(raw_complete, str):
+            normalized = raw_complete.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                is_complete = True
+            elif normalized in {"false", "0", "no", "off"}:
+                is_complete = False
+            elif normalized in {"auto", "reset", "none", "null"}:
+                is_complete = None
+            else:
+                raise ValueError("is_complete must be boolean or null.")
+        else:
+            raise ValueError("is_complete must be boolean or null.")
+
+    sessions: list[dict[str, object]] | None = None
+    run_type_from_sessions: str | None = None
+    if "sessions" in body:
+        sessions, planned_total_miles = _parse_plan_sessions_input(body.get("sessions"))
+        for item in sessions:
+            if not isinstance(item, dict):
+                continue
+            candidate = str(item.get("run_type") or "").strip()
+            if candidate:
+                run_type_from_sessions = candidate
+                break
+    elif "distance" in body:
+        sessions, planned_total_miles = _parse_plan_distance_input(body.get("distance"))
+    elif "planned_total_miles" in body:
+        sessions, planned_total_miles = _parse_plan_distance_input(body.get("planned_total_miles"))
+    else:
+        planned_total_miles = existing_day.get("planned_total_miles")
+
+    if "run_type" not in body and run_type_from_sessions:
+        run_type = run_type_from_sessions
+
+    return run_type, notes, is_complete, planned_total_miles, sessions
+
+
+def _save_plan_day_record(
+    current: Settings,
+    *,
+    date_key: str,
+    body: dict[str, object],
+) -> tuple[dict[str, object], int]:
+    existing_day = get_plan_day(current.processed_log_file, date_local=date_key) or {}
+    try:
+        run_type, notes, is_complete, planned_total_miles, sessions = _coerce_plan_day_payload(
+            body,
+            existing_day=existing_day,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    saved = upsert_plan_day(
+        current.processed_log_file,
+        date_local=date_key,
+        timezone_name=current.timezone,
+        run_type=run_type,
+        planned_total_miles=planned_total_miles,
+        actual_total_miles=existing_day.get("actual_total_miles"),
+        is_complete=is_complete,
+        notes=notes,
+    )
+    if not saved:
+        return {"status": "error", "error": "Failed to persist plan day."}, 500
+
+    if sessions is not None:
+        replaced = replace_plan_sessions_for_day(
+            current.processed_log_file,
+            date_local=date_key,
+            sessions=sessions,
+        )
+        if not replaced:
+            return {"status": "error", "error": "Failed to persist plan sessions."}, 500
+    else:
+        existing_sessions = list_plan_sessions(
+            current.processed_log_file,
+            start_date=date_key,
+            end_date=date_key,
+        ).get(date_key, [])
+        sessions = existing_sessions if isinstance(existing_sessions, list) else []
+
+    distance_saved = ""
+    if sessions:
+        distance_saved = "+".join(
+            _format_plan_miles_value(float(item.get("planned_miles") or 0.0))
+            for item in sessions
+            if isinstance(item, dict) and float(item.get("planned_miles") or 0.0) > 0
+        )
+    elif isinstance(planned_total_miles, (int, float)) and float(planned_total_miles) > 0:
+        distance_saved = _format_plan_miles_value(float(planned_total_miles))
+
+    normalized_sessions = _normalize_plan_session_response(sessions or [])
+    payload: dict[str, object] = {
+        "status": "ok",
+        "date_local": date_key,
+        "planned_total_miles": float(planned_total_miles or 0.0),
+        "distance_saved": distance_saved,
+        "session_count": len(normalized_sessions),
+        "sessions": normalized_sessions,
+        "run_type": run_type or "",
+        "notes": notes or "",
+        "is_complete": is_complete,
+    }
+    return payload, 200
+
+
 def _dashboard_min_plan_date(today: date) -> date:
     start_date_raw = str(os.getenv("DASHBOARD_START_DATE", "")).strip()
     if start_date_raw:
@@ -588,6 +712,8 @@ def plan_data_get() -> tuple[dict, int]:
     window_days = str(request.args.get("window_days") or "").strip() or str(14)
     start_date = str(request.args.get("start_date") or "").strip() or None
     end_date = str(request.args.get("end_date") or "").strip() or None
+    include_meta_raw = str(request.args.get("include_meta") or "1").strip().lower()
+    include_meta = include_meta_raw not in {"0", "false", "no", "off"}
     current = _effective_settings()
     try:
         payload = get_plan_payload(
@@ -596,6 +722,7 @@ def plan_data_get() -> tuple[dict, int]:
             window_days=window_days,
             start_date=start_date,
             end_date=end_date,
+            include_meta=include_meta,
         )
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400
@@ -662,116 +789,67 @@ def plan_day_put(date_local: str) -> tuple[dict, int]:
         date_key = _resolve_plan_date(date_local)
     except ValueError as exc:
         return {"status": "error", "error": str(exc)}, 400
+    return _save_plan_day_record(current, date_key=date_key, body=body)
 
-    existing_day = get_plan_day(current.processed_log_file, date_local=date_key) or {}
 
-    raw_run_type = body.get("run_type", existing_day.get("run_type"))
-    run_type = str(raw_run_type or "").strip() or None
-    raw_notes = body.get("notes", existing_day.get("notes"))
-    notes = str(raw_notes or "").strip() or None
+@app.post("/plan/days/bulk")
+def plan_days_bulk_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return {"status": "error", "error": "Request body must be a JSON object."}, 400
+    raw_days = body.get("days")
+    if not isinstance(raw_days, list) or not raw_days:
+        return {"status": "error", "error": "days must be a non-empty array."}, 400
 
-    existing_is_complete = existing_day.get("is_complete")
-    is_complete: bool | None = existing_is_complete if isinstance(existing_is_complete, bool) else None
-    if "is_complete" in body:
-        raw_complete = body.get("is_complete")
-        if raw_complete is None:
-            is_complete = None
-        elif isinstance(raw_complete, bool):
-            is_complete = raw_complete
-        elif isinstance(raw_complete, str):
-            normalized = raw_complete.strip().lower()
-            if normalized in {"true", "1", "yes", "on"}:
-                is_complete = True
-            elif normalized in {"false", "0", "no", "off"}:
-                is_complete = False
-            elif normalized in {"auto", "reset", "none", "null"}:
-                is_complete = None
-            else:
-                return {"status": "error", "error": "is_complete must be boolean or null."}, 400
-        else:
-            return {"status": "error", "error": "is_complete must be boolean or null."}, 400
-
-    sessions: list[dict[str, object]] | None = None
-    run_type_from_sessions: str | None = None
-    if "sessions" in body:
+    current = _effective_settings()
+    results: list[dict[str, object]] = []
+    for item in raw_days:
+        if not isinstance(item, dict):
+            return {"status": "error", "error": "each days entry must be an object."}, 400
         try:
-            sessions, planned_total_miles = _parse_plan_sessions_input(body.get("sessions"))
+            date_key = _resolve_plan_date(str(item.get("date_local") or ""))
         except ValueError as exc:
             return {"status": "error", "error": str(exc)}, 400
-        for item in sessions:
-            if not isinstance(item, dict):
-                continue
-            candidate = str(item.get("run_type") or "").strip()
-            if candidate:
-                run_type_from_sessions = candidate
-                break
-    elif "distance" in body:
-        try:
-            sessions, planned_total_miles = _parse_plan_distance_input(body.get("distance"))
-        except ValueError as exc:
-            return {"status": "error", "error": str(exc)}, 400
-    elif "planned_total_miles" in body:
-        try:
-            sessions, planned_total_miles = _parse_plan_distance_input(body.get("planned_total_miles"))
-        except ValueError as exc:
-            return {"status": "error", "error": str(exc)}, 400
-    else:
-        planned_total_miles = existing_day.get("planned_total_miles")
-
-    if "run_type" not in body and run_type_from_sessions:
-        run_type = run_type_from_sessions
-
-    saved = upsert_plan_day(
-        current.processed_log_file,
-        date_local=date_key,
-        timezone_name=current.timezone,
-        run_type=run_type,
-        planned_total_miles=planned_total_miles,
-        actual_total_miles=existing_day.get("actual_total_miles"),
-        is_complete=is_complete,
-        notes=notes,
-    )
-    if not saved:
-        return {"status": "error", "error": "Failed to persist plan day."}, 500
-
-    if sessions is not None:
-        replaced = replace_plan_sessions_for_day(
-            current.processed_log_file,
-            date_local=date_key,
-            sessions=sessions,
-        )
-        if not replaced:
-            return {"status": "error", "error": "Failed to persist plan sessions."}, 500
-    else:
-        existing_sessions = list_plan_sessions(
-            current.processed_log_file,
-            start_date=date_key,
-            end_date=date_key,
-        ).get(date_key, [])
-        sessions = existing_sessions if isinstance(existing_sessions, list) else []
-
-    distance_saved = ""
-    if sessions:
-        distance_saved = "+".join(
-            _format_plan_miles_value(float(item.get("planned_miles") or 0.0))
-            for item in sessions
-            if isinstance(item, dict) and float(item.get("planned_miles") or 0.0) > 0
-        )
-    elif isinstance(planned_total_miles, (int, float)) and float(planned_total_miles) > 0:
-        distance_saved = _format_plan_miles_value(float(planned_total_miles))
-
-    normalized_sessions = _normalize_plan_session_response(sessions or [])
+        day_payload = {key: value for key, value in item.items() if key != "date_local"}
+        saved_payload, status_code = _save_plan_day_record(current, date_key=date_key, body=day_payload)
+        if status_code != 200:
+            return saved_payload, status_code
+        results.append(saved_payload)
 
     return {
         "status": "ok",
+        "saved_count": len(results),
+        "days": results,
+    }, 200
+
+
+@app.get("/plan/day/<string:date_local>/metrics")
+def plan_day_metrics_get(date_local: str) -> tuple[dict, int]:
+    current = _effective_settings()
+    try:
+        date_key = _resolve_plan_date(date_local)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    try:
+        payload = get_plan_payload(
+            current,
+            center_date=date_key,
+            start_date=date_key,
+            end_date=date_key,
+            include_meta=False,
+        )
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+    except Exception as exc:
+        return {"status": "error", "error": f"Failed to build day metrics payload: {exc}"}, 500
+
+    rows = payload.get("rows") if isinstance(payload, dict) else []
+    row = rows[0] if isinstance(rows, list) and rows else None
+    return {
+        "status": "ok",
         "date_local": date_key,
-        "planned_total_miles": float(planned_total_miles or 0.0),
-        "distance_saved": distance_saved,
-        "session_count": len(normalized_sessions),
-        "sessions": normalized_sessions,
-        "run_type": run_type or "",
-        "notes": notes or "",
-        "is_complete": is_complete,
+        "summary": payload.get("summary") if isinstance(payload, dict) else {},
+        "row": row if isinstance(row, dict) else {},
     }, 200
 
 

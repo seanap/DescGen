@@ -300,6 +300,7 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(calls[0].get("window_days"), "14")
         self.assertIsNone(calls[0].get("start_date"))
         self.assertIsNone(calls[0].get("end_date"))
+        self.assertTrue(bool(calls[0].get("include_meta")))
 
     def test_plan_data_endpoint_passes_range_dates(self) -> None:
         calls: list[dict] = []
@@ -321,6 +322,22 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0].get("start_date"), "2025-01-01")
         self.assertEqual(calls[0].get("end_date"), "2027-02-22")
+
+    def test_plan_data_endpoint_can_disable_meta(self) -> None:
+        calls: list[dict] = []
+
+        def _payload(*_args, **kwargs):
+            calls.append(kwargs)
+            return {
+                "status": "ok",
+                "rows": [],
+            }
+
+        api_server.get_plan_payload = _payload
+        response = self.client.get("/plan/data.json?include_meta=0")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(bool(calls[0].get("include_meta")))
 
     def test_plan_data_endpoint_returns_400_for_invalid_center_date(self) -> None:
         def _raise(*_args, **_kwargs):
@@ -476,6 +493,42 @@ class TestApiServer(unittest.TestCase):
             payload = response.get_json()
             self.assertEqual(payload.get("status"), "error")
             self.assertIn("sessions", str(payload.get("error")))
+
+    def test_plan_days_bulk_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            response = self.client.post(
+                "/plan/days/bulk",
+                json={
+                    "days": [
+                        {"date_local": "2026-02-22", "sessions": [6, 4], "run_type": "Easy"},
+                        {"date_local": "2026-02-23", "sessions": [5], "run_type": "Recovery"},
+                    ]
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(int(payload.get("saved_count") or 0), 2)
+            days = payload.get("days") or []
+            self.assertEqual(len(days), 2)
+
+    def test_plan_day_metrics_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+            api_server.get_dashboard_payload = lambda *_args, **_kwargs: {"activities": []}
+            seed = self.client.put(
+                "/plan/day/2026-02-22",
+                json={"distance": "6.2", "run_type": "Easy"},
+            )
+            self.assertEqual(seed.status_code, 200)
+            response = self.client.get("/plan/day/2026-02-22/metrics")
+            self.assertEqual(response.status_code, 200)
+            payload = response.get_json()
+            self.assertEqual(payload.get("status"), "ok")
+            self.assertEqual(payload.get("date_local"), "2026-02-22")
+            self.assertIn("summary", payload)
+            self.assertIn("row", payload)
 
     def test_plan_seed_from_actuals_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

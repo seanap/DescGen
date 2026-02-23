@@ -569,6 +569,11 @@ body.plan-page.plan-pace-open .plan-pace-handles {
   border-right: 0;
 }
 
+.plan-table tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 36px;
+}
+
 .plan-table thead th:nth-child(1),
 .plan-table tbody td:nth-child(1) {
   min-width: var(--plan-col-done);

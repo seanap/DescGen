@@ -32,6 +32,16 @@
   let loadedStartDate = "";
   let loadedEndDate = "";
   let loadedTimezone = "";
+  let refreshFromDate = "";
+  let refreshTimer = null;
+  let refreshInFlight = false;
+  let refreshQueuedAfterFlight = false;
+  let pendingPlanSaves = new Map();
+  let saveFlushTimer = null;
+  let saveFlushInFlight = false;
+  let saveFlushQueuedAfterFlight = false;
+  let saveMaxNextFocusDate = "";
+  let hasLoadedPlanMeta = false;
   let paceCurrentGoal = "5:00:00";
   let paceDerivedGoal = "";
   const PLAN_INITIAL_FUTURE_DAYS = 365;
@@ -251,6 +261,27 @@
 
   function isIsoDateString(value) {
     return parseIsoDate(value) !== null;
+  }
+
+  function loadCachedRunTypeOptions() {
+    try {
+      const raw = window.sessionStorage.getItem("plan.run_type_options");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+      runTypeOptions = parsed.map((item) => String(item || ""));
+      hasLoadedPlanMeta = true;
+    } catch (_err) {
+      // Ignore cache parse errors.
+    }
+  }
+
+  function cacheRunTypeOptions(options) {
+    try {
+      window.sessionStorage.setItem("plan.run_type_options", JSON.stringify(options || []));
+    } catch (_err) {
+      // Ignore storage errors.
+    }
   }
 
   function setPaceStatus(message, tone) {
@@ -606,6 +637,90 @@
     return payload;
   }
 
+  function canonicalSessionPayload(sessions) {
+    const normalized = [];
+    for (const session of Array.isArray(sessions) ? sessions : []) {
+      if (!session || typeof session !== "object") continue;
+      const planned = Number.parseFloat(String(session.planned_miles));
+      if (!Number.isFinite(planned) || planned <= 0) continue;
+      normalized.push({
+        planned_miles: Number(planned.toFixed(3)),
+        run_type: String(session.run_type || "").trim(),
+        planned_workout: String(session.planned_workout || session.workout_code || "").trim(),
+      });
+    }
+    return normalized;
+  }
+
+  function payloadsEqualByValue(left, right) {
+    const l = JSON.stringify(canonicalSessionPayload(left));
+    const r = JSON.stringify(canonicalSessionPayload(right));
+    return l === r;
+  }
+
+  function applyLocalPlanEdit(dateLocal, sessions, runType) {
+    const row = rowsByDate.get(dateLocal);
+    if (!row || typeof row !== "object") return;
+    const normalizedSessions = canonicalSessionPayload(sessions).map((item, idx) => ({
+      ordinal: idx + 1,
+      planned_miles: item.planned_miles,
+      run_type: item.run_type,
+      planned_workout: item.planned_workout,
+      workout_code: item.planned_workout,
+    }));
+    const plannedTotal = normalizedSessions.reduce((sum, item) => sum + Number(item.planned_miles || 0), 0);
+    row.run_type = String(runType || row.run_type || "");
+    row.planned_sessions_detail = normalizedSessions;
+    row.planned_sessions = normalizedSessions.map((item) => Number(item.planned_miles));
+    row.planned_miles = Number(plannedTotal.toFixed(3));
+    row.planned_input = normalizedSessions.map((item) => formatSessionValue(Number(item.planned_miles))).join("+");
+    const actualMiles = asNumber(row.actual_miles) || 0;
+    row.day_delta = actualMiles - Number(row.planned_miles || 0);
+    rowsByDate.set(dateLocal, row);
+  }
+
+  function queuePlanBackgroundRefresh(anchorDate) {
+    const anchor = String(anchorDate || "").trim();
+    const candidate = overlapStartForDate(anchor, loadedStartDate);
+    if (isIsoDateString(candidate)) {
+      if (!isIsoDateString(refreshFromDate) || candidate < refreshFromDate) {
+        refreshFromDate = candidate;
+      }
+    }
+    if (refreshTimer !== null) {
+      clearTimeout(refreshTimer);
+    }
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      void runPlanBackgroundRefresh();
+    }, 280);
+  }
+
+  async function runPlanBackgroundRefresh() {
+    if (refreshInFlight) {
+      refreshQueuedAfterFlight = true;
+      return;
+    }
+    if (!isIsoDateString(loadedEndDate)) return;
+    const startDate = isIsoDateString(refreshFromDate) ? refreshFromDate : loadedStartDate;
+    refreshFromDate = "";
+    refreshInFlight = true;
+    try {
+      await loadPlanRange({
+        startDate,
+        endDate: loadedEndDate,
+        centerDateOverride: centerDateEl.value,
+        append: true,
+      });
+    } finally {
+      refreshInFlight = false;
+      if (refreshQueuedAfterFlight || isIsoDateString(refreshFromDate)) {
+        refreshQueuedAfterFlight = false;
+        void runPlanBackgroundRefresh();
+      }
+    }
+  }
+
   function sessionsFromRunTypeEditors(dateLocal) {
     const runTypeSelects = Array.from(bodyEl.querySelectorAll(`.plan-session-type[data-date="${dateLocal}"]`));
     runTypeSelects.sort(
@@ -707,6 +822,12 @@
   function saveSessionPayload(row, index, rows, nextFocusDate, nextField, sessionsOverride) {
     const sessions = Array.isArray(sessionsOverride) ? sessionsOverride : collectSessionPayloadForDate(row.date);
     const runType = resolveDayRunType(row.date, row && row.run_type);
+    const existingSessions = serializeSessionsForApi(sessionDetailsFromRow(row));
+    const existingRunType = String(row && row.run_type ? row.run_type : "").trim();
+    if (payloadsEqualByValue(existingSessions, sessions) && existingRunType === String(runType || "").trim()) {
+      return;
+    }
+    applyLocalPlanEdit(row.date, sessions, runType);
     void savePlanRow(
       row.date,
       {
@@ -725,40 +846,148 @@
     };
   }
 
-  async function savePlanRow(dateLocal, payload, nextFocusDate, nextField) {
+  function mergeSavePayload(existingPayload, incomingPayload) {
+    const base = existingPayload && typeof existingPayload === "object" ? existingPayload : {};
+    const next = incomingPayload && typeof incomingPayload === "object" ? incomingPayload : {};
+    return {
+      ...base,
+      ...next,
+    };
+  }
+
+  async function refreshCenterSummaryLightweight() {
+    const centerDate = isIsoDateString(centerDateEl && centerDateEl.value) ? centerDateEl.value : "";
+    if (!centerDate) return;
     try {
-      const response = await fetch(`/plan/day/${encodeURIComponent(dateLocal)}`, {
-        method: "PUT",
+      const response = await fetch(`/plan/day/${encodeURIComponent(centerDate)}/metrics`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || payload.status !== "ok") return;
+      if (payload.summary && typeof payload.summary === "object") {
+        setSummary({
+          status: "ok",
+          summary: payload.summary,
+        });
+      }
+    } catch (_err) {
+      // Lightweight summary refresh is best-effort.
+    }
+  }
+
+  function queuePlanSave(dateLocal, payload, nextFocusDate, nextField) {
+    const dateKey = String(dateLocal || "").trim();
+    if (!isIsoDateString(dateKey)) return;
+    const nextPayload = mergeSavePayload(pendingPlanSaves.get(dateKey), payload || {});
+    pendingPlanSaves.set(dateKey, nextPayload);
+    if (isIsoDateString(nextFocusDate)) {
+      if (!isIsoDateString(saveMaxNextFocusDate) || nextFocusDate > saveMaxNextFocusDate) {
+        saveMaxNextFocusDate = nextFocusDate;
+      }
+    }
+    setPendingFocus(nextFocusDate, nextField);
+    if (saveFlushTimer !== null) {
+      clearTimeout(saveFlushTimer);
+    }
+    saveFlushTimer = setTimeout(() => {
+      saveFlushTimer = null;
+      void flushQueuedPlanSaves();
+    }, 120);
+  }
+
+  async function flushQueuedPlanSaves() {
+    if (saveFlushInFlight) {
+      saveFlushQueuedAfterFlight = true;
+      return;
+    }
+    if (!(pendingPlanSaves instanceof Map) || pendingPlanSaves.size === 0) return;
+    const entries = Array.from(pendingPlanSaves.entries());
+    pendingPlanSaves = new Map();
+    saveFlushInFlight = true;
+    try {
+      const response = await fetch("/plan/days/bulk", {
+        method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload || {}),
+        body: JSON.stringify({
+          days: entries.map(([dateKey, dayPayload]) => ({
+            date_local: dateKey,
+            ...(dayPayload && typeof dayPayload === "object" ? dayPayload : {}),
+          })),
+        }),
       });
       const result = await response.json();
       if (!response.ok || result.status !== "ok") {
-        throw new Error(String((result && result.error) || "Failed to save plan day"));
+        throw new Error(String((result && result.error) || "Failed to save plan days"));
       }
-      setPendingFocus(nextFocusDate, nextField);
-      const requestedFocusDate = String(nextFocusDate || "").trim();
-      const shouldAppendFuture = (
-        isIsoDateString(requestedFocusDate)
+
+      const savedDays = Array.isArray(result && result.days) ? result.days : [];
+      let minSavedDate = "";
+      for (const saved of savedDays) {
+        if (!saved || typeof saved !== "object") continue;
+        const dateKey = String(saved.date_local || "");
+        if (!isIsoDateString(dateKey)) continue;
+        if (!isIsoDateString(minSavedDate) || dateKey < minSavedDate) {
+          minSavedDate = dateKey;
+        }
+        const savedSessions = Array.isArray(saved.sessions) ? saved.sessions : [];
+        applyLocalPlanEdit(
+          dateKey,
+          savedSessions,
+          String(saved.run_type || ""),
+        );
+      }
+
+      const needsAppendFuture = (
+        isIsoDateString(saveMaxNextFocusDate)
         && isIsoDateString(loadedEndDate)
-        && requestedFocusDate > loadedEndDate
+        && saveMaxNextFocusDate > loadedEndDate
       );
-      if (shouldAppendFuture) {
-        const appendStart = overlapStartForDate(dateLocal, loadedStartDate);
+      if (needsAppendFuture) {
+        const anchorDate = isIsoDateString(minSavedDate) ? minSavedDate : loadedEndDate;
+        const appendStart = overlapStartForDate(anchorDate, loadedStartDate);
         const appendTarget = addDaysIso(loadedEndDate, PLAN_APPEND_FUTURE_DAYS);
-        const appendEnd = requestedFocusDate > appendTarget ? requestedFocusDate : appendTarget;
+        const appendEnd = saveMaxNextFocusDate > appendTarget ? saveMaxNextFocusDate : appendTarget;
         await loadPlanRange({
           startDate: appendStart,
           endDate: appendEnd,
           centerDateOverride: centerDateEl.value,
           append: true,
         });
-      } else {
-        await loadPlan(centerDateEl.value);
+      } else if (isIsoDateString(minSavedDate)) {
+        queuePlanBackgroundRefresh(minSavedDate);
+      }
+      void refreshCenterSummaryLightweight();
+      if (metaEl) {
+        metaEl.textContent = `Saved ${savedDays.length} day(s) | syncing metrics...`;
       }
     } catch (err) {
+      for (const [dateKey, dayPayload] of entries) {
+        pendingPlanSaves.set(dateKey, mergeSavePayload(pendingPlanSaves.get(dateKey), dayPayload));
+      }
       if (metaEl) {
-        metaEl.textContent = String(err && err.message ? err.message : "Failed to save plan row");
+        metaEl.textContent = String(err && err.message ? err.message : "Failed to save plan days");
+      }
+      if (saveFlushTimer !== null) {
+        clearTimeout(saveFlushTimer);
+      }
+      saveFlushTimer = setTimeout(() => {
+        saveFlushTimer = null;
+        void flushQueuedPlanSaves();
+      }, 300);
+    } finally {
+      saveMaxNextFocusDate = "";
+      saveFlushInFlight = false;
+      if (saveFlushQueuedAfterFlight || pendingPlanSaves.size > 0) {
+        saveFlushQueuedAfterFlight = false;
+        void flushQueuedPlanSaves();
+      }
+    }
+  }
+
+  async function savePlanRow(dateLocal, payload, nextFocusDate, nextField) {
+    try {
+      queuePlanSave(dateLocal, payload || {}, nextFocusDate, nextField);
+    } catch (err) {
+      if (metaEl) {
+        metaEl.textContent = String(err && err.message ? err.message : "Failed to queue plan save");
       }
     }
   }
@@ -766,6 +995,12 @@
   function selectorForField(field, dateValue) {
     const dateEscaped = String(dateValue || "");
     return `.plan-session-distance[data-date="${dateEscaped}"][data-session-index="0"]`;
+  }
+
+  function rowIndexByDate(dateValue) {
+    const dateKey = String(dateValue || "");
+    if (!dateKey) return -1;
+    return renderedRows.findIndex((item) => item && item.date === dateKey);
   }
 
   function focusNeighbor(rows, index, field, delta) {
@@ -795,16 +1030,6 @@
       }
       select.appendChild(option);
     }
-    select.addEventListener("change", () => {
-      saveSessionPayload(row, index, rows, row.date, "distance");
-    });
-    select.addEventListener("keydown", (event) => {
-      if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
-        return;
-      }
-      event.preventDefault();
-      focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
-    });
     return select;
   }
 
@@ -922,31 +1147,6 @@
         : "";
       input.placeholder = "mi";
       input.title = "Distance for this session. Press Enter to save.";
-      input.addEventListener("keydown", (event) => {
-        if (sessionIndex === 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-          event.preventDefault();
-          focusNeighbor(rows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
-          return;
-        }
-
-        if (event.ctrlKey && event.shiftKey) {
-          const mapped = runTypeHotkeys[String(event.key || "").toLowerCase()];
-          if (mapped && runTypeOptions.includes(mapped)) {
-            event.preventDefault();
-            const sessionTypeSelect = bodyEl.querySelector(
-              `.plan-session-type[data-date="${row.date}"][data-session-index="${sessionIndex}"]`,
-            );
-            if (sessionTypeSelect) sessionTypeSelect.value = mapped;
-            saveSessionPayload(row, index, rows, row.date, "distance");
-            return;
-          }
-        }
-
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        const nextRow = rowAt(rows, index + 1);
-        saveSessionPayload(row, index, rows, nextRow ? nextRow.date : addDaysIso(row.date, 1), "distance");
-      });
       distanceWrap.appendChild(input);
 
       if (sessionIndex === 0) {
@@ -1011,9 +1211,13 @@
     return editor;
   }
 
-  function renderRows(rows) {
+  async function renderRows(rows) {
     bodyEl.textContent = "";
     rowsByDate = new Map();
+    let chunkFragment = document.createDocumentFragment();
+    let chunkCount = 0;
+    const shouldChunk = rows.length > 320;
+    const chunkSize = 72;
     let weekIndex = -1;
     let currentWeekKey = "";
     for (let index = 0; index < rows.length; index += 1) {
@@ -1153,7 +1357,19 @@
       tr.appendChild(makeCell(formatRatio(row && row.avg30_miles_per_day, 2), "metric-neutral"));
       tr.appendChild(makeCell(formatRatio(row && row.mi_t30_ratio, 1), miT30BandFromValue(row && row.mi_t30_ratio)));
 
-      bodyEl.appendChild(tr);
+      chunkFragment.appendChild(tr);
+      chunkCount += 1;
+      if (shouldChunk && chunkCount >= chunkSize) {
+        bodyEl.appendChild(chunkFragment);
+        chunkFragment = document.createDocumentFragment();
+        chunkCount = 0;
+        // Yield to keep typing and scroll interactions responsive on long ranges.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    }
+    if (chunkCount > 0) {
+      bodyEl.appendChild(chunkFragment);
     }
   }
 
@@ -1376,6 +1592,7 @@
   } = {}) {
     const params = new URLSearchParams();
     params.set("window_days", "14");
+    params.set("include_meta", hasLoadedPlanMeta ? "0" : "1");
     const targetDate = String(centerDateOverride || centerDateEl.value || "").trim();
     if (targetDate) {
       params.set("center_date", targetDate);
@@ -1406,21 +1623,38 @@
       if (typeof payload.max_center_date === "string" && payload.max_center_date) {
         centerDateEl.max = payload.max_center_date;
       }
-      runTypeOptions = Array.isArray(payload.run_type_options) ? payload.run_type_options : [""];
+      if (Array.isArray(payload.run_type_options) && payload.run_type_options.length > 0) {
+        runTypeOptions = payload.run_type_options.map((item) => String(item || ""));
+        hasLoadedPlanMeta = true;
+        cacheRunTypeOptions(runTypeOptions);
+      } else if (!Array.isArray(runTypeOptions) || runTypeOptions.length === 0) {
+        runTypeOptions = [""];
+      }
       setMeta(payload);
       setSummary(payload);
       const incomingRows = Array.isArray(payload.rows) ? payload.rows : [];
       renderedRows = append ? mergeRowsByDate(renderedRows, incomingRows) : incomingRows;
-      renderRows(renderedRows);
-      if (typeof payload.start_date === "string" && isIsoDateString(payload.start_date)) {
-        loadedStartDate = payload.start_date;
-      } else if (!loadedStartDate && isIsoDateString(startDate)) {
-        loadedStartDate = String(startDate);
-      }
-      if (typeof payload.end_date === "string" && isIsoDateString(payload.end_date)) {
-        loadedEndDate = payload.end_date;
-      } else if (isIsoDateString(endDate)) {
-        loadedEndDate = String(endDate);
+      await renderRows(renderedRows);
+      const payloadStart = (typeof payload.start_date === "string" && isIsoDateString(payload.start_date))
+        ? payload.start_date
+        : (isIsoDateString(startDate) ? String(startDate) : "");
+      const payloadEnd = (typeof payload.end_date === "string" && isIsoDateString(payload.end_date))
+        ? payload.end_date
+        : (isIsoDateString(endDate) ? String(endDate) : "");
+      if (append) {
+        if (isIsoDateString(payloadStart)) {
+          if (!isIsoDateString(loadedStartDate) || payloadStart < loadedStartDate) {
+            loadedStartDate = payloadStart;
+          }
+        }
+        if (isIsoDateString(payloadEnd)) {
+          if (!isIsoDateString(loadedEndDate) || payloadEnd > loadedEndDate) {
+            loadedEndDate = payloadEnd;
+          }
+        }
+      } else {
+        if (isIsoDateString(payloadStart)) loadedStartDate = payloadStart;
+        if (isIsoDateString(payloadEnd)) loadedEndDate = payloadEnd;
       }
       applyPendingFocus();
       const centerTarget = String(centerDateInView || "").trim();
@@ -1498,6 +1732,90 @@
     });
   }
 
+  if (bodyEl) {
+    bodyEl.addEventListener("change", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.matches(".plan-session-type")) {
+        const dateLocal = String(target.getAttribute("data-date") || "");
+        const row = rowsByDate.get(dateLocal);
+        if (!row) return;
+        const index = rowIndexByDate(dateLocal);
+        if (index < 0) return;
+        saveSessionPayload(row, index, renderedRows, dateLocal, "distance");
+        return;
+      }
+      if (target.matches(".plan-session-distance")) {
+        const dateLocal = String(target.getAttribute("data-date") || "");
+        const row = rowsByDate.get(dateLocal);
+        if (!row) return;
+        const index = rowIndexByDate(dateLocal);
+        if (index < 0) return;
+        saveSessionPayload(row, index, renderedRows, dateLocal, "distance");
+      }
+    });
+
+    bodyEl.addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      if (target.matches(".plan-session-type")) {
+        if (!event.ctrlKey || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) {
+          return;
+        }
+        const dateLocal = String(target.getAttribute("data-date") || "");
+        const index = rowIndexByDate(dateLocal);
+        if (index < 0) return;
+        event.preventDefault();
+        focusNeighbor(renderedRows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+
+      if (!target.matches(".plan-session-distance")) return;
+
+      const dateLocal = String(target.getAttribute("data-date") || "");
+      const row = rowsByDate.get(dateLocal);
+      if (!row) return;
+      const index = rowIndexByDate(dateLocal);
+      if (index < 0) return;
+      const sessionIndex = Number.parseInt(String(target.getAttribute("data-session-index") || "0"), 10);
+      if (sessionIndex === 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        focusNeighbor(renderedRows, index, "distance", event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey) {
+        const mapped = runTypeHotkeys[String(event.key || "").toLowerCase()];
+        if (mapped && runTypeOptions.includes(mapped)) {
+          event.preventDefault();
+          const sessionTypeSelect = bodyEl.querySelector(
+            `.plan-session-type[data-date="${dateLocal}"][data-session-index="${sessionIndex}"]`,
+          );
+          if (sessionTypeSelect instanceof HTMLSelectElement) {
+            sessionTypeSelect.value = mapped;
+          }
+          saveSessionPayload(row, index, renderedRows, dateLocal, "distance");
+          return;
+        }
+      }
+
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const nextRow = rowAt(renderedRows, index + 1);
+      if (nextRow) {
+        focusNeighbor(renderedRows, index, "distance", 1);
+      }
+      saveSessionPayload(
+        row,
+        index,
+        renderedRows,
+        nextRow ? nextRow.date : addDaysIso(dateLocal, 1),
+        "distance",
+      );
+    });
+  }
+
   if (paceDrawerTab) {
     paceDrawerTab.addEventListener("click", () => {
       const nextOpen = !(paceDrawer && paceDrawer.classList.contains("open"));
@@ -1545,6 +1863,7 @@
   }
 
   bindWorkoutMenuHandlers();
+  loadCachedRunTypeOptions();
   setPaceDrawerOpen(false);
   setDistanceOptions([]);
   if (paceSetDerivedBtn instanceof HTMLButtonElement) {
