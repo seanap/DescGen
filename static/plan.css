@@ -3,6 +3,7 @@
 }
 
 body.plan-page {
+  --plan-pace-drawer-width: min(420px, 92vw);
   --plan-neon-blue: #63d8ff;
   --plan-neon-blue-soft: rgba(99, 216, 255, 0.2);
   --plan-neon-green: #63f7b8;
@@ -32,12 +33,12 @@ body.plan-page {
   position: fixed;
   top: 0;
   left: 0;
-  width: min(420px, 92vw);
+  width: var(--plan-pace-drawer-width);
   height: 100vh;
   background: color-mix(in srgb, var(--dg-panel) 92%, #080808);
   border-right: 1px solid var(--dg-line);
   box-shadow: var(--dg-shadow);
-  transform: translateX(calc(-100% + 44px));
+  transform: translateX(-100%);
   transition: transform 0.22s ease;
   z-index: 120;
   display: grid;
@@ -55,11 +56,16 @@ body.plan-page {
 }
 
 .plan-pace-handles {
-  position: absolute;
-  right: -44px;
+  position: fixed;
+  left: 0;
   top: calc(var(--dg-shell-offset, 92px) + 8px);
   width: 44px;
-  z-index: 2;
+  z-index: 121;
+  transition: left 0.22s ease;
+}
+
+body.plan-page.plan-pace-open .plan-pace-handles {
+  left: calc(var(--plan-pace-drawer-width) - 1px);
 }
 
 .plan-pace-tab {

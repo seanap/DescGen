@@ -21,10 +21,10 @@
 <body class="plan-page">
   {% include "_app_shell_nav.html" %}
 
+  <div class="plan-pace-handles">
+    <button id="planPaceDrawerTab" class="plan-pace-tab" type="button" aria-label="Open pace workshop">Pace Workshop</button>
+  </div>
   <aside id="planPaceDrawer" class="plan-pace-drawer" aria-hidden="true">
-    <div class="plan-pace-handles">
-      <button id="planPaceDrawerTab" class="plan-pace-tab" type="button" aria-label="Open pace workshop">Pace Workshop</button>
-    </div>
     <div class="plan-pace-head">
       <h2>Pace Workshop</h2>
       <button id="planPaceDrawerClose" class="plan-pace-close" type="button">Close</button>
@@ -32,7 +32,6 @@
     <div class="plan-pace-body">
       <section class="plan-pace-section">
         <h3>Current Marathon Goal</h3>
-        <p class="muted">Default is 5:00:00 on fresh install.</p>
         <div class="plan-pace-inline">
           <input id="planMarathonGoalInput" type="text" inputmode="numeric" placeholder="H:MM:SS" aria-label="Marathon goal time">
           <button id="planMarathonGoalSetBtn" type="button">Set Goal</button>
