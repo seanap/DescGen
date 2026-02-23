@@ -10,6 +10,20 @@
   const settingsPanel = document.getElementById("planSettingsPanel");
   const seedBtn = document.getElementById("planSeedBtn");
   const settingsStatusEl = document.getElementById("planSettingsStatus");
+  const paceDrawer = document.getElementById("planPaceDrawer");
+  const paceDrawerTab = document.getElementById("planPaceDrawerTab");
+  const paceDrawerClose = document.getElementById("planPaceDrawerClose");
+  const paceBackdrop = document.getElementById("planPaceBackdrop");
+  const paceStatusEl = document.getElementById("planPaceStatus");
+  const marathonGoalInputEl = document.getElementById("planMarathonGoalInput");
+  const marathonGoalSetBtn = document.getElementById("planMarathonGoalSetBtn");
+  const paceDistanceSelectEl = document.getElementById("planPaceDistanceSelect");
+  const paceTimeInputEl = document.getElementById("planPaceTimeInput");
+  const paceCalcBtn = document.getElementById("planPaceCalcBtn");
+  const paceDerivedGoalEl = document.getElementById("planPaceDerivedGoal");
+  const paceSetDerivedBtn = document.getElementById("planPaceSetDerivedBtn");
+  const raceEquivalencyListEl = document.getElementById("planRaceEquivalencyList");
+  const trainingPacesListEl = document.getElementById("planTrainingPacesList");
 
   let runTypeOptions = [""];
   let pendingFocus = { date: "", field: "distance" };
@@ -18,6 +32,8 @@
   let loadedStartDate = "";
   let loadedEndDate = "";
   let loadedTimezone = "";
+  let paceCurrentGoal = "5:00:00";
+  let paceDerivedGoal = "";
   const PLAN_INITIAL_FUTURE_DAYS = 365;
   const PLAN_APPEND_FUTURE_DAYS = 56;
 
@@ -235,6 +251,198 @@
 
   function isIsoDateString(value) {
     return parseIsoDate(value) !== null;
+  }
+
+  function setPaceStatus(message, tone) {
+    if (!paceStatusEl) return;
+    paceStatusEl.textContent = String(message || "");
+    if (tone === "ok" || tone === "error") {
+      paceStatusEl.dataset.tone = tone;
+      return;
+    }
+    paceStatusEl.dataset.tone = "neutral";
+  }
+
+  function setPaceDrawerOpen(nextOpen) {
+    if (!(paceDrawer instanceof HTMLElement)) return;
+    paceDrawer.classList.toggle("open", !!nextOpen);
+    paceDrawer.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    if (paceBackdrop instanceof HTMLElement) {
+      paceBackdrop.classList.toggle("open", !!nextOpen);
+      paceBackdrop.setAttribute("aria-hidden", nextOpen ? "false" : "true");
+    }
+  }
+
+  function paceSetButtonBusy(buttonEl, isBusy, busyLabel) {
+    if (!(buttonEl instanceof HTMLElement)) return;
+    if (isBusy) {
+      buttonEl.dataset.originalLabel = buttonEl.textContent || "";
+      buttonEl.textContent = String(busyLabel || "Saving...");
+      buttonEl.setAttribute("disabled", "disabled");
+      return;
+    }
+    const original = String(buttonEl.dataset.originalLabel || "").trim();
+    if (original) buttonEl.textContent = original;
+    buttonEl.removeAttribute("disabled");
+  }
+
+  function makePaceItem(labelText, valueText) {
+    const row = document.createElement("div");
+    row.className = "plan-pace-item";
+    const label = document.createElement("span");
+    label.className = "plan-pace-item-label";
+    label.textContent = String(labelText || "--");
+    const value = document.createElement("span");
+    value.className = "plan-pace-item-value";
+    value.textContent = String(valueText || "--");
+    row.appendChild(label);
+    row.appendChild(value);
+    return row;
+  }
+
+  function renderPaceGrid(targetEl, rows) {
+    if (!(targetEl instanceof HTMLElement)) return;
+    targetEl.textContent = "";
+    for (const row of Array.isArray(rows) ? rows : []) {
+      if (!row || typeof row !== "object") continue;
+      targetEl.appendChild(makePaceItem(row.label, row.time || row.pace));
+    }
+  }
+
+  function updatePaceDerivedGoalDisplay() {
+    if (!(paceDerivedGoalEl instanceof HTMLElement)) return;
+    if (paceDerivedGoal) {
+      paceDerivedGoalEl.textContent = `Marathon Equivalent: ${paceDerivedGoal}`;
+      return;
+    }
+    paceDerivedGoalEl.textContent = "Marathon Equivalent: --";
+  }
+
+  function supportedDistanceFallback() {
+    return [
+      { value: "1mi", label: "1mi" },
+      { value: "2mi", label: "2mi" },
+      { value: "5k", label: "5k" },
+      { value: "10k", label: "10k" },
+      { value: "15k", label: "15k" },
+      { value: "10mi", label: "10mi" },
+      { value: "hm", label: "HM" },
+      { value: "marathon", label: "Marathon" },
+    ];
+  }
+
+  function setDistanceOptions(options) {
+    if (!(paceDistanceSelectEl instanceof HTMLSelectElement)) return;
+    const items = Array.isArray(options) && options.length > 0 ? options : supportedDistanceFallback();
+    const currentValue = String(paceDistanceSelectEl.value || "10k");
+    paceDistanceSelectEl.textContent = "";
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      const value = String(item.value || "").trim();
+      if (!value) continue;
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = String(item.label || value);
+      paceDistanceSelectEl.appendChild(option);
+    }
+    if (Array.from(paceDistanceSelectEl.options).some((option) => option.value === currentValue)) {
+      paceDistanceSelectEl.value = currentValue;
+    } else if (Array.from(paceDistanceSelectEl.options).some((option) => option.value === "10k")) {
+      paceDistanceSelectEl.value = "10k";
+    }
+  }
+
+  function applyPaceWorkshopPayload(payload) {
+    if (!payload || payload.status !== "ok") return;
+    if (marathonGoalInputEl instanceof HTMLInputElement && typeof payload.marathon_goal === "string") {
+      paceCurrentGoal = payload.marathon_goal;
+      marathonGoalInputEl.value = paceCurrentGoal;
+    }
+    setDistanceOptions(payload.supported_distances);
+    const goalTraining = payload.goal_training && typeof payload.goal_training === "object"
+      ? payload.goal_training
+      : {};
+    renderPaceGrid(trainingPacesListEl, goalTraining.paces);
+  }
+
+  async function loadPaceWorkshop() {
+    if (!(paceDistanceSelectEl instanceof HTMLSelectElement)) return;
+    setPaceStatus("Loading pace workshop...", "neutral");
+    updatePaceDerivedGoalDisplay();
+    try {
+      const response = await fetch("/plan/pace-workshop.json", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || payload.status !== "ok") {
+        throw new Error(String((payload && payload.error) || "Failed to load pace workshop"));
+      }
+      applyPaceWorkshopPayload(payload);
+      setPaceStatus("", "neutral");
+    } catch (err) {
+      setDistanceOptions([]);
+      setPaceStatus(String(err && err.message ? err.message : "Failed to load pace workshop"), "error");
+    }
+  }
+
+  async function saveMarathonGoal(goalText) {
+    if (!goalText) return;
+    paceSetButtonBusy(marathonGoalSetBtn, true, "Saving...");
+    setPaceStatus("Saving marathon goal...", "neutral");
+    try {
+      const response = await fetch("/plan/pace-workshop/goal", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ marathon_goal: String(goalText || "").trim() }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.status !== "ok") {
+        throw new Error(String((payload && payload.error) || "Failed to save marathon goal"));
+      }
+      applyPaceWorkshopPayload(payload);
+      setPaceStatus(`Goal set to ${payload.marathon_goal}`, "ok");
+    } catch (err) {
+      setPaceStatus(String(err && err.message ? err.message : "Failed to save marathon goal"), "error");
+    } finally {
+      paceSetButtonBusy(marathonGoalSetBtn, false);
+    }
+  }
+
+  async function calculatePaces() {
+    if (!(paceDistanceSelectEl instanceof HTMLSelectElement) || !(paceTimeInputEl instanceof HTMLInputElement)) return;
+    const distance = String(paceDistanceSelectEl.value || "").trim();
+    const time = String(paceTimeInputEl.value || "").trim();
+    if (!distance || !time) {
+      setPaceStatus("Enter race distance and time before calculating.", "error");
+      return;
+    }
+    paceSetButtonBusy(paceCalcBtn, true, "Working...");
+    setPaceStatus("Calculating race equivalency and training paces...", "neutral");
+    try {
+      const response = await fetch("/plan/pace-workshop/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          distance,
+          time,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.status !== "ok") {
+        throw new Error(String((payload && payload.error) || "Calculation failed"));
+      }
+      paceDerivedGoal = String(payload.derived_marathon_goal || "");
+      updatePaceDerivedGoalDisplay();
+      renderPaceGrid(raceEquivalencyListEl, payload.race_equivalency);
+      const trainingBlock = payload.training && typeof payload.training === "object" ? payload.training : {};
+      renderPaceGrid(trainingPacesListEl, trainingBlock.paces);
+      if (paceSetDerivedBtn instanceof HTMLButtonElement) {
+        paceSetDerivedBtn.disabled = !paceDerivedGoal;
+      }
+      setPaceStatus("Calculation complete.", "ok");
+    } catch (err) {
+      setPaceStatus(String(err && err.message ? err.message : "Calculation failed"), "error");
+    } finally {
+      paceSetButtonBusy(paceCalcBtn, false);
+    }
   }
 
   function mergeRowsByDate(existingRows, incomingRows) {
@@ -1289,7 +1497,59 @@
     });
   }
 
+  if (paceDrawerTab) {
+    paceDrawerTab.addEventListener("click", () => {
+      const nextOpen = !(paceDrawer && paceDrawer.classList.contains("open"));
+      setPaceDrawerOpen(nextOpen);
+    });
+  }
+  if (paceDrawerClose) {
+    paceDrawerClose.addEventListener("click", () => {
+      setPaceDrawerOpen(false);
+    });
+  }
+  if (paceBackdrop) {
+    paceBackdrop.addEventListener("click", () => {
+      setPaceDrawerOpen(false);
+    });
+  }
+  if (marathonGoalSetBtn && marathonGoalInputEl) {
+    marathonGoalSetBtn.addEventListener("click", () => {
+      void saveMarathonGoal(marathonGoalInputEl.value);
+    });
+    marathonGoalInputEl.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      void saveMarathonGoal(marathonGoalInputEl.value);
+    });
+  }
+  if (paceCalcBtn) {
+    paceCalcBtn.addEventListener("click", () => {
+      void calculatePaces();
+    });
+  }
+  if (paceTimeInputEl) {
+    paceTimeInputEl.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      void calculatePaces();
+    });
+  }
+  if (paceSetDerivedBtn && marathonGoalInputEl) {
+    paceSetDerivedBtn.addEventListener("click", () => {
+      if (!paceDerivedGoal) return;
+      marathonGoalInputEl.value = paceDerivedGoal;
+      void saveMarathonGoal(paceDerivedGoal);
+    });
+  }
+
   bindWorkoutMenuHandlers();
+  setPaceDrawerOpen(false);
+  setDistanceOptions([]);
+  if (paceSetDerivedBtn instanceof HTMLButtonElement) {
+    paceSetDerivedBtn.disabled = true;
+  }
+  void loadPaceWorkshop();
   if (!isIsoDateString(centerDateEl.value)) {
     centerDateEl.value = todayIsoLocal();
   }

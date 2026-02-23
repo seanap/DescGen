@@ -1734,6 +1734,66 @@ def list_plan_sessions(path: Path, *, start_date: str, end_date: str) -> dict[st
     return payload
 
 
+def set_plan_setting(path: Path, key: str, value: Any) -> bool:
+    key_text = str(key or "").strip()
+    if not key_text:
+        return False
+    now_iso = _utc_now_iso()
+    try:
+        value_json = json.dumps(value)
+    except (TypeError, ValueError):
+        return False
+
+    try:
+        with _connect_runtime_db(path) as conn:
+            conn.execute(
+                """
+                INSERT INTO plan_settings (
+                    key,
+                    value_json,
+                    updated_at_utc
+                )
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at_utc = excluded.updated_at_utc
+                """,
+                (
+                    key_text,
+                    value_json,
+                    now_iso,
+                ),
+            )
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def get_plan_setting(path: Path, key: str, default: Any = None) -> Any:
+    key_text = str(key or "").strip()
+    if not key_text:
+        return default
+    try:
+        with _connect_runtime_db(path) as conn:
+            row = conn.execute(
+                """
+                SELECT value_json
+                FROM plan_settings
+                WHERE key = ?
+                LIMIT 1
+                """,
+                (key_text,),
+            ).fetchone()
+    except sqlite3.Error:
+        return default
+    if row is None:
+        return default
+    try:
+        return json.loads(str(row["value_json"]))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(".tmp")

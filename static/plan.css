@@ -28,6 +28,233 @@ body.plan-page {
     linear-gradient(180deg, var(--dg-bg-0) 0%, var(--dg-bg-1) 44%, #050505 100%);
 }
 
+.plan-pace-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: min(420px, 92vw);
+  height: 100vh;
+  background: color-mix(in srgb, var(--dg-panel) 92%, #080808);
+  border-right: 1px solid var(--dg-line);
+  box-shadow: var(--dg-shadow);
+  transform: translateX(calc(-100% + 44px));
+  transition: transform 0.22s ease;
+  z-index: 120;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 12px;
+}
+
+.plan-pace-drawer.open {
+  transform: translateX(0);
+}
+
+.plan-pace-drawer:not(.open) {
+  border-right-color: transparent;
+  box-shadow: none;
+}
+
+.plan-pace-handles {
+  position: absolute;
+  right: -44px;
+  top: calc(var(--dg-shell-offset, 92px) + 8px);
+  width: 44px;
+  z-index: 2;
+}
+
+.plan-pace-tab {
+  border: 1px solid rgba(252, 76, 2, 0.68);
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in srgb, var(--dg-panel) 90%, #0f0f0f);
+  color: #ffc29a;
+  padding: 10px 7px;
+  min-height: 164px;
+  width: 44px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  cursor: pointer;
+}
+
+.plan-pace-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(252, 76, 2, 0.75);
+}
+
+.plan-pace-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.plan-pace-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.plan-pace-close {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9px;
+  background: rgba(9, 9, 9, 0.85);
+  color: var(--dg-text);
+  padding: 7px 11px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.plan-pace-close:hover,
+.plan-pace-close:focus-visible {
+  outline: none;
+  border-color: rgba(252, 76, 2, 0.82);
+  box-shadow: 0 0 0 2px rgba(252, 76, 2, 0.2);
+}
+
+.plan-pace-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.plan-pace-section {
+  border: 1px solid var(--dg-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dg-panel) 88%, black 12%);
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.plan-pace-section h3 {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+
+.plan-pace-inline {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr;
+  margin-top: 8px;
+}
+
+.plan-pace-inline input,
+.plan-pace-inline select,
+.plan-pace-inline button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(8, 8, 8, 0.88);
+  color: var(--dg-text);
+  padding: 7px 9px;
+  font-size: 0.85rem;
+}
+
+.plan-pace-inline button {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.plan-pace-inline button:hover,
+.plan-pace-inline button:focus-visible {
+  outline: none;
+  border-color: rgba(252, 76, 2, 0.82);
+  box-shadow: 0 0 0 2px rgba(252, 76, 2, 0.2);
+}
+
+.plan-pace-derived-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#planPaceSetDerivedBtn {
+  border: 1px solid color-mix(in srgb, var(--plan-neon-blue) 68%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--plan-neon-blue) 20%, transparent);
+  color: #e3f7ff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+
+#planPaceSetDerivedBtn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.plan-pace-derived-goal {
+  color: #d2f0ff;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.83rem;
+  margin: 7px 0 0;
+}
+
+.plan-pace-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.plan-pace-item {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(76px, 1fr) auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(11, 11, 11, 0.82);
+  padding: 6px 8px;
+}
+
+.plan-pace-item-label {
+  color: var(--dg-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.plan-pace-item-value {
+  color: #e9f6ff;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.plan-pace-status {
+  margin: 6px 2px 0;
+  min-height: 1.2em;
+  color: var(--dg-muted);
+  font-size: 0.78rem;
+}
+
+.plan-pace-status[data-tone=\"ok\"] {
+  color: #c8ffe3;
+}
+
+.plan-pace-status[data-tone=\"error\"] {
+  color: #ffd2e7;
+}
+
+.plan-pace-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 20, 0.58);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 110;
+}
+
+.plan-pace-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .plan-shell {
   width: min(1720px, calc(100% - 30px));
   margin: var(--dg-page-top-gap) auto 30px;

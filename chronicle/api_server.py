@@ -14,6 +14,13 @@ from .activity_pipeline import run_once
 from .config import Settings
 from .dashboard_data import get_dashboard_payload
 from .plan_data import get_plan_payload
+from .pace_workshop import (
+    DEFAULT_MARATHON_GOAL,
+    calculate_race_equivalency,
+    normalize_marathon_goal_time,
+    supported_race_distances,
+    training_paces_for_goal,
+)
 from .setup_config import (
     PROVIDER_FIELDS,
     PROVIDER_LINKS,
@@ -26,6 +33,7 @@ from .setup_config import (
     update_setup_env_file,
 )
 from .storage import (
+    get_plan_setting,
     delete_runtime_value,
     get_plan_day,
     get_runtime_value,
@@ -34,6 +42,7 @@ from .storage import (
     list_plan_sessions,
     read_json,
     replace_plan_sessions_for_day,
+    set_plan_setting,
     set_runtime_value,
     upsert_plan_day,
     write_json,
@@ -84,6 +93,7 @@ STRAVA_OAUTH_RUNTIME_KEY = "setup.strava.oauth"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_AUTHORIZE_URL = "https://www.strava.com/oauth/authorize"
 METERS_PER_MILE = 1609.34
+PLAN_PACE_WORKSHOP_GOAL_KEY = "pace_workshop.marathon_goal"
 
 
 def _effective_settings() -> Settings:
@@ -287,6 +297,25 @@ def _resolve_plan_date(raw_date: str) -> str:
     except ValueError as exc:
         raise ValueError("date_local must be YYYY-MM-DD.") from exc
     return parsed.isoformat()
+
+
+def _load_plan_marathon_goal(path: Path) -> str:
+    saved = get_plan_setting(path, PLAN_PACE_WORKSHOP_GOAL_KEY, DEFAULT_MARATHON_GOAL)
+    try:
+        return normalize_marathon_goal_time(saved)
+    except ValueError:
+        return DEFAULT_MARATHON_GOAL
+
+
+def _plan_pace_workshop_payload(path: Path, marathon_goal: str) -> dict[str, object]:
+    training = training_paces_for_goal(marathon_goal)
+    return {
+        "status": "ok",
+        "marathon_goal": normalize_marathon_goal_time(marathon_goal),
+        "default_marathon_goal": DEFAULT_MARATHON_GOAL,
+        "supported_distances": supported_race_distances(),
+        "goal_training": training,
+    }
 
 
 def _format_plan_miles_value(value: float) -> str:
@@ -573,6 +602,53 @@ def plan_data_get() -> tuple[dict, int]:
     except Exception as exc:
         return {"status": "error", "error": f"Failed to build plan payload: {exc}"}, 500
     return payload, 200
+
+
+@app.get("/plan/pace-workshop.json")
+def plan_pace_workshop_get() -> tuple[dict, int]:
+    current = _effective_settings()
+    goal = _load_plan_marathon_goal(current.processed_log_file)
+    return _plan_pace_workshop_payload(current.processed_log_file, goal), 200
+
+
+@app.put("/plan/pace-workshop/goal")
+def plan_pace_workshop_goal_put() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return {"status": "error", "error": "Request body must be a JSON object."}, 400
+    goal_input = body.get("marathon_goal", body.get("goal_time"))
+    try:
+        goal_time = normalize_marathon_goal_time(goal_input)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    current = _effective_settings()
+    saved = set_plan_setting(current.processed_log_file, PLAN_PACE_WORKSHOP_GOAL_KEY, goal_time)
+    if not saved:
+        return {"status": "error", "error": "Failed to persist marathon goal."}, 500
+    return _plan_pace_workshop_payload(current.processed_log_file, goal_time), 200
+
+
+@app.post("/plan/pace-workshop/calculate")
+def plan_pace_workshop_calculate_post() -> tuple[dict, int]:
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return {"status": "error", "error": "Request body must be a JSON object."}, 400
+
+    distance_input = body.get("distance", body.get("race_distance"))
+    race_time_input = body.get("time", body.get("race_time"))
+    try:
+        calculation = calculate_race_equivalency(distance_input, race_time_input)
+    except ValueError as exc:
+        return {"status": "error", "error": str(exc)}, 400
+
+    current = _effective_settings()
+    current_goal = _load_plan_marathon_goal(current.processed_log_file)
+    return {
+        "status": "ok",
+        "current_marathon_goal": current_goal,
+        **calculation,
+    }, 200
 
 
 @app.put("/plan/day/<string:date_local>")
