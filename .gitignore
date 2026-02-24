@@ -8,11 +8,8 @@ chronicle/stat_modules/__pycache__/
 .venv/
 
 processed_activities.log
-REFACTOR_PLAN.md
 
-*.local.md
-WHIMSICAL_METRICS_IDEAS.local.md
-UI_REDESIGN_PLAN.local.md
+AGENTS.md
 
 # Local planning/design notes
 local/
@@ -24,5 +21,4 @@ View_hero_layout.png
 
 # Android companion app build artifacts
 android/.gradle/
-android/**/build/
 android/local.properties
