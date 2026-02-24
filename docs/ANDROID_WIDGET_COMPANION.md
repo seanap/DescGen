@@ -2,9 +2,12 @@
 
 This repo includes a standalone Android companion app under `android/` that powers home-screen widgets backed by Chronicle plan data.
 
+![widget](https://github.com/user-attachments/assets/7132c09c-7db5-412a-9932-f2413133321a)
+
+
 ## What It Does
-- Fetches `GET /plan/today.json`.
-- Schedules a WorkManager background sync every **61 minutes**.
+- Fetches `GET /plan/today.json` to get today's Planned Run.
+- Backend Schedules a WorkManager background sync every **61 minutes**.
 - Supports on-demand refresh from widget/action tap.
 - Provides two widget types:
   1. `1x1` miles-only tile (Chronicle icon background + large miles text).
@@ -12,7 +15,7 @@ This repo includes a standalone Android companion app under `android/` that powe
 - Tapping widget content opens Chronicle `/plan`.
 
 ## Chronicle API Contract
-The widget app expects:
+`GET /plan/today.json` provides:
 
 ```json
 {
@@ -23,22 +26,13 @@ The widget app expects:
 }
 ```
 
-`workout_shorthand` is optional.
-
-## Build / Install
-1. Open `android/` in Android Studio (Giraffe+ recommended).
-2. Let Gradle sync and install required SDK components.
-3. Connect a device/emulator and run the `app` module.
-4. Add either Chronicle widget from the home-screen widget picker.
+`workout_shorthand` is dependant on `SOS` run type.
 
 ## Configure Base URL
 The launcher app (`Chronicle Widget`) contains a simple base URL setting.
-- Example LAN URL: `http://192.168.1.9:8777`
-- Emulator default remains `http://10.0.2.2:8777`
-
-Save, then tap **Refresh Widgets Now**.
+- Set Chronicle's LAN URL ex. `http://192.168.1.90:8080`
+- Save, then tap **Refresh Widgets Now**.
 
 ## Notes
 - WorkManager enforces a minimum interval; 61 minutes is honored.
-- Widget update period is `0`; refreshes are fully worker-driven.
 - If network fetch fails, widget falls back to last cached payload.
