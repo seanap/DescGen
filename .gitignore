@@ -16,9 +16,17 @@ local/
 
 # Local desktop artifacts
 Thumbs.db
+.DS_Store
 Chronicle.png
 View_hero_layout.png
 
 # Android companion app build artifacts
 android/.gradle/
+android/.kotlin/
+android/**/build/
 android/local.properties
+android/captures/
+*.iml
+*.jks
+*.keystore
+*.aab

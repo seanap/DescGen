@@ -36,3 +36,11 @@ The launcher app (`Chronicle Widget`) contains a simple base URL setting.
 ## Notes
 - WorkManager enforces a minimum interval; 61 minutes is honored.
 - If network fetch fails, widget falls back to last cached payload.
+
+## APK Distribution
+- APK binaries are distributed through **GitHub Releases**, not committed in source control.
+- Release workflow: `.github/workflows/android-widget-release.yml`.
+- Trigger options:
+  - Push a tag like `android-widget-v0.2.0`.
+  - Or run the workflow manually (`workflow_dispatch`) and provide `release_tag`.
+- Release asset output name format: `chronicle-widget-<tag>.apk`.
