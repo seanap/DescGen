@@ -1,7 +1,8 @@
 # <img src="./static/chronicle.png" alt="Chronicle icon" width="30" />hronicle
 
 <p align="center">
-<img width="977" height="251" alt="chronicle_banner" src="https://github.com/user-attachments/assets/e5d2514a-cd42-4715-921b-75a0a64418df" />
+<img height="318" alt="chronicle_banner_short" src="https://github.com/user-attachments/assets/110b0df9-f376-403a-95c3-a900ba14550b" />
+
 </p>
 
 Chronicle automatically builds rich Strava activity descriptions by combining data from Strava and your connected stat sources.
