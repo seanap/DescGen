@@ -1190,7 +1190,7 @@ def _is_incline_treadmill_named_activity(
 ) -> bool:
     texts = [_text_blob(activity)]
     garmin_type_key = ""
-    if isinstance(training, dict):
+    if isinstance(training, dict) and bool(training.get("_garmin_activity_aligned")):
         garmin_last = training.get("garmin_last_activity")
         if isinstance(garmin_last, dict):
             texts.append(str(garmin_last.get("activity_name") or "").strip().lower())
