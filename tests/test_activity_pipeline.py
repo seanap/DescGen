@@ -601,6 +601,139 @@ class TestTreadmillProfileRoutingBehavior(unittest.TestCase):
         self.assertEqual(standard_selected.get("profile_id"), "treadmill")
         self.assertEqual(incline_selected.get("profile_id"), "incline_treadmill")
 
+    def test_profile_selection_skips_disabled_profiles(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        profiles = [
+            {"profile_id": "default", "label": "Default", "enabled": True, "priority": 0},
+            {"profile_id": "race", "label": "Race", "enabled": False, "priority": 100},
+        ]
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "name": "City 10K race effort",
+            "workout_type": 1,
+        }
+
+        with patch("chronicle.activity_pipeline.list_template_profiles", return_value=profiles):
+            selected = _select_activity_profile(settings, activity)
+
+        self.assertEqual(selected.get("profile_id"), "default")
+        self.assertEqual(selected.get("reasons"), ["fallback"])
+
+    def test_profile_selection_uses_criteria_for_custom_profile(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        profiles = [
+            {"profile_id": "default", "label": "Default", "enabled": True, "priority": 0},
+            {
+                "profile_id": "custom_distance_run",
+                "label": "Custom Distance Run",
+                "enabled": True,
+                "priority": 200,
+                "criteria": {
+                    "sport_type": "run",
+                    "distance_miles_min": 5,
+                    "trainer": False,
+                },
+            },
+        ]
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "distance": 10000.0,
+            "trainer": False,
+            "start_latlng": [40.0, -74.0],
+        }
+
+        with patch("chronicle.activity_pipeline.list_template_profiles", return_value=profiles):
+            selected = _select_activity_profile(settings, activity)
+
+        self.assertEqual(selected.get("profile_id"), "custom_distance_run")
+        self.assertTrue(selected.get("reasons"))
+
+    def test_profile_selection_criteria_can_override_builtin_matching(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        profiles = [
+            {"profile_id": "default", "label": "Default", "enabled": True, "priority": 0},
+            {
+                "profile_id": "treadmill",
+                "label": "Treadmill",
+                "enabled": True,
+                "priority": 120,
+                "criteria": {"sport_type": "walk", "has_gps": True, "trainer": False},
+            },
+        ]
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 3000.0,
+            "moving_time": 1800,
+            "name": "Treadmill",
+        }
+
+        with patch("chronicle.activity_pipeline.list_template_profiles", return_value=profiles):
+            selected = _select_activity_profile(settings, activity)
+
+        self.assertEqual(selected.get("profile_id"), "default")
+
+    def test_strength_activity_is_not_misidentified_as_treadmill(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        profiles = [
+            {"profile_id": "default", "label": "Default", "enabled": True, "priority": 0},
+            {"profile_id": "incline_treadmill", "label": "Incline Treadmill", "enabled": True, "priority": 110},
+            {"profile_id": "treadmill", "label": "Treadmill", "enabled": True, "priority": 100},
+            {"profile_id": "strength_training", "label": "Strength Training", "enabled": True, "priority": 75},
+        ]
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "trainer": True,
+            "start_latlng": [],
+            "distance": 0.0,
+            "moving_time": 1300,
+            "name": "Treadmill incline strength training",
+            "external_id": "garmin_ping_strength",
+            "device_name": "Garmin Forerunner",
+        }
+        training = {
+            "_garmin_activity_aligned": True,
+            "garmin_last_activity": {
+                "activity_type": "strength_training",
+                "total_sets": 12,
+            },
+        }
+
+        with patch("chronicle.activity_pipeline.list_template_profiles", return_value=profiles):
+            selected = _select_activity_profile(settings, activity, training=training)
+
+        self.assertEqual(selected.get("profile_id"), "strength_training")
+        self.assertIn("garmin activity indicates strength", selected.get("reasons", []))
+
 
 if __name__ == "__main__":
     unittest.main()

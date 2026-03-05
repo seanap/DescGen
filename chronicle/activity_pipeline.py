@@ -1401,12 +1401,320 @@ def _activity_for_profile_preview(context: dict[str, Any]) -> tuple[dict[str, An
     return activity, training
 
 
+_CRITERIA_META_KEYS = {
+    "kind",
+    "description",
+    "label",
+    "name",
+    "version",
+    "notes",
+}
+
+
+def _criteria_has_executable_rules(criteria: dict[str, Any] | None) -> bool:
+    if not isinstance(criteria, dict):
+        return False
+    for key, value in criteria.items():
+        if key in _CRITERIA_META_KEYS:
+            continue
+        if key in {"all_of", "any_of", "none_of"}:
+            if isinstance(value, dict):
+                return True
+            if isinstance(value, (list, tuple)):
+                return any(isinstance(item, dict) for item in value)
+            continue
+        return True
+    return False
+
+
+def _criteria_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        numeric = int(value)
+        if numeric in {0, 1}:
+            return bool(numeric)
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return None
+
+
+def _criteria_string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, (list, tuple)):
+        items: list[str] = []
+        for item in value:
+            text = str(item or "").strip()
+            if text:
+                items.append(text)
+        return items
+    return []
+
+
+def _criteria_clauses(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, (list, tuple)):
+        return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _criteria_match_reasons(
+    criteria: dict[str, Any],
+    activity: dict[str, Any],
+    settings: Settings,
+    training: dict[str, Any] | None = None,
+) -> list[str]:
+    reasons: list[str] = []
+    evaluated = False
+
+    all_of = _criteria_clauses(criteria.get("all_of"))
+    if "all_of" in criteria:
+        evaluated = True
+        if not all_of:
+            return []
+        for clause in all_of:
+            clause_reasons = _criteria_match_reasons(clause, activity, settings, training=training)
+            if not clause_reasons:
+                return []
+            reasons.extend(clause_reasons)
+
+    any_of = _criteria_clauses(criteria.get("any_of"))
+    if "any_of" in criteria:
+        evaluated = True
+        if not any_of:
+            return []
+        any_reasons: list[str] = []
+        for clause in any_of:
+            clause_reasons = _criteria_match_reasons(clause, activity, settings, training=training)
+            if clause_reasons:
+                any_reasons = clause_reasons
+                break
+        if not any_reasons:
+            return []
+        reasons.extend(any_reasons)
+
+    none_of = _criteria_clauses(criteria.get("none_of"))
+    if "none_of" in criteria:
+        evaluated = True
+        if not none_of:
+            return []
+        for clause in none_of:
+            clause_reasons = _criteria_match_reasons(clause, activity, settings, training=training)
+            if clause_reasons:
+                return []
+        reasons.append("none_of clauses clear")
+
+    raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip()
+    sport_type = _normalize_activity_type_key(raw_sport_type)
+    workout_type = _as_float(activity.get("workout_type"))
+    treadmill = _is_treadmill(activity)
+    strength_like = _is_strength_like(activity) or _training_indicates_strength(training)
+    distance = _distance_miles(activity)
+    gain_ft = _elevation_gain_feet(activity)
+    gain_per_mile = gain_ft / distance if distance > 0 else 0.0
+    moving_raw = activity.get("moving_time")
+    moving_seconds = _as_float(moving_raw)
+    if moving_seconds is None:
+        parsed_seconds = _duration_to_seconds(moving_raw)
+        moving_seconds = float(parsed_seconds) if parsed_seconds is not None else 0.0
+    start = _start_latlng(activity)
+    has_gps = bool(activity.get("has_gps")) or start is not None
+    text = _text_blob(activity)
+    activity_name = str(activity.get("name") or "").strip().lower()
+    external_id = str(activity.get("external_id") or "").strip().lower()
+    device_name = str(activity.get("device_name") or "").strip().lower()
+
+    if "sport_type" in criteria:
+        evaluated = True
+        expected_types = {
+            _normalize_activity_type_key(item)
+            for item in _criteria_string_list(criteria.get("sport_type"))
+            if item
+        }
+        if not expected_types or sport_type not in expected_types:
+            return []
+        reasons.append(f"sport_type={raw_sport_type or 'unknown'}")
+
+    if "workout_type" in criteria:
+        evaluated = True
+        expected = _as_float(criteria.get("workout_type"))
+        if expected is None or workout_type is None or int(round(workout_type)) != int(round(expected)):
+            return []
+        reasons.append(f"workout_type={int(round(workout_type))}")
+
+    if "trainer" in criteria:
+        evaluated = True
+        expected = _criteria_bool(criteria.get("trainer"))
+        actual = bool(activity.get("trainer"))
+        if expected is None or actual != expected:
+            return []
+        reasons.append(f"trainer={str(actual).lower()}")
+
+    if "commute" in criteria:
+        evaluated = True
+        expected = _criteria_bool(criteria.get("commute"))
+        actual = bool(activity.get("commute"))
+        if expected is None or actual != expected:
+            return []
+        reasons.append(f"commute={str(actual).lower()}")
+
+    if "has_gps" in criteria:
+        evaluated = True
+        expected = _criteria_bool(criteria.get("has_gps"))
+        if expected is None or has_gps != expected:
+            return []
+        reasons.append(f"has_gps={str(has_gps).lower()}")
+
+    if "treadmill" in criteria:
+        evaluated = True
+        expected = _criteria_bool(criteria.get("treadmill"))
+        if expected is None or treadmill != expected:
+            return []
+        reasons.append(f"treadmill={str(treadmill).lower()}")
+
+    if "strength_like" in criteria:
+        evaluated = True
+        expected = _criteria_bool(criteria.get("strength_like"))
+        if expected is None or strength_like != expected:
+            return []
+        reasons.append(f"strength_like={str(strength_like).lower()}")
+
+    if "distance_miles_min" in criteria:
+        evaluated = True
+        minimum = _as_float(criteria.get("distance_miles_min"))
+        if minimum is None or distance < minimum:
+            return []
+        reasons.append(f"distance={distance:.2f}mi >= {minimum:.2f}mi")
+
+    if "distance_miles_max" in criteria:
+        evaluated = True
+        maximum = _as_float(criteria.get("distance_miles_max"))
+        if maximum is None or distance > maximum:
+            return []
+        reasons.append(f"distance={distance:.2f}mi <= {maximum:.2f}mi")
+
+    if "moving_time_seconds_min" in criteria:
+        evaluated = True
+        minimum = _as_float(criteria.get("moving_time_seconds_min"))
+        if minimum is None or moving_seconds < minimum:
+            return []
+        reasons.append(f"moving_time={moving_seconds:.0f}s >= {minimum:.0f}s")
+
+    if "moving_time_seconds_max" in criteria:
+        evaluated = True
+        maximum = _as_float(criteria.get("moving_time_seconds_max"))
+        if maximum is None or moving_seconds > maximum:
+            return []
+        reasons.append(f"moving_time={moving_seconds:.0f}s <= {maximum:.0f}s")
+
+    if "gain_per_mile_ft_min" in criteria:
+        evaluated = True
+        minimum = _as_float(criteria.get("gain_per_mile_ft_min"))
+        if minimum is None or gain_per_mile < minimum:
+            return []
+        reasons.append(f"gain_per_mile={gain_per_mile:.0f}ft >= {minimum:.0f}ft")
+
+    if "gain_per_mile_ft_max" in criteria:
+        evaluated = True
+        maximum = _as_float(criteria.get("gain_per_mile_ft_max"))
+        if maximum is None or gain_per_mile > maximum:
+            return []
+        reasons.append(f"gain_per_mile={gain_per_mile:.0f}ft <= {maximum:.0f}ft")
+
+    if "text_contains" in criteria:
+        evaluated = True
+        tokens = [token.lower() for token in _criteria_string_list(criteria.get("text_contains"))]
+        if not tokens or not all(token in text for token in tokens):
+            return []
+        reasons.append("text_contains matched")
+
+    if "name_contains" in criteria:
+        evaluated = True
+        tokens = [token.lower() for token in _criteria_string_list(criteria.get("name_contains"))]
+        if not tokens or not all(token in activity_name for token in tokens):
+            return []
+        reasons.append("name_contains matched")
+
+    if "text_not_contains" in criteria:
+        evaluated = True
+        tokens = [token.lower() for token in _criteria_string_list(criteria.get("text_not_contains"))]
+        if not tokens or any(token in text for token in tokens):
+            return []
+        reasons.append("text_not_contains clear")
+
+    if "name_not_contains" in criteria:
+        evaluated = True
+        tokens = [token.lower() for token in _criteria_string_list(criteria.get("name_not_contains"))]
+        if not tokens or any(token in activity_name for token in tokens):
+            return []
+        reasons.append("name_not_contains clear")
+
+    if "external_id_contains" in criteria:
+        evaluated = True
+        tokens = [token.lower() for token in _criteria_string_list(criteria.get("external_id_contains"))]
+        if not tokens or not all(token in external_id for token in tokens):
+            return []
+        reasons.append("external_id_contains matched")
+
+    if "device_name_contains" in criteria:
+        evaluated = True
+        tokens = [token.lower() for token in _criteria_string_list(criteria.get("device_name_contains"))]
+        if not tokens or not all(token in device_name for token in tokens):
+            return []
+        reasons.append("device_name_contains matched")
+
+    if "home_distance_miles_max" in criteria or "home_distance_miles_min" in criteria:
+        evaluated = True
+        if start is None or settings.home_latitude is None or settings.home_longitude is None:
+            return []
+        home_distance = _haversine_miles(start[0], start[1], settings.home_latitude, settings.home_longitude)
+        if "home_distance_miles_min" in criteria:
+            minimum = _as_float(criteria.get("home_distance_miles_min"))
+            if minimum is None or home_distance < minimum:
+                return []
+            reasons.append(f"home_distance={home_distance:.2f}mi >= {minimum:.2f}mi")
+        if "home_distance_miles_max" in criteria:
+            maximum = _as_float(criteria.get("home_distance_miles_max"))
+            if maximum is None or home_distance > maximum:
+                return []
+            reasons.append(f"home_distance={home_distance:.2f}mi <= {maximum:.2f}mi")
+
+    if "garmin_activity_type_in" in criteria:
+        evaluated = True
+        garmin_last = training.get("garmin_last_activity") if isinstance(training, dict) else None
+        garmin_type = _normalize_activity_type_key(garmin_last.get("activity_type")) if isinstance(garmin_last, dict) else ""
+        expected_types = {
+            _normalize_activity_type_key(item)
+            for item in _criteria_string_list(criteria.get("garmin_activity_type_in"))
+            if item
+        }
+        if not expected_types or garmin_type not in expected_types:
+            return []
+        reasons.append(f"garmin_activity_type={garmin_type}")
+
+    if not evaluated:
+        return []
+    return reasons or ["criteria matched"]
+
+
 def _profile_match_reasons(
     profile_id: str,
     activity: dict[str, Any],
     settings: Settings,
     training: dict[str, Any] | None = None,
+    criteria: dict[str, Any] | None = None,
 ) -> list[str]:
+    if _criteria_has_executable_rules(criteria):
+        return _criteria_match_reasons(criteria or {}, activity, settings, training=training)
+
     workout_type = _to_int(activity.get("workout_type"))
     raw_sport_type = str(activity.get("sport_type") or activity.get("type") or "").strip()
     sport_type = raw_sport_type.lower()
@@ -1529,7 +1837,14 @@ def _select_activity_profile(
         profile_id = str(profile.get("profile_id") or "").strip().lower()
         if profile_id == "default":
             continue
-        reasons = _profile_match_reasons(profile_id, detailed_activity, settings, training=training)
+        criteria = profile.get("criteria") if isinstance(profile.get("criteria"), dict) else None
+        reasons = _profile_match_reasons(
+            profile_id,
+            detailed_activity,
+            settings,
+            training=training,
+            criteria=criteria,
+        )
         if reasons:
             return {
                 "profile_id": profile_id,

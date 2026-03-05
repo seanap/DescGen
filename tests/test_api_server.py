@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import unittest
@@ -1042,6 +1043,47 @@ class TestApiServer(unittest.TestCase):
         self.assertEqual(load_payload["status"], "ok")
         self.assertEqual(load_payload["profile_id"], "trail")
         self.assertIn("Trail", load_payload["template"])
+
+    def test_editor_template_uses_and_persists_working_profile_when_profile_id_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._set_temp_state_dir(temp_dir)
+
+            working_response = self.client.post(
+                "/editor/profiles/working",
+                json={"profile_id": "trail"},
+            )
+            self.assertEqual(working_response.status_code, 200)
+            self.assertEqual(working_response.get_json()["working_profile_id"], "trail")
+
+            save_response = self.client.put(
+                "/editor/template",
+                json={
+                    "template": "Working Trail {{ activity.distance_miles }}",
+                    "author": "tester",
+                    "name": "Working Trail Template",
+                    "source": "test",
+                    "context_mode": "sample",
+                },
+            )
+            self.assertEqual(save_response.status_code, 200)
+            save_payload = save_response.get_json()
+            self.assertEqual(save_payload["profile_id"], "trail")
+
+            stored_config = Path(temp_dir) / "template_profiles.json"
+            stored_payload = json.loads(stored_config.read_text(encoding="utf-8"))
+            self.assertEqual(stored_payload.get("working_profile_id"), "trail")
+
+            get_working_response = self.client.get("/editor/template")
+            self.assertEqual(get_working_response.status_code, 200)
+            get_working_payload = get_working_response.get_json()
+            self.assertEqual(get_working_payload["profile_id"], "trail")
+            self.assertIn("Working Trail", get_working_payload["template"])
+
+            default_response = self.client.get("/editor/template?profile_id=default")
+            self.assertEqual(default_response.status_code, 200)
+            default_payload = default_response.get_json()
+            self.assertEqual(default_payload["profile_id"], "default")
+            self.assertNotIn("Working Trail", default_payload["template"])
 
     def test_editor_template_put_rejects_invalid_context_mode(self) -> None:
         response = self.client.put(
