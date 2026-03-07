@@ -33,6 +33,7 @@ android/captures/
 
 # Local AI/dev orchestration artifacts
 .codex/
+.agents/skills/
 _bmad*/
 
 # Python test/coverage artifacts
