@@ -10,7 +10,7 @@
 
 #
 
-This app is currently built for someone that likes self-hosting their own docker apps, who uses Strava but hates writing out descriptions, and who wears a Garmin watch.
+This app is built for someone that likes self-hosting their own docker apps, who uses Strava but hates writing out descriptions, and who wears a Garmin watch.
 
 ## Key Features
 - Auto-processes new activities.  
@@ -108,3 +108,11 @@ http://localhost:1609
 - Android widget companion: [`docs/ANDROID_WIDGET_COMPANION.md`](docs/ANDROID_WIDGET_COMPANION.md)
 - Android widget APK downloads: [GitHub Releases](https://github.com/seanap/Chronicle/releases)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)
+
+## Thanks!
+Borrowed ideas, inspiration, code, and style from the following great projects:
+- https://github.com/aspain/git-sweaty Dashboard inspiration
+- https://github.com/yeekang-0311/garmin_planner Workout builder and Send to Garmin
+- https://www.home-assistant.io/docs/configuration/templating/ Jinja Template builder inspired by HomeAssistant Templating
+- https://activitystat.com/ For the auto stat description inspiration
+- This project was built using the [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) with assistance from CODEX GPT5.4
