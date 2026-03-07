@@ -116,16 +116,6 @@
     0 6px 18px rgba(0, 0, 0, 0.42);
 }
 
-.dg-brand-tagline {
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
-  font-weight: 500;
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.65);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding-left: 44px;
-}
-
 .dg-shell-spacer {
   min-height: 1px;
   justify-self: end;
@@ -270,11 +260,6 @@
     width: 28px;
     height: 28px;
     border-radius: 9px;
-  }
-
-  .dg-brand-tagline {
-    font-size: 0.68rem;
-    padding-left: 38px;
   }
 
   .dg-nav {
