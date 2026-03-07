@@ -22,19 +22,21 @@ This app is built for someone that likes self-hosting their own docker apps, who
   - yaml Workout Builder  
   - Send to your garmin watch workout calendar.  
 
-## Includes a polished local web app:
-  - `View` (`/dashboard`) for long-term trends.
-  - `Plan` (`/plan`) for planning your next move.
-  - `Build` (`/editor`) for template editing and preview.
-  - `Sources` (`/setup`) for source credentials and OAuth.
-  - `Control` (`/control`) for one-click API operations.
-
-## Screenshots
+## Pages:
+  - `View` (`/dashboard`) for long-term trends.  
 <img width="1915" height="1923" alt="Screenshot 2026-03-07 120436" src="https://github.com/user-attachments/assets/d44ccc82-9439-4a38-b034-c07406f1743e" />
+
+  - `Plan` (`/plan`) for planning your next move.  
 <img width="2900" height="1922" alt="Screenshot 2026-02-22 231607" src="https://github.com/user-attachments/assets/35f5f8e6-4cc4-4787-9f08-c2a7687e2398" />
+
+  - `Build` (`/editor`) for template editing and preview.  
 <img width="2006" height="1943" alt="Screenshot 2026-02-20 115619" src="https://github.com/user-attachments/assets/ec734164-a7e0-4b60-8131-9c4968b4f858" />
+
+  - `Sources` (`/setup`) for source credentials and OAuth.  
 <img width="2399" height="926" alt="Screenshot 2026-02-20 115710" src="https://github.com/user-attachments/assets/9ef5e175-ea91-42b6-b430-faa68060493e" />
-<img width="2336" height="1939" alt="Screenshot 2026-02-20 115752 REDACTED" src="https://github.com/user-attachments/assets/6a4a2e88-c7c0-4692-ac33-5251b52d753d" />
+
+  - `Control` (`/control`) for one-click API operations.  
+<img width="2336" height="1939" alt="Screenshot 2026-02-20 115752 REDACTED" src="https://github.com/user-attachments/assets/6a4a2e88-c7c0-4692-ac33-5251b52d753d" />  
 
 
 ## Quick Start
