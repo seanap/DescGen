@@ -1,29 +1,33 @@
 # <img src="./static/chronicle.png" alt="Chronicle icon" width="30" />hronicle
 
 <p align="center">
-<img height="318" alt="chronicle_banner_short" src="https://github.com/user-attachments/assets/110b0df9-f376-403a-95c3-a900ba14550b" />
-
+<img height="318" alt="chronicle_banner_short" src="https://github.com/user-attachments/assets/110b0df9-f376-403a-95c3-a900ba14550b" />  
 </p>
 
-Chronicle automatically builds rich Strava activity descriptions by combining data from Strava and your connected stat sources.
+<p align="center">Chronicle your activity with automated Strava descriptions.</p>
+<p align="center">Chronicle your activity history through heatmaps.</p>
+<p align="center">Chronicle your workout sessions and send to garmin.</p>
 
-## UI Direction
-- The MPA is the product and the active refinement target.
-- Future styling changes should be reviewed in-browser with `A` vs `B` comparisons at `/design-review`.
-- Product direction details: [`docs/UI_DIRECTION.md`](docs/UI_DIRECTION.md)
-- Refinement process and page order: [`docs/MPA_REFINEMENT_ROADMAP.md`](docs/MPA_REFINEMENT_ROADMAP.md)
+#
+
+This app is currently built for someone that likes self-hosting their own docker apps, who uses Strava but hates writing out descriptions, and who wears a Garmin watch.
 
 ## Key Features
-- Auto-processes new activities on a worker heartbeat.
-- Writes description templates back to Strava based on activity profile.
-- Includes a polished local web app:
+- Auto-processes new activities.  
+- Activity Profile matching,  
+  - yaml Profile Builder.  
+- Custom Description Templates per profile,  
+  - Jinja Template Builder  
+- Plan and wargame your next sessions.  
+  - yaml Workout Builder  
+  - Send to your garmin watch workout calendar.  
+
+## Includes a polished local web app:
   - `View` (`/dashboard`) for long-term trends.
   - `Plan` (`/plan`) for planning your next move.
   - `Build` (`/editor`) for template editing and preview.
   - `Sources` (`/setup`) for source credentials and OAuth.
   - `Control` (`/control`) for one-click API operations.
-- Supports profile-based templates (for different activity types).
-- Exposes local API endpoints for automation and reruns.
 
 ## Screenshots
 <img width="1915" height="1923" alt="Screenshot 2026-03-07 120436" src="https://github.com/user-attachments/assets/d44ccc82-9439-4a38-b034-c07406f1743e" />
@@ -33,16 +37,16 @@ Chronicle automatically builds rich Strava activity descriptions by combining da
 <img width="2336" height="1939" alt="Screenshot 2026-02-20 115752 REDACTED" src="https://github.com/user-attachments/assets/6a4a2e88-c7c0-4692-ac33-5251b52d753d" />
 
 
-## Quick Start (macOS)
+## Quick Start
 
-### Step 0: Install Docker Desktop for Mac
+#### Step 0: Install Docker Desktop for Mac
 1. Watch this quick setup video: https://www.youtube.com/watch?v=agkOZr27d3Y
 2. Install Docker Desktop and launch it.
 
-### Step 1: Open Terminal
+#### Step 1: Open Terminal
 - Open `Terminal.app`.
 
-### Step 2: Create a folder and clone Chronicle Project
+#### Step 2: Create a folder and clone Chronicle Project
 ```bash
 mkdir -p ~/docker/chronicle
 cd ~/docker/chronicle
@@ -50,43 +54,57 @@ git clone https://github.com/seanap/Chronicle.git
 cd Chronicle
 cp .env.example .env
 ```
-
-### Step 3: Start Chronicle
+#### Step 3: Start Chronicle
 ```bash
 docker compose up -d --build
 ```
-
 - Re-run the same command after pulling new code so the latest backend and frontend assets are rebuilt into the image.
 
-### Step 4: Open the app
+#### Step 4: Open the app
 ```bash
 http://localhost:1609
 ```
-
-- Dashboard (`View`): http://localhost:1609/dashboard
-- Plan (`Plan`): http://localhost:1609/plan
-- Template Editor (`Build`): http://localhost:1609/editor
-- Source Setup (`Sources`): http://localhost:1609/setup
-- API Control (`Control`): http://localhost:1609/control
-- Design review: `http://localhost:1609/design-review`
-
-### Step 5: Add your credentials in `Sources`
+#### Step 5: Add your credentials in `Sources`
 - Go to `Sources` and fill in your source keys/tokens.
 - Source setup guide: [`docs/SOURCES_SETUP.md`](docs/SOURCES_SETUP.md)
+
+## Using Chronicle
+
+#### Auto-Descriptions:
+-  Go to Build page >
+  - Template Workshop Drawer >
+    - Duplicate default Template, save-as, and load >
+    - Modify Advanced Template jinja >
+    - Confirm preview then `Save + Publish`
+  - Profile Workshop >
+    - Select Profile from dropdown >
+    - Enable >
+    - `Set Working`
+  - Template Workshop >
+    - Duplicate profile Template, save-as, and load >
+    - Modify Advanced Template jinja >
+    - `Save + Publish`
+#### Plan
+- Go to Plan page
+  - Pace Workshop drawer >
+    - Calcule Recent Race >
+    - Set Marathon Goal
+  - Type daily mileage targets >
+    - Set run type to SOS to enable session workout >
+    - select workout shorthand from dropdown, modify if needed
+  - Workout Workshop drawer >
+    - select template from dropdown >
+    - modify yaml to customize, `Save`
+#### View
+- Go to View page >
+  - Scope drawer >
+    - Enable Years and Activity Types
+  - Click the top Activity Type buttons to filter
+  - Click the Data buttons to filter
+  - Click the bottom Most Active buttons to filter
 
 ## Documentation
 - API docs: [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md)
 - Android widget companion: [`docs/ANDROID_WIDGET_COMPANION.md`](docs/ANDROID_WIDGET_COMPANION.md)
 - Android widget APK downloads: [GitHub Releases](https://github.com/seanap/Chronicle/releases)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)
-
-## Updating a Docker Deploy
-
-If you already have Chronicle running and want the current MPA product build to show up:
-
-```bash
-git pull
-docker compose up -d --build
-```
-
-Then hard refresh the browser on `/dashboard` or `/control`.
