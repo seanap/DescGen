@@ -10,7 +10,7 @@
 
 #
 
-This app is built for someone that likes self-hosting their own docker apps, who uses Strava but hates writing out descriptions, and who wears a Garmin watch.
+This app is a self-hosted Docker web app, Requires a Strava and Garmin account, and is compatible with Intervals.icu, SmashRun, WeatherAPI. Developed by a runner that wears a Garmin watch, other sports are untested and other brands are not supported.
 
 ## Key Features
 - Auto-processes new activities.  
