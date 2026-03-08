@@ -1,9 +1,13 @@
 import unittest
+from unittest.mock import patch
+
+import requests
 
 from chronicle.stat_modules.misery_index import (
     calculate_misery_index,
     calculate_misery_index_components,
     get_aqi_description,
+    get_misery_index_details_for_activity,
     get_misery_index_description,
 )
 
@@ -239,6 +243,43 @@ class TestMiseryIndex(unittest.TestCase):
     def test_aqi_description(self) -> None:
         self.assertEqual(get_aqi_description(1), "😃")
         self.assertEqual(get_aqi_description(99), "Unknown")
+
+    def test_activity_details_keep_weather_when_aqi_lookup_fails(self) -> None:
+        activity = {
+            "start_date": "2026-03-07T12:00:00Z",
+            "start_latlng": [33.75, -84.39],
+        }
+        with patch(
+            "chronicle.stat_modules.misery_index._get_weather_data",
+            return_value={
+                "temp_f": 62.0,
+                "dewpoint_f": 48.0,
+                "humidity": 55.0,
+                "wind_mph": 4.0,
+                "cloud": 20.0,
+                "precip_in": 0.0,
+                "is_day": True,
+                "chance_of_rain": 5.0,
+                "chance_of_snow": 0.0,
+                "will_it_rain": False,
+                "will_it_snow": False,
+                "condition_text": "Sunny",
+                "heatindex_f": 62.0,
+                "windchill_f": 62.0,
+                "tz_id": "America/New_York",
+            },
+        ), patch(
+            "chronicle.stat_modules.misery_index._get_air_quality_index",
+            side_effect=requests.RequestException("aqi unavailable"),
+        ):
+            details = get_misery_index_details_for_activity(activity, "weather-key")
+
+        self.assertIsNotNone(details)
+        assert details is not None
+        self.assertIsInstance(details["misery_index"], float)
+        self.assertEqual(details["aqi"], None)
+        self.assertEqual(details["aqi_description"], "Unknown")
+        self.assertEqual(details["weather"]["temp_f"], 62.0)
 
 
 if __name__ == "__main__":

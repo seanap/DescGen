@@ -752,12 +752,25 @@ def get_misery_index_details_for_activity(
         return None
 
     lat, lon = start_latlng
+    weather_data: dict[str, Any] | None = None
+    aqi: int | None = None
+    weather_error: requests.RequestException | None = None
+    aqi_error: requests.RequestException | None = None
     try:
         weather_data = _get_weather_data(weather_api_key, float(lat), float(lon), activity_time)
+    except requests.RequestException as exc:
+        weather_error = exc
+        logger.error("Weather API weather request failed: %s", exc)
+    try:
         aqi = _get_air_quality_index(weather_api_key, float(lat), float(lon))
     except requests.RequestException as exc:
-        logger.error("Weather API request failed: %s", exc)
-        return None
+        aqi_error = exc
+        logger.error("Weather API AQI request failed: %s", exc)
+
+    if weather_data is None and aqi is None and (weather_error is not None or aqi_error is not None):
+        if weather_error is not None:
+            raise weather_error
+        raise aqi_error if aqi_error is not None else requests.RequestException("Weather API request failed")
 
     if not weather_data:
         return {

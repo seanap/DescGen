@@ -613,6 +613,9 @@ def _build_garmin_last_activity_context(
         "max_hr": int(round(_as_float(last_activity.get("maxHR")) or 0))
         if isinstance(last_activity.get("maxHR"), (int, float))
         else "N/A",
+        "cadence_spm": int(round(_as_float(last_activity.get("averageRunningCadenceInStepsPerMinute")) or 0))
+        if isinstance(last_activity.get("averageRunningCadenceInStepsPerMinute"), (int, float))
+        else "N/A",
         "avg_power_w": int(round(avg_power)) if avg_power is not None else "N/A",
         "norm_power_w": int(round(norm_power)) if norm_power is not None else "N/A",
         "max_power_w": int(round(max_power)) if max_power is not None else "N/A",

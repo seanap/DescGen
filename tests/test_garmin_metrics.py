@@ -300,6 +300,7 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         self.assertEqual(last_activity["distance_miles"], "8.02 mi")
         self.assertEqual(last_activity["activity_id"], 21922402831)
         self.assertEqual(last_activity["average_pace"], "7:19/mi")
+        self.assertEqual(last_activity["cadence_spm"], 176)
         self.assertIn("Z1", last_activity["hr_zone_summary"])
         self.assertEqual(last_activity["total_sets"], 2)
         self.assertEqual(last_activity["active_sets"], 2)

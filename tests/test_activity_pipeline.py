@@ -161,6 +161,48 @@ class TestActivityGarminBadges(unittest.TestCase):
         self.assertEqual(context.get("smashrun_activity_badges"), ["Two by 365 by 10k"])
         self.assertEqual(context.get("smashrun", {}).get("activity_badges"), ["Two by 365 by 10k"])
 
+    def test_description_context_uses_aligned_garmin_activity_hr_and_cadence(self) -> None:
+        context = _build_description_context(
+            detailed_activity={
+                "id": 17455368360,
+                "name": "Lunch Run",
+                "type": "Run",
+                "sport_type": "Run",
+                "distance": 8046.72,
+                "moving_time": 2400,
+                "elapsed_time": 2460,
+                "average_speed": 3.3528,
+                "average_heartrate": 151,
+                "average_cadence": 88.0,
+                "start_latlng": [33.75, -84.39],
+            },
+            training={
+                "average_hr": 143,
+                "running_cadence": 176,
+                "_garmin_activity_aligned": True,
+                "garmin_last_activity": {
+                    "activity_id": 3002,
+                    "average_hr": 167,
+                    "cadence_spm": 182,
+                },
+                "garmin_segment_notables": [],
+            },
+            intervals_payload={},
+            week={"gap": "8:00/mi", "distance": 10.0, "elevation": 100.0, "duration": "1:20:00", "beers_earned": 6.0, "calories": 1000, "run_count": 2},
+            month={"gap": "8:10/mi", "distance": 40.0, "elevation": 400.0, "duration": "5:20:00", "beers_earned": 25.0, "calories": 4000, "run_count": 8},
+            year={"gap": "8:20/mi", "distance": 80.0, "elevation": 800.0, "duration": "10:40:00", "beers_earned": 50.0, "calories": 8000, "run_count": 16},
+            longest_streak=None,
+            notables=[],
+            latest_elevation_feet=None,
+            misery_index=None,
+            misery_index_description=None,
+            air_quality_index=None,
+            aqi_description=None,
+        )
+
+        self.assertEqual(context.get("activity", {}).get("average_hr"), 167)
+        self.assertEqual(context.get("activity", {}).get("cadence_spm"), 182)
+
 
 class TestActivitySmashrunBadges(unittest.TestCase):
     def test_extract_activity_smashrun_badges_matches_smashrun_and_strava_ids(self) -> None:

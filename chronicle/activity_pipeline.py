@@ -2272,6 +2272,14 @@ def _get_garmin_metrics(client: Any | None) -> dict[str, Any]:
 def _merge_hr_cadence_from_strava(training: dict[str, Any], detailed_activity: dict[str, Any]) -> tuple[Any, Any]:
     average_hr = training.get("average_hr", "N/A")
     running_cadence = training.get("running_cadence", "N/A")
+    garmin_last = training.get("garmin_last_activity") if isinstance(training.get("garmin_last_activity"), dict) else {}
+    if training.get("_garmin_activity_aligned"):
+        garmin_average_hr = garmin_last.get("average_hr")
+        if garmin_average_hr not in {None, "", "N/A"}:
+            average_hr = garmin_average_hr
+        garmin_cadence = garmin_last.get("cadence_spm")
+        if garmin_cadence not in {None, "", "N/A"}:
+            running_cadence = garmin_cadence
 
     strava_hr = detailed_activity.get("average_heartrate")
     if average_hr == "N/A" and isinstance(strava_hr, (int, float)):
