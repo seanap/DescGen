@@ -359,6 +359,76 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         self.assertEqual(rest_set["weight_value"], "N/A")
         self.assertEqual(rest_set["weight_display"], "N/A")
 
+    def test_build_garmin_activity_context_exposes_vescdash_metrics(self) -> None:
+        context = build_garmin_activity_context(
+            None,
+            {
+                "activityId": 22132894377,
+                "activityName": "Forsyth County EUC riding",
+                "activityTypeDTO": {"typeKey": "other"},
+                "summaryDTO": {
+                    "averageHR": 65.0,
+                    "maxHR": 85.0,
+                    "distance": 1451.89,
+                    "duration": 561.418,
+                    "movingDuration": 421.0,
+                    "averageSpeed": 2.5859999656677246,
+                    "maxSpeed": 7.241000175476074,
+                    "calories": 15.0,
+                    "waterEstimated": 51.0,
+                },
+                "connectIQMeasurements": [
+                    {
+                        "appID": "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                        "developerFieldNumber": 21,
+                        "value": "Profile 1",
+                    },
+                    {
+                        "appID": "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                        "developerFieldNumber": 23,
+                        "value": "4.2",
+                    },
+                    {
+                        "appID": "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                        "developerFieldNumber": 24,
+                        "value": "17.8",
+                    }
+                ],
+                "metricDescriptors": [
+                    {
+                        "appID": "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                        "developerFieldNumber": 4,
+                        "key": "connectIQDeveloperField-20",
+                        "metricsIndex": 0,
+                    },
+                    {
+                        "appID": "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                        "developerFieldNumber": 26,
+                        "key": "connectIQDeveloperField-21",
+                        "metricsIndex": 1,
+                    }
+                ],
+                "activityDetailMetrics": [
+                    {"metrics": [125.0, 12.0]},
+                    {"metrics": [180.0, 18.0]},
+                ],
+            },
+        )
+
+        self.assertEqual(context["activity_type"], "other")
+        self.assertEqual(context["average_hr"], 65)
+        self.assertEqual(context["calories"], 15)
+        self.assertEqual(context["connectiq_app_ids"], ["0432631a-d5e3-4272-a072-fa8c7e24c483"])
+        self.assertEqual(context["connectiq_measurements"][0]["developer_field_number"], 21)
+        self.assertEqual(context["connectiq_detail_metrics"][0]["last_value"], 180.0)
+        self.assertEqual(context["vescdash"]["profile_name"], "Profile 1")
+        self.assertEqual(context["vescdash"]["trip_distance_miles"], "4.2 mi")
+        self.assertEqual(context["vescdash"]["max_speed_mph"], "17.8 mph")
+        self.assertEqual(context["vescdash"]["current_power_w"], "180 W")
+        self.assertEqual(context["vescdash"]["current_temperature_f"], "18°F")
+        self.assertTrue(context["vescdash_detected"])
+        self.assertTrue(context["wheeldash_detected"])
+
 
 if __name__ == "__main__":
     unittest.main()

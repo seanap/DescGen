@@ -17,6 +17,35 @@ from ..numeric_utils import (
 
 logger = logging.getLogger(__name__)
 
+VESCDASH_APP_IDS = {
+    "0432631a-d5e3-4272-a072-fa8c7e24c483",
+}
+
+VESCDASH_FIELD_DEFINITIONS: dict[int, dict[str, str]] = {
+    1: {"key": "current_pwm_pct", "label": "Current PWM", "unit": "%"},
+    2: {"key": "current_voltage_v", "label": "Current Voltage", "unit": "V"},
+    3: {"key": "current_current_a", "label": "Current Current", "unit": "A"},
+    4: {"key": "current_power_w", "label": "Current Power", "unit": "W"},
+    8: {"key": "max_pwm_pct", "label": "Maximum PWM", "unit": "%"},
+    9: {"key": "max_current_a", "label": "Maximum Current", "unit": "A"},
+    10: {"key": "max_power_w", "label": "Maximum Power", "unit": "W"},
+    13: {"key": "average_current_a", "label": "Average Current", "unit": "A"},
+    14: {"key": "average_power_w", "label": "Average Power", "unit": "W"},
+    15: {"key": "running_time_s", "label": "Running Time", "unit": "s"},
+    16: {"key": "min_voltage_v", "label": "Minimum Voltage", "unit": "V"},
+    17: {"key": "max_voltage_v", "label": "Maximum Voltage", "unit": "V"},
+    18: {"key": "min_battery_pct", "label": "Minimum Battery", "unit": "%"},
+    19: {"key": "max_battery_pct", "label": "Maximum Battery", "unit": "%"},
+    21: {"key": "wheel_name", "label": "Wheel Name", "unit": ""},
+    22: {"key": "current_speed_mph", "label": "Current Speed", "unit": "mph"},
+    23: {"key": "trip_distance_miles", "label": "Trip Distance", "unit": "mi"},
+    24: {"key": "max_speed_mph", "label": "Maximum Speed", "unit": "mph"},
+    25: {"key": "average_speed_mph", "label": "Average Speed", "unit": "mph"},
+    26: {"key": "current_temperature_f", "label": "Current Temperature", "unit": "°F"},
+    27: {"key": "min_temperature_f", "label": "Minimum Temperature", "unit": "°F"},
+    28: {"key": "max_temperature_f", "label": "Maximum Temperature", "unit": "°F"},
+}
+
 
 def safe_get(value: Any, keys: list[Any], default: Any = "N/A") -> Any:
     cursor = value
@@ -435,11 +464,217 @@ def _fetch_activity_exercise_sets(client: Any | None, activity_id: int | None) -
         return None
 
 
+def _normalize_garmin_activity_payload(activity_payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(activity_payload)
+    summary = activity_payload.get("summaryDTO") if isinstance(activity_payload.get("summaryDTO"), dict) else {}
+    metadata = activity_payload.get("metadataDTO") if isinstance(activity_payload.get("metadataDTO"), dict) else {}
+    activity_type_dto = (
+        activity_payload.get("activityTypeDTO") if isinstance(activity_payload.get("activityTypeDTO"), dict) else {}
+    )
+
+    field_map = {
+        "activityName": activity_payload.get("activityName"),
+        "startTimeGMT": summary.get("startTimeGMT"),
+        "startTimeLocal": summary.get("startTimeLocal"),
+        "distance": summary.get("distance"),
+        "duration": summary.get("duration"),
+        "movingDuration": summary.get("movingDuration"),
+        "elapsedDuration": summary.get("elapsedDuration"),
+        "averageSpeed": summary.get("averageSpeed"),
+        "averageMovingSpeed": summary.get("averageMovingSpeed"),
+        "maxSpeed": summary.get("maxSpeed"),
+        "avgElevation": summary.get("avgElevation"),
+        "maxElevation": summary.get("maxElevation"),
+        "minElevation": summary.get("minElevation"),
+        "elevationGain": summary.get("elevationGain"),
+        "elevationLoss": summary.get("elevationLoss"),
+        "averageHR": summary.get("averageHR"),
+        "minHR": summary.get("minHR"),
+        "maxHR": summary.get("maxHR"),
+        "steps": summary.get("steps"),
+        "calories": summary.get("calories"),
+        "waterEstimated": summary.get("waterEstimated"),
+        "trainingEffect": summary.get("trainingEffect"),
+        "anaerobicTrainingEffect": summary.get("anaerobicTrainingEffect"),
+        "trainingEffectLabel": summary.get("trainingEffectLabel"),
+        "activityTrainingLoad": summary.get("activityTrainingLoad"),
+        "startLatitude": summary.get("startLatitude"),
+        "startLongitude": summary.get("startLongitude"),
+        "endLatitude": summary.get("endLatitude"),
+        "endLongitude": summary.get("endLongitude"),
+        "deviceApplicationInstallationId": metadata.get("deviceApplicationInstallationId"),
+        "connectIQMeasurements": activity_payload.get("connectIQMeasurements"),
+        "metricDescriptors": activity_payload.get("metricDescriptors"),
+        "activityDetailMetrics": activity_payload.get("activityDetailMetrics"),
+    }
+    for key, value in field_map.items():
+        if normalized.get(key) is None and value is not None:
+            normalized[key] = value
+
+    if not isinstance(normalized.get("activityType"), dict):
+        type_key = activity_type_dto.get("typeKey")
+        if isinstance(type_key, str) and type_key.strip():
+            normalized["activityType"] = {"typeKey": type_key}
+
+    return normalized
+
+
+def _normalize_connectiq_measurements(activity_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_rows = activity_payload.get("connectIQMeasurements")
+    if not isinstance(raw_rows, list):
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for row in raw_rows:
+        if not isinstance(row, dict):
+            continue
+        app_id = str(row.get("appID") or "").strip()
+        developer_field_number = _as_int(row.get("developerFieldNumber"))
+        raw_value = row.get("value")
+        value = str(raw_value).strip() if raw_value is not None else "N/A"
+        field_spec = VESCDASH_FIELD_DEFINITIONS.get(developer_field_number or -1, {})
+        numeric_value = _as_float(raw_value)
+        rows.append(
+            {
+                "app_id": app_id or "N/A",
+                "developer_field_number": developer_field_number if developer_field_number is not None else "N/A",
+                "value": value or "N/A",
+                "numeric_value": numeric_value if numeric_value is not None else "N/A",
+                "metric_key": str(field_spec.get("key") or "N/A"),
+                "label": str(field_spec.get("label") or "N/A"),
+                "unit": str(field_spec.get("unit") or ""),
+            }
+        )
+    return rows
+
+
+def _summarize_connectiq_detail_metrics(activity_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    descriptors = activity_payload.get("metricDescriptors")
+    detail_rows = activity_payload.get("activityDetailMetrics")
+    if not isinstance(descriptors, list) or not isinstance(detail_rows, list):
+        return []
+
+    summaries: list[dict[str, Any]] = []
+    for descriptor in descriptors:
+        if not isinstance(descriptor, dict):
+            continue
+        app_id = str(descriptor.get("appID") or "").strip()
+        if not app_id:
+            continue
+        metrics_index = _as_int(descriptor.get("metricsIndex"))
+        if metrics_index is None or metrics_index < 0:
+            continue
+
+        values: list[Any] = []
+        for detail_row in detail_rows:
+            if not isinstance(detail_row, dict):
+                continue
+            metrics = detail_row.get("metrics")
+            if not isinstance(metrics, list) or metrics_index >= len(metrics):
+                continue
+            value = metrics[metrics_index]
+            if value is not None:
+                values.append(value)
+
+        if not values:
+            continue
+
+        numeric_values = [float(value) for value in values if isinstance(value, (int, float))]
+        last_value = values[-1]
+        developer_field_number = _as_int(descriptor.get("developerFieldNumber"))
+        field_spec = VESCDASH_FIELD_DEFINITIONS.get(developer_field_number or -1, {})
+        summaries.append(
+            {
+                "app_id": app_id,
+                "developer_field_number": developer_field_number or "N/A",
+                "key": str(descriptor.get("key") or "N/A"),
+                "sample_count": len(values),
+                "last_value": last_value,
+                "min_value": min(numeric_values) if numeric_values else "N/A",
+                "max_value": max(numeric_values) if numeric_values else "N/A",
+                "metric_key": str(field_spec.get("key") or "N/A"),
+                "label": str(field_spec.get("label") or "N/A"),
+                "unit": str(field_spec.get("unit") or ""),
+            }
+        )
+    return summaries
+
+
+def _format_vescdash_value(value: Any, unit: str = "") -> str:
+    if value in (None, "", "N/A"):
+        return "N/A"
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or "N/A"
+    if isinstance(value, (int, float)):
+        if unit == "s":
+            return _seconds_to_hms(value)
+        rounded = round(float(value), 2)
+        display = str(int(rounded)) if float(rounded).is_integer() else f"{rounded:.2f}".rstrip("0").rstrip(".")
+        if not unit:
+            return display
+        separator = "" if unit in {"%", "°F"} else " "
+        return f"{display}{separator}{unit}"
+    return str(value)
+
+
+def _build_vescdash_context(
+    connectiq_measurements: list[dict[str, Any]],
+    connectiq_detail_metrics: list[dict[str, Any]],
+    connectiq_app_ids: list[str],
+) -> dict[str, Any]:
+    measurement_by_key = {
+        str(item.get("metric_key") or "").strip(): item
+        for item in connectiq_measurements
+        if str(item.get("metric_key") or "").strip() not in {"", "N/A"}
+    }
+    detail_by_key = {
+        str(item.get("metric_key") or "").strip(): item
+        for item in connectiq_detail_metrics
+        if str(item.get("metric_key") or "").strip() not in {"", "N/A"}
+    }
+
+    context: dict[str, Any] = {
+        "detected": any(app_id in VESCDASH_APP_IDS for app_id in connectiq_app_ids),
+        "app_ids": list(connectiq_app_ids),
+        "profile_name": "N/A",
+        "wheel_name": "N/A",
+    }
+
+    for developer_field_number, spec in VESCDASH_FIELD_DEFINITIONS.items():
+        metric_key = spec["key"]
+        unit = spec["unit"]
+        measurement = measurement_by_key.get(metric_key)
+        detail = detail_by_key.get(metric_key)
+
+        raw_value: Any = "N/A"
+        if measurement is not None:
+            raw_value = measurement.get("numeric_value")
+            if raw_value in (None, "N/A"):
+                raw_value = measurement.get("value", "N/A")
+        elif detail is not None:
+            raw_value = detail.get("last_value", "N/A")
+
+        context[metric_key] = _format_vescdash_value(raw_value, unit=unit)
+        context[f"{metric_key}_raw"] = raw_value if raw_value not in (None, "") else "N/A"
+        context[f"{metric_key}_label"] = spec["label"]
+
+        if detail is not None:
+            context[f"{metric_key}_min"] = _format_vescdash_value(detail.get("min_value"), unit=unit)
+            context[f"{metric_key}_max"] = _format_vescdash_value(detail.get("max_value"), unit=unit)
+
+    wheel_name_value = measurement_by_key.get("wheel_name", {}).get("value", "N/A")
+    context["wheel_name"] = wheel_name_value if isinstance(wheel_name_value, str) and wheel_name_value.strip() else "N/A"
+    context["profile_name"] = context["wheel_name"]
+    return context
+
+
 def build_garmin_activity_context(client: Any | None, activity_payload: dict[str, Any]) -> dict[str, Any]:
-    activity_id = _as_int(activity_payload.get("activityId"))
+    normalized_payload = _normalize_garmin_activity_payload(activity_payload)
+    activity_id = _as_int(normalized_payload.get("activityId"))
     exercise_sets_payload = _fetch_activity_exercise_sets(client, activity_id)
     return _build_garmin_last_activity_context(
-        activity_payload,
+        normalized_payload,
         exercise_sets_payload=exercise_sets_payload,
     )
 
@@ -515,6 +750,15 @@ def get_activity_context_for_strava_activity(
     best_candidate = dict(ranked[0][1])
     activity_id = _as_int(best_candidate.get("activityId"))
 
+    get_activity = getattr(client, "get_activity", None)
+    if activity_id is not None and callable(get_activity):
+        try:
+            summary = get_activity(activity_id)
+            if isinstance(summary, dict):
+                best_candidate.update(summary)
+        except Exception as exc:
+            logger.debug("Garmin activity summary lookup unavailable for %s: %s", activity_id, exc)
+
     get_activity_details = getattr(client, "get_activity_details", None)
     if activity_id is not None and callable(get_activity_details):
         try:
@@ -532,12 +776,23 @@ def _build_garmin_last_activity_context(
     *,
     exercise_sets_payload: Any | None = None,
 ) -> dict[str, Any]:
+    last_activity = _normalize_garmin_activity_payload(last_activity)
     activity_id = _as_int(last_activity.get("activityId"))
     avg_power = _as_float(last_activity.get("avgPower"))
     norm_power = _as_float(last_activity.get("normPower"))
     max_power = _as_float(last_activity.get("maxPower"))
     strength_summary_sets = _normalize_strength_summary_sets(last_activity.get("summarizedExerciseSets"))
     exercise_sets = _normalize_exercise_sets(exercise_sets_payload)
+    connectiq_measurements = _normalize_connectiq_measurements(last_activity)
+    connectiq_detail_metrics = _summarize_connectiq_detail_metrics(last_activity)
+    connectiq_app_ids = sorted(
+        {
+            str(row.get("app_id") or "").strip()
+            for row in connectiq_measurements + connectiq_detail_metrics
+            if str(row.get("app_id") or "").strip()
+        }
+    )
+    vescdash = _build_vescdash_context(connectiq_measurements, connectiq_detail_metrics, connectiq_app_ids)
 
     active_sets_from_payload = [row for row in exercise_sets if str(row.get("set_type")) == "ACTIVE"]
     total_sets = _as_int(last_activity.get("totalSets"))
@@ -599,6 +854,7 @@ def _build_garmin_last_activity_context(
         "moving_time": _seconds_to_hms(last_activity.get("movingDuration")),
         "elapsed_time": _seconds_to_hms(last_activity.get("elapsedDuration")),
         "average_pace": _mps_to_pace(last_activity.get("averageSpeed")),
+        "average_moving_speed_mph": _mps_to_mph(last_activity.get("averageMovingSpeed")),
         "average_speed_mph": _mps_to_mph(last_activity.get("averageSpeed")),
         "max_speed_mph": _mps_to_mph(last_activity.get("maxSpeed")),
         "gap_pace": _mps_to_pace(last_activity.get("avgGradeAdjustedSpeed")),
@@ -609,6 +865,9 @@ def _build_garmin_last_activity_context(
         "min_elevation_feet": _meters_to_feet(last_activity.get("minElevation")),
         "average_hr": int(round(_as_float(last_activity.get("averageHR")) or 0))
         if isinstance(last_activity.get("averageHR"), (int, float))
+        else "N/A",
+        "min_hr": int(round(_as_float(last_activity.get("minHR")) or 0))
+        if isinstance(last_activity.get("minHR"), (int, float))
         else "N/A",
         "max_hr": int(round(_as_float(last_activity.get("maxHR")) or 0))
         if isinstance(last_activity.get("maxHR"), (int, float))
@@ -648,6 +907,26 @@ def _build_garmin_last_activity_context(
         "steps": int(round(_as_float(last_activity.get("steps")) or 0))
         if isinstance(last_activity.get("steps"), (int, float))
         else "N/A",
+        "calories": int(round(_as_float(last_activity.get("calories")) or 0))
+        if isinstance(last_activity.get("calories"), (int, float))
+        else "N/A",
+        "water_estimated": int(round(_as_float(last_activity.get("waterEstimated")) or 0))
+        if isinstance(last_activity.get("waterEstimated"), (int, float))
+        else "N/A",
+        "activity_training_load": round(float(last_activity.get("activityTrainingLoad")), 2)
+        if isinstance(last_activity.get("activityTrainingLoad"), (int, float))
+        else "N/A",
+        "training_effect": round(float(last_activity.get("trainingEffect")), 1)
+        if isinstance(last_activity.get("trainingEffect"), (int, float))
+        else "N/A",
+        "anaerobic_training_effect": round(float(last_activity.get("anaerobicTrainingEffect")), 1)
+        if isinstance(last_activity.get("anaerobicTrainingEffect"), (int, float))
+        else "N/A",
+        "training_effect_label": str(last_activity.get("trainingEffectLabel") or "N/A"),
+        "start_latitude": _as_float(last_activity.get("startLatitude")) or "N/A",
+        "start_longitude": _as_float(last_activity.get("startLongitude")) or "N/A",
+        "end_latitude": _as_float(last_activity.get("endLatitude")) or "N/A",
+        "end_longitude": _as_float(last_activity.get("endLongitude")) or "N/A",
         "lap_count": int(round(_as_float(last_activity.get("lapCount")) or 0))
         if isinstance(last_activity.get("lapCount"), (int, float))
         else "N/A",
@@ -659,6 +938,12 @@ def _build_garmin_last_activity_context(
         "exercise_sets": exercise_sets,
         "hr_zone_summary": _zone_summary(last_activity, "hrTimeInZone_"),
         "power_zone_summary": _zone_summary(last_activity, "powerTimeInZone_"),
+        "connectiq_measurements": connectiq_measurements,
+        "connectiq_detail_metrics": connectiq_detail_metrics,
+        "connectiq_app_ids": connectiq_app_ids,
+        "vescdash": vescdash,
+        "vescdash_detected": bool(vescdash.get("detected")),
+        "wheeldash_detected": bool(vescdash.get("detected")),
         "is_pr": bool(last_activity.get("pr")),
     }
 

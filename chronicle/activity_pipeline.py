@@ -1895,6 +1895,27 @@ def _criteria_match_reasons(
             return []
         reasons.append(f"garmin_activity_type={garmin_type}")
 
+    if "garmin_connectiq_app_ids_any" in criteria:
+        evaluated = True
+        garmin_last = training.get("garmin_last_activity") if isinstance(training, dict) else None
+        actual_app_ids = set()
+        if isinstance(garmin_last, dict):
+            app_ids = garmin_last.get("connectiq_app_ids")
+            if isinstance(app_ids, list):
+                actual_app_ids = {
+                    str(item).strip().lower()
+                    for item in app_ids
+                    if isinstance(item, str) and str(item).strip()
+                }
+        expected_app_ids = {
+            str(item).strip().lower()
+            for item in _criteria_string_list(criteria.get("garmin_connectiq_app_ids_any"))
+            if str(item).strip()
+        }
+        if not expected_app_ids or not actual_app_ids.intersection(expected_app_ids):
+            return []
+        reasons.append("garmin_connectiq_app_id match")
+
     if not evaluated:
         return []
     return reasons or ["criteria matched"]
@@ -2225,6 +2246,10 @@ def _profile_activity_update_payload(profile_id: str, detailed_activity: dict[st
         payload["private"] = True
         payload["name"] = "Strength Workout"
         payload["type"] = "Workout"
+        return payload
+    if profile_id == "onewheel":
+        payload["type"] = "EBikeRide"
+        payload["name"] = "Onewheel Float 🛹"
         return payload
     if profile_id == "incline_treadmill":
         payload["type"] = "Walk"

@@ -923,6 +923,17 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
         "criteria": {"kind": "activity", "description": "Strava commute flag."},
     },
     {
+        "profile_id": "onewheel",
+        "label": "Onewheel",
+        "enabled": True,
+        "locked": False,
+        "priority": 79,
+        "criteria": {
+            "kind": "activity",
+            "description": "Garmin VESCDash-backed Onewheel/EUC activities.",
+        },
+    },
+    {
         "profile_id": "walk",
         "label": "Walk",
         "enabled": True,
@@ -999,6 +1010,20 @@ PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
     "commute": """🚲 Commute Run
 🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🕓 {{ activity.time }}
 🌤️ MI {{ misery.index }} {{ misery.index.emoji }}""",
+    "onewheel": """{% set garmin = raw.training.garmin_last_activity if raw is defined and raw.training is defined and raw.training.garmin_last_activity is defined and raw.training.garmin_last_activity else {} %}
+{% set vesc = garmin.vescdash if garmin and garmin.vescdash is defined and garmin.vescdash else {} %}
+🛞 Onewheel
+🏷️ {{ activity.name }} | Garmin {{ garmin.activity_type | default('N/A') }}
+🕓 {{ garmin.moving_time | default(activity.time) }} | 🗺️ {{ garmin.distance_miles | default(activity.distance_miles) }} | 🚄 {{ garmin.average_speed_mph | default(activity.average_speed_mph) }} | ⚡ Max {{ garmin.max_speed_mph | default('N/A') }}
+💓 {{ garmin.average_hr | default(activity.average_hr) }} avg | {{ garmin.max_hr | default('N/A') }} max | 🔥 {{ garmin.calories | default('N/A') }} cal | 💧 {{ garmin.water_estimated | default('N/A') }} ml
+🗻 +{{ garmin.elevation_gain_feet | default('N/A') }}' / -{{ garmin.elevation_loss_feet | default('N/A') }}' | Avg {{ garmin.avg_elevation_feet | default('N/A') }}' | Load {{ garmin.activity_training_load | default('N/A') }}
+🔌 VESCDash {{ vesc.profile_name | default('N/A') }}{% for app_id in garmin.connectiq_app_ids | default([]) %} {{ app_id }}{% endfor %}
+🧭 Trip {{ vesc.trip_distance_miles | default('N/A') }} | Avg {{ vesc.average_speed_mph | default('N/A') }} | Max {{ vesc.max_speed_mph | default('N/A') }}
+⚡ Avg {{ vesc.average_power_w | default('N/A') }} | Max {{ vesc.max_power_w | default('N/A') }} | Max PWM {{ vesc.max_pwm_pct | default('N/A') }}
+🔌 Avg Current {{ vesc.average_current_a | default('N/A') }} | Max Current {{ vesc.max_current_a | default('N/A') }} | Running {{ vesc.running_time_s | default('N/A') }}
+🔋 {{ vesc.min_battery_pct | default('N/A') }} → {{ vesc.max_battery_pct | default('N/A') }} | {{ vesc.min_voltage_v | default('N/A') }} → {{ vesc.max_voltage_v | default('N/A') }}
+🌡️ {{ vesc.min_temperature_f | default('N/A') }} → {{ vesc.max_temperature_f | default('N/A') }} | Current {{ vesc.current_temperature_f | default('N/A') }}
+🪫 Current {{ vesc.current_current_a | default('N/A') }} | Voltage {{ vesc.current_voltage_v | default('N/A') }} | Power {{ vesc.current_power_w | default('N/A') }}""",
     "walk": """{% set garmin = raw.training.garmin_last_activity if raw is defined and raw.training is defined and raw.training.garmin_last_activity is defined and raw.training.garmin_last_activity else {} %}
 {% set garmin_steps = garmin.steps if garmin and garmin.steps is defined and garmin.steps != 'N/A' else none %}
 {% set est_steps = none %}
@@ -1496,6 +1521,24 @@ def _profile_builtin_criteria(settings: Settings | None, profile_id: str) -> dic
             "any_of": [
                 {"commute": True},
                 {"strava_tags_any": ["commute"]},
+            ],
+        }
+    if normalized == "onewheel":
+        return {
+            "kind": "activity",
+            "description": "Garmin VESCDash-backed Onewheel/EUC activities.",
+            "any_of": [
+                {
+                    "all_of": [
+                        {"garmin_activity_type_in": ["other"]},
+                        {
+                            "garmin_connectiq_app_ids_any": [
+                                "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                            ]
+                        },
+                    ]
+                },
+                {"text_contains_any": ["onewheel", "euc", "electric unicycle"]},
             ],
         }
     if normalized == "walk":

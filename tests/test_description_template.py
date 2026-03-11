@@ -417,6 +417,11 @@ class TestDescriptionTemplate(unittest.TestCase):
             self.assertEqual(walk["label"], "Walk")
             self.assertTrue(walk["enabled"])
             self.assertFalse(walk["locked"])
+            self.assertTrue(any(str(item.get("profile_id")) == "onewheel" for item in profiles))
+            onewheel = next(item for item in profiles if str(item.get("profile_id")) == "onewheel")
+            self.assertEqual(onewheel["label"], "Onewheel")
+            self.assertTrue(onewheel["enabled"])
+            self.assertFalse(onewheel["locked"])
 
             working = get_working_template_profile(settings)
             self.assertEqual(working["profile_id"], "default")
@@ -434,6 +439,10 @@ class TestDescriptionTemplate(unittest.TestCase):
             walk_template = get_active_template(settings, profile_id="walk")
             self.assertIn("Misery Index", walk_template["template"])
             self.assertIn("Steps:", walk_template["template"])
+            onewheel_template = get_active_template(settings, profile_id="onewheel")
+            self.assertIn("🛞 Onewheel", onewheel_template["template"])
+            self.assertIn("VESCDash", onewheel_template["template"])
+            self.assertIn("Max PWM", onewheel_template["template"])
 
     def test_profile_template_save_and_version_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as td:
