@@ -1882,10 +1882,17 @@ def _criteria_match_reasons(
                 return []
             reasons.append(f"home_distance={home_distance:.2f}mi <= {maximum:.2f}mi")
 
+    aligned_garmin = (
+        training.get("garmin_last_activity")
+        if isinstance(training, dict) and bool(training.get("_garmin_activity_aligned"))
+        else None
+    )
+
     if "garmin_activity_type_in" in criteria:
         evaluated = True
-        garmin_last = training.get("garmin_last_activity") if isinstance(training, dict) else None
-        garmin_type = _normalize_activity_type_key(garmin_last.get("activity_type")) if isinstance(garmin_last, dict) else ""
+        garmin_type = (
+            _normalize_activity_type_key(aligned_garmin.get("activity_type")) if isinstance(aligned_garmin, dict) else ""
+        )
         expected_types = {
             _normalize_activity_type_key(item)
             for item in _criteria_string_list(criteria.get("garmin_activity_type_in"))
@@ -1897,10 +1904,9 @@ def _criteria_match_reasons(
 
     if "garmin_connectiq_app_ids_any" in criteria:
         evaluated = True
-        garmin_last = training.get("garmin_last_activity") if isinstance(training, dict) else None
         actual_app_ids = set()
-        if isinstance(garmin_last, dict):
-            app_ids = garmin_last.get("connectiq_app_ids")
+        if isinstance(aligned_garmin, dict):
+            app_ids = aligned_garmin.get("connectiq_app_ids")
             if isinstance(app_ids, list):
                 actual_app_ids = {
                     str(item).strip().lower()

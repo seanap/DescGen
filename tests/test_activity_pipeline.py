@@ -945,6 +945,59 @@ class TestTreadmillProfileRoutingBehavior(unittest.TestCase):
         self.assertEqual(selected.get("profile_id"), "onewheel")
         self.assertIn("garmin_connectiq_app_id match", selected.get("reasons", []))
 
+    def test_profile_selection_does_not_route_run_to_onewheel_without_aligned_garmin_activity(self) -> None:
+        settings = SimpleNamespace(
+            profile_trail_gain_per_mile_ft=220.0,
+            profile_long_run_miles=10.0,
+            home_latitude=None,
+            home_longitude=None,
+            home_radius_miles=10.0,
+        )
+        profiles = [
+            {"profile_id": "default", "label": "Default", "enabled": True, "priority": 0},
+            {
+                "profile_id": "onewheel",
+                "label": "Onewheel",
+                "enabled": True,
+                "priority": 79,
+                "criteria": {
+                    "kind": "activity",
+                    "any_of": [
+                        {
+                            "all_of": [
+                                {"garmin_activity_type_in": ["other"]},
+                                {
+                                    "garmin_connectiq_app_ids_any": [
+                                        "0432631a-d5e3-4272-a072-fa8c7e24c483",
+                                    ]
+                                },
+                            ]
+                        },
+                        {"text_contains_any": ["onewheel", "euc", "electric unicycle"]},
+                    ],
+                },
+            },
+        ]
+        activity = {
+            "sport_type": "Run",
+            "type": "Run",
+            "name": "Forsyth County - Zone 2",
+            "distance": 12000.0,
+            "moving_time": 3600,
+        }
+        training = {
+            "_garmin_activity_aligned": False,
+            "garmin_last_activity": {
+                "activity_type": "other",
+                "connectiq_app_ids": ["0432631a-d5e3-4272-a072-fa8c7e24c483"],
+            },
+        }
+
+        with patch("chronicle.activity_pipeline.list_template_profiles", return_value=profiles):
+            selected = _select_activity_profile(settings, activity, training=training)
+
+        self.assertEqual(selected.get("profile_id"), "default")
+
 
 class TestExecutableProfileCriteria(unittest.TestCase):
     def setUp(self) -> None:
