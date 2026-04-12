@@ -323,6 +323,77 @@ class _DynamicGarminClient(_DummyGarminClient):
         }
 
 
+class _ReferenceActivityGarminClient(_DummyGarminClient):
+    def get_last_activity(self):
+        payload = dict(super().get_last_activity())
+        payload.update(
+            {
+                "activityId": 9001,
+                "startTimeGMT": "2026-03-20 11:42:00",
+                "duration": 1800,
+                "averageHR": 111,
+                "averageRunningCadenceInStepsPerMinute": 171,
+                "aerobicTrainingEffect": 1.1,
+                "anaerobicTrainingEffect": 0.0,
+                "trainingEffectLabel": "RECOVERY",
+                "avgGradeAdjustedSpeed": 2.5,
+            }
+        )
+        return payload
+
+    def get_training_status(self, end_date):
+        feedback = "PRODUCTIVE_BUILDING" if end_date == "2026-02-12" else "RECOVERY_EASY"
+        return {
+            "mostRecentVO2Max": {"generic": {"vo2MaxPreciseValue": 57.2}},
+            "mostRecentTrainingStatus": {
+                "latestTrainingStatusData": {
+                    "3417115846": {
+                        "trainingStatusFeedbackPhrase": feedback,
+                        "fitnessTrend": "IMPROVING",
+                        "loadLevelTrend": "WITHIN_RANGE",
+                        "weeklyTrainingLoad": 568,
+                        "loadTunnelMin": 60,
+                        "loadTunnelMax": 92,
+                        "acuteTrainingLoadDTO": {
+                            "acwrStatus": "OPTIMAL",
+                            "dailyTrainingLoadChronic": 72,
+                            "dailyTrainingLoadAcute": 78,
+                            "dailyAcuteChronicWorkloadRatio": 1.12,
+                            "acwrPercent": 112,
+                        },
+                    }
+                }
+            },
+        }
+
+    def get_rhr_day(self, start_date):
+        value = 44 if start_date == "2026-02-12" else 55
+        return {
+            "allMetrics": {
+                "metricsMap": {
+                    "WELLNESS_RESTING_HEART_RATE": [{"value": value}],
+                }
+            }
+        }
+
+    def get_training_readiness(self, start_date):
+        return {
+            "dailyReadiness": {
+                "level": "HIGH" if start_date == "2026-02-12" else "POOR",
+                "score": 77 if start_date == "2026-02-12" else 12,
+                "sleepScore": 81 if start_date == "2026-02-12" else 40,
+                "feedbackShort": "Recovered",
+                "recoveryTime": 21600,
+            }
+        }
+
+    def get_endurance_score(self, end_date):
+        return {"overallScore": 7001 if end_date == "2026-02-12" else 6000}
+
+    def get_hill_score(self, end_date):
+        return {"overallScore": 99 if end_date == "2026-02-12" else 50}
+
+
 class TestVo2MaxExpandedMetrics(unittest.TestCase):
     def test_fetch_training_status_returns_expanded_fields(self) -> None:
         metrics = fetch_training_status_and_scores(_DummyGarminClient())
@@ -370,6 +441,39 @@ class TestVo2MaxExpandedMetrics(unittest.TestCase):
         self.assertEqual(metrics["sleep_score"], 86)
         self.assertEqual(metrics["weekly_training_load"], 568)
         self.assertEqual(metrics["daily_acwr_ratio"], 1.12)
+
+    def test_fetch_training_status_uses_reference_activity_for_historical_rerun(self) -> None:
+        reference_activity = {
+            "activityId": 5555,
+            "startTimeGMT": "2026-02-12 11:42:00",
+            "duration": 2400,
+            "distance": 8000.0,
+            "averageSpeed": 3.4,
+            "averageHR": 167,
+            "averageRunningCadenceInStepsPerMinute": 182,
+            "aerobicTrainingEffect": 3.5,
+            "anaerobicTrainingEffect": 0.7,
+            "trainingEffectLabel": "TEMPO",
+            "avgGradeAdjustedSpeed": 3.5,
+            "activityName": "Historical Run",
+            "activityType": {"typeKey": "running"},
+            "startTimeLocal": "2026-02-12 06:42:00",
+        }
+
+        metrics = fetch_training_status_and_scores(
+            _ReferenceActivityGarminClient(),
+            reference_activity=reference_activity,
+            reference_date="2026-02-12T11:42:00Z",
+        )
+
+        self.assertEqual(metrics["training_status_key"], "Productive")
+        self.assertEqual(metrics["training_readiness_score"], 77)
+        self.assertEqual(metrics["resting_hr"], 44)
+        self.assertEqual(metrics["endurance_overall_score"], 7001)
+        self.assertEqual(metrics["hill_overall_score"], 99)
+        self.assertEqual(metrics["average_hr"], 167)
+        self.assertEqual(metrics["running_cadence"], 182)
+        self.assertEqual(metrics["garmin_last_activity"]["activity_id"], 5555)
 
     def test_get_activity_context_for_strava_activity_matches_strength_session(self) -> None:
         strava_activity = {

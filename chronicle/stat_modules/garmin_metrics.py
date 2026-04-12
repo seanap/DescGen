@@ -769,7 +769,7 @@ def build_garmin_activity_context(client: Any | None, activity_payload: dict[str
     )
 
 
-def get_activity_context_for_strava_activity(
+def get_activity_payload_for_strava_activity(
     client: Any | None,
     strava_activity: dict[str, Any],
     *,
@@ -858,6 +858,22 @@ def get_activity_context_for_strava_activity(
         except Exception as exc:
             logger.debug("Garmin activity detail lookup unavailable for %s: %s", activity_id, exc)
 
+    return best_candidate
+
+
+def get_activity_context_for_strava_activity(
+    client: Any | None,
+    strava_activity: dict[str, Any],
+    *,
+    max_start_diff_seconds: int = 6 * 60 * 60,
+) -> dict[str, Any] | None:
+    best_candidate = get_activity_payload_for_strava_activity(
+        client,
+        strava_activity,
+        max_start_diff_seconds=max_start_diff_seconds,
+    )
+    if not isinstance(best_candidate, dict):
+        return None
     return build_garmin_activity_context(client, best_candidate)
 
 
@@ -1038,7 +1054,34 @@ def _build_garmin_last_activity_context(
     }
 
 
-def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
+def _reference_start_utc(reference_date: Any) -> datetime | None:
+    if isinstance(reference_date, datetime):
+        parsed = reference_date
+    elif isinstance(reference_date, str):
+        text = reference_date.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                parsed = datetime.strptime(text, "%Y-%m-%d")
+            except ValueError:
+                return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def fetch_training_status_and_scores(
+    client: Any,
+    *,
+    reference_activity: dict[str, Any] | None = None,
+    reference_date: datetime | str | None = None,
+) -> dict[str, Any]:
     metrics = _default_metrics()
     try:
         last_activity = client.get_last_activity() or {}
@@ -1046,16 +1089,19 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         logger.error("Failed to fetch Garmin last activity: %s", exc)
         return metrics
 
-    start_time_gmt = last_activity.get("startTimeGMT")
-    duration_seconds = int(last_activity.get("duration", 0) or 0)
-    if not start_time_gmt:
+    if not isinstance(last_activity, dict):
+        last_activity = {}
+    activity_source = reference_activity if isinstance(reference_activity, dict) and reference_activity else last_activity
+
+    start_time_dt = _parse_garmin_start_utc(activity_source)
+    if start_time_dt is None:
+        start_time_dt = _reference_start_utc(reference_date)
+    if start_time_dt is None:
+        start_time_dt = _parse_garmin_start_utc(last_activity)
+    if start_time_dt is None:
         return metrics
 
-    try:
-        start_time_dt = datetime.strptime(start_time_gmt, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return metrics
-
+    duration_seconds = int(activity_source.get("duration", 0) or 0)
     end_time_dt = start_time_dt + timedelta(seconds=duration_seconds)
     start_date = start_time_dt.strftime("%Y-%m-%d")
     end_date = end_time_dt.strftime("%Y-%m-%d")
@@ -1066,7 +1112,7 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
         logger.error("Failed to fetch Garmin training status: %s", exc)
         training_status = {}
 
-    latest_status_data = _select_training_status_record(training_status, last_activity=last_activity)
+    latest_status_data = _select_training_status_record(training_status, last_activity=activity_source)
     acute_load_dto = latest_status_data.get("acuteTrainingLoadDTO")
     if not isinstance(acute_load_dto, dict):
         acute_load_dto = {}
@@ -1104,13 +1150,13 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
     metrics["acwr_status"] = acwr_status.capitalize() if acwr_status != "N/A" else "N/A"
     metrics["acwr_status_emoji"] = {"OPTIMAL": "🟢", "HIGH": "🔴", "LOW": "🔴", "N/A": "⚪"}.get(acwr_status, "⚪")
 
-    average_hr = last_activity.get("averageHR")
-    running_cadence = last_activity.get("averageRunningCadenceInStepsPerMinute")
-    aerobic_te = last_activity.get("aerobicTrainingEffect")
-    anaerobic_te = last_activity.get("anaerobicTrainingEffect")
-    effect_label = str(last_activity.get("trainingEffectLabel", "N/A")).replace("_", " ").title()
+    average_hr = activity_source.get("averageHR")
+    running_cadence = activity_source.get("averageRunningCadenceInStepsPerMinute")
+    aerobic_te = activity_source.get("aerobicTrainingEffect")
+    anaerobic_te = activity_source.get("anaerobicTrainingEffect")
+    effect_label = str(activity_source.get("trainingEffectLabel", "N/A")).replace("_", " ").title()
     if effect_label.lower() == "unknown":
-        effect_label = str(last_activity.get("aerobicTrainingEffectMessage", "No Aerobic Benefit")).replace("_", " ").title()
+        effect_label = str(activity_source.get("aerobicTrainingEffectMessage", "No Aerobic Benefit")).replace("_", " ").title()
 
     metrics["average_hr"] = int(average_hr) if isinstance(average_hr, (int, float)) else "N/A"
     metrics["running_cadence"] = int(running_cadence) if isinstance(running_cadence, (int, float)) else "N/A"
@@ -1118,12 +1164,12 @@ def fetch_training_status_and_scores(client: Any) -> dict[str, Any]:
     metrics["anaerobic_training_effect"] = round(float(anaerobic_te), 1) if isinstance(anaerobic_te, (int, float)) else "N/A"
     metrics["training_effect_label"] = effect_label
     metrics["avg_grade_adjusted_speed"] = (
-        float(last_activity.get("avgGradeAdjustedSpeed"))
-        if isinstance(last_activity.get("avgGradeAdjustedSpeed"), (int, float))
+        float(activity_source.get("avgGradeAdjustedSpeed"))
+        if isinstance(activity_source.get("avgGradeAdjustedSpeed"), (int, float))
         else "N/A"
     )
-    metrics["garmin_last_activity"] = build_garmin_activity_context(client, last_activity)
-    metrics["garmin_segment_notables"] = _normalize_garmin_segment_notables(last_activity)
+    metrics["garmin_last_activity"] = build_garmin_activity_context(client, activity_source)
+    metrics["garmin_segment_notables"] = _normalize_garmin_segment_notables(activity_source)
 
     try:
         resting_hr_data = client.get_rhr_day(start_date)

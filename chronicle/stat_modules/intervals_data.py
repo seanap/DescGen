@@ -241,6 +241,72 @@ def _extract_start_date(activity: dict[str, Any]) -> str | None:
     return None
 
 
+def _parse_start_date_utc(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _select_activity_id(
+    activities: list[dict[str, Any]],
+    *,
+    strava_activity_id: Any = None,
+    reference_start: datetime | str | None = None,
+    reference_distance_meters: Any = None,
+) -> Any:
+    if not activities:
+        return None
+
+    target_strava_id = str(strava_activity_id).strip() if strava_activity_id is not None else ""
+    if target_strava_id:
+        for activity in activities:
+            if _extract_strava_activity_id(activity) == target_strava_id:
+                return activity.get("id") or activity.get("activity_id")
+
+    reference_start_utc = _parse_start_date_utc(reference_start)
+    reference_distance = _first_numeric(reference_distance_meters)
+    if reference_start_utc is None:
+        return activities[0].get("id") or activities[0].get("activity_id")
+
+    ranked: list[tuple[float, Any]] = []
+    for activity in activities:
+        activity_id = activity.get("id") or activity.get("activity_id")
+        if activity_id is None:
+            continue
+        activity_start = _parse_start_date_utc(_extract_start_date(activity))
+        if activity_start is None:
+            continue
+        score = abs((activity_start - reference_start_utc).total_seconds())
+
+        activity_distance = _first_numeric(
+            activity.get("distance"),
+            activity.get("distance_m"),
+            activity.get("distanceM"),
+            activity.get("distanceMeters"),
+        )
+        if (
+            reference_distance is not None
+            and activity_distance is not None
+            and reference_distance > 0
+            and activity_distance > 0
+        ):
+            score += abs(activity_distance - reference_distance) / max(reference_distance, activity_distance) * 1800.0
+
+        ranked.append((score, activity_id))
+
+    if ranked:
+        ranked.sort(key=lambda item: item[0])
+        return ranked[0][1]
+    return activities[0].get("id") or activities[0].get("activity_id")
+
+
 def get_intervals_dashboard_metrics(
     user_id: str | None,
     api_key: str | None,
@@ -345,13 +411,24 @@ def get_intervals_dashboard_metrics(
 
 
 def get_intervals_activity_data(
-    user_id: str | None, api_key: str | None, lookback_days: int = 2
+    user_id: str | None,
+    api_key: str | None,
+    lookback_days: int = 2,
+    *,
+    strava_activity_id: Any = None,
+    reference_start: datetime | str | None = None,
+    reference_distance_meters: Any = None,
 ) -> dict[str, Any] | None:
     if not user_id or not api_key:
         return None
 
-    end_date = datetime.now(timezone.utc)
-    start_date = end_date - timedelta(days=lookback_days)
+    reference_start_utc = _parse_start_date_utc(reference_start)
+    if reference_start_utc is not None:
+        start_date = reference_start_utc - timedelta(days=max(1, lookback_days))
+        end_date = reference_start_utc + timedelta(days=1)
+    else:
+        end_date = datetime.now(timezone.utc)
+        start_date = end_date - timedelta(days=lookback_days)
     start_date_str = start_date.strftime("%Y-%m-%dT%H:%M:%S")
     end_date_str = end_date.strftime("%Y-%m-%dT%H:%M:%S")
     auth = ("API_KEY", api_key)
@@ -367,7 +444,12 @@ def get_intervals_activity_data(
         if not activities:
             return None
 
-        activity_id = activities[0].get("id") or activities[0].get("activity_id")
+        activity_id = _select_activity_id(
+            activities,
+            strava_activity_id=strava_activity_id,
+            reference_start=reference_start_utc,
+            reference_distance_meters=reference_distance_meters,
+        )
         if activity_id is None:
             return None
 

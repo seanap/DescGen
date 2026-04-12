@@ -27,7 +27,7 @@ from .stat_modules import beers_earned, period_stats
 from .stat_modules.intervals_data import get_intervals_activity_data
 from .stat_modules.garmin_metrics import default_metrics as default_garmin_metrics
 from .stat_modules.garmin_metrics import fetch_training_status_and_scores
-from .stat_modules.garmin_metrics import get_activity_context_for_strava_activity
+from .stat_modules.garmin_metrics import get_activity_payload_for_strava_activity
 from .storage import (
     acquire_runtime_lock,
     claim_activity_job,
@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 
 PERIOD_STATS_ACTIVITIES_CACHE_KEY = "cycle.period_stats.activities_cache"
 DEFAULT_STRAVA_PERIOD_STATS_INCREMENTAL_OVERLAP_HOURS = 48
+GARMIN_LOGIN_BLOCKED_UNTIL_KEY = "garmin.login_blocked_until_utc"
+GARMIN_LOGIN_LAST_ERROR_KEY = "garmin.login_last_error"
+DEFAULT_GARMIN_LOGIN_RETRY_COOLDOWN_SECONDS = 6 * 60 * 60
 
 
 def _configure_logging(level: str) -> None:
@@ -261,6 +264,15 @@ def _service_cache_set(
         "value": value,
     }
     set_runtime_value(settings.processed_log_file, runtime_key, payload)
+
+
+def _garmin_login_retry_cooldown_seconds() -> int:
+    raw = str(os.getenv("GARMIN_LOGIN_RETRY_COOLDOWN_SECONDS", str(DEFAULT_GARMIN_LOGIN_RETRY_COOLDOWN_SECONDS))).strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return DEFAULT_GARMIN_LOGIN_RETRY_COOLDOWN_SECONDS
+    return max(300, parsed)
 
 
 def _service_in_cooldown(settings: Settings, service_name: str) -> tuple[bool, str | None]:
@@ -2194,16 +2206,18 @@ def build_profile_preview_training(
         raise ValueError("Activity data is required.")
 
     garmin_client = _get_garmin_client(settings)
-    training = _get_garmin_metrics(garmin_client)
-    training["_garmin_activity_aligned"] = False
+    matched_garmin_activity = None
     if garmin_client is not None:
-        matched_garmin_context = get_activity_context_for_strava_activity(
+        matched_garmin_activity = get_activity_payload_for_strava_activity(
             garmin_client,
             activity,
         )
-        if isinstance(matched_garmin_context, dict) and matched_garmin_context:
-            training["garmin_last_activity"] = matched_garmin_context
-            training["_garmin_activity_aligned"] = True
+    training = _get_garmin_metrics(
+        garmin_client,
+        reference_activity=matched_garmin_activity,
+        reference_date=activity.get("start_date"),
+    )
+    training["_garmin_activity_aligned"] = bool(isinstance(matched_garmin_activity, dict) and matched_garmin_activity)
     return training
 
 
@@ -2322,34 +2336,96 @@ def _get_garmin_client(settings: Settings) -> Any | None:
         logger.warning("Garmin is enabled but credentials are missing. Using N/A values.")
         return None
 
+    blocked_until_raw = get_runtime_value(settings.processed_log_file, GARMIN_LOGIN_BLOCKED_UNTIL_KEY)
+    blocked_until = _parse_utc_datetime(blocked_until_raw)
+    now_utc = datetime.now(timezone.utc)
+    if blocked_until is not None and blocked_until > now_utc:
+        logger.warning(
+            "Skipping Garmin login until %s due to prior rate limit.",
+            blocked_until.isoformat(),
+        )
+        return None
+
     try:
-        from garminconnect import Garmin
+        from garminconnect import Garmin, GarminConnectTooManyRequestsError
 
         tokenstore_dir = settings.state_dir / "garmin_tokens"
         client = Garmin(settings.garmin_email, settings.garmin_password)
-        if tokenstore_dir.exists():
-            try:
-                client.login(str(tokenstore_dir))
-                return client
-            except Exception as exc:
-                logger.warning("Garmin token login failed, retrying with credentials: %s", exc)
-
-        client.login()
-        try:
-            client.garth.dump(str(tokenstore_dir))
-        except Exception as exc:
-            logger.debug("Failed to persist Garmin session tokens: %s", exc)
+        client.login(str(tokenstore_dir))
+        delete_runtime_value(settings.processed_log_file, GARMIN_LOGIN_BLOCKED_UNTIL_KEY)
+        delete_runtime_value(settings.processed_log_file, GARMIN_LOGIN_LAST_ERROR_KEY)
         return client
+    except GarminConnectTooManyRequestsError as exc:
+        blocked_until = now_utc + timedelta(seconds=_garmin_login_retry_cooldown_seconds())
+        set_runtime_values(
+            settings.processed_log_file,
+            {
+                GARMIN_LOGIN_BLOCKED_UNTIL_KEY: blocked_until.isoformat(),
+                GARMIN_LOGIN_LAST_ERROR_KEY: str(exc),
+                "garmin.login_last_rate_limited_at_utc": now_utc.isoformat(),
+            },
+        )
+        logger.error(
+            "Garmin login rate-limited; skipping further Garmin login attempts until %s: %s",
+            blocked_until.isoformat(),
+            exc,
+        )
+        return None
     except Exception as exc:
+        set_runtime_values(
+            settings.processed_log_file,
+            {
+                GARMIN_LOGIN_LAST_ERROR_KEY: str(exc),
+                "garmin.login_last_failed_at_utc": now_utc.isoformat(),
+            },
+        )
         logger.error("Garmin login failed: %s", exc)
         return None
 
 
-def _get_garmin_metrics(client: Any | None) -> dict[str, Any]:
+def _ensure_garmin_ready(
+    settings: Settings,
+    client: Any | None,
+    *,
+    now_utc: datetime | None = None,
+) -> None:
+    if client is not None:
+        return
+    if not settings.enable_garmin:
+        return
+    if not settings.garmin_email or not settings.garmin_password:
+        return
+
+    blocked_until = _parse_utc_datetime(
+        get_runtime_value(settings.processed_log_file, GARMIN_LOGIN_BLOCKED_UNTIL_KEY)
+    )
+    last_error = str(
+        get_runtime_value(settings.processed_log_file, GARMIN_LOGIN_LAST_ERROR_KEY) or ""
+    ).strip()
+    current_time = now_utc.astimezone(timezone.utc) if now_utc else datetime.now(timezone.utc)
+    if blocked_until is not None and blocked_until > current_time:
+        detail = last_error or "Too many requests"
+        raise RuntimeError(
+            f"Garmin login rate-limited until {blocked_until.isoformat()}: {detail}"
+        )
+    if last_error:
+        raise RuntimeError(f"Garmin login failed: {last_error}")
+
+
+def _get_garmin_metrics(
+    client: Any | None,
+    *,
+    reference_activity: dict[str, Any] | None = None,
+    reference_date: datetime | str | None = None,
+) -> dict[str, Any]:
     if client is None:
         return default_garmin_metrics()
     try:
-        return fetch_training_status_and_scores(client)
+        return fetch_training_status_and_scores(
+            client,
+            reference_activity=reference_activity,
+            reference_date=reference_date,
+        )
     except Exception as exc:
         logger.error("Garmin data fetch failed: %s", exc)
         return default_garmin_metrics()
@@ -2839,13 +2915,24 @@ def _build_description_context(
     }
 
 
-def _resolve_cycle_time_context(settings: Settings) -> tuple[timezone | ZoneInfo, datetime, datetime, datetime]:
+def _resolve_cycle_time_context(
+    settings: Settings,
+    *,
+    reference_utc: datetime | None = None,
+) -> tuple[timezone | ZoneInfo, datetime, datetime, datetime]:
     try:
         local_tz = ZoneInfo(settings.timezone)
     except ZoneInfoNotFoundError:
         logger.warning("Unknown timezone '%s'. Falling back to UTC.", settings.timezone)
         local_tz = timezone.utc
-    now_local = datetime.now(local_tz)
+    if reference_utc is None:
+        now_local = datetime.now(local_tz)
+    else:
+        if reference_utc.tzinfo is None:
+            reference_utc = reference_utc.replace(tzinfo=timezone.utc)
+        else:
+            reference_utc = reference_utc.astimezone(timezone.utc)
+        now_local = reference_utc.astimezone(local_tz)
     now_utc = now_local.astimezone(timezone.utc)
     year_start_utc = datetime(now_local.year, 1, 1, tzinfo=local_tz).astimezone(timezone.utc)
     return local_tz, now_local, now_utc, year_start_utc
@@ -3213,6 +3300,8 @@ def _is_retryable_run_error(exc: Exception) -> bool:
         "timed out",
         "temporarily unavailable",
         "too many requests",
+        "rate limit",
+        "rate-limited",
         "connection reset",
         "connection aborted",
         "connection refused",
@@ -3385,7 +3474,11 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
                 int(latest["id"]),
             )
 
-        _local_tz, now_local, now_utc, year_start = _resolve_cycle_time_context(settings)
+        reference_start_utc = _parse_utc_datetime(detailed_activity.get("start_date"))
+        _local_tz, reference_local, reference_now_utc, year_start = _resolve_cycle_time_context(
+            settings,
+            reference_utc=reference_start_utc,
+        )
 
         latest_marker = (
             str(latest.get("id")).strip() if latest.get("id") is not None else None,
@@ -3404,7 +3497,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             detailed_activity,
             selected_activity_id=selected_activity_id,
             latest_activity_id=int(latest["id"]),
-            now_utc=now_utc,
+            now_utc=reference_now_utc,
             service_state=service_state,
         )
         longest_streak = smashrun_context["longest_streak"]
@@ -3416,38 +3509,41 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         smashrun_badges = smashrun_context["smashrun_badges"]
 
         garmin_client = _get_garmin_client(settings)
-        training = _get_garmin_metrics(garmin_client)
-        training["_garmin_activity_aligned"] = False
+        _ensure_garmin_ready(settings, garmin_client, now_utc=reference_now_utc)
+        matched_garmin_activity = None
         if garmin_client is not None:
-            matched_garmin_context = _run_service_call(
+            matched_garmin_activity = _run_service_call(
                 settings,
-                "garmin.activity_context",
-                get_activity_context_for_strava_activity,
+                "garmin.activity_match",
+                get_activity_payload_for_strava_activity,
                 garmin_client,
                 detailed_activity,
                 service_state=service_state,
-                cache_key=f"garmin.activity_context:{selected_activity_id}",
+                cache_key=f"garmin.activity_match:{selected_activity_id}",
                 cache_ttl_seconds=settings.service_cache_ttl_seconds,
             )
-            if isinstance(matched_garmin_context, dict) and matched_garmin_context:
-                training["garmin_last_activity"] = matched_garmin_context
-                training["_garmin_activity_aligned"] = True
+        training = _get_garmin_metrics(
+            garmin_client,
+            reference_activity=matched_garmin_activity if isinstance(matched_garmin_activity, dict) else None,
+            reference_date=detailed_activity.get("start_date"),
+        )
+        training["_garmin_activity_aligned"] = bool(isinstance(matched_garmin_activity, dict) and matched_garmin_activity)
         garmin_period_fallback = _run_service_call(
             settings,
             "garmin.period_fallback",
             period_stats.get_garmin_period_fallback,
             garmin_client,
-            now_utc=now_utc,
+            now_utc=reference_now_utc,
             timezone_name=settings.timezone,
             service_state=service_state,
-            cache_key=f"garmin.period_fallback:{now_local.date().isoformat()}:{settings.timezone}",
+            cache_key=f"garmin.period_fallback:{reference_local.date().isoformat()}:{settings.timezone}",
             cache_ttl_seconds=settings.service_cache_ttl_seconds,
         )
 
         period_summaries = period_stats.get_period_stats(
             strava_activities,
             smashrun_elevation_totals,
-            now_utc,
+            reference_now_utc,
             timezone_name=settings.timezone,
             garmin_period_fallback=garmin_period_fallback,
         )
@@ -3460,6 +3556,9 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
                 get_intervals_activity_data,
                 settings.intervals_user_id,
                 settings.intervals_api_key,
+                strava_activity_id=selected_activity_id,
+                reference_start=detailed_activity.get("start_date"),
+                reference_distance_meters=detailed_activity.get("distance"),
                 service_state=service_state,
                 cache_key=f"intervals.activity:{selected_activity_id}",
                 cache_ttl_seconds=settings.service_cache_ttl_seconds,
@@ -3547,7 +3646,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
         )
 
         payload = {
-            "updated_at_utc": now_utc.isoformat(),
+            "updated_at_utc": datetime.now(timezone.utc).isoformat(),
             "activity_id": selected_activity_id,
             "activity_start_date": selected.get("start_date"),
             "description": description,
@@ -3563,7 +3662,7 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
                 "reasons": selected_profile.get("reasons") or [],
                 "working_profile_id": str(selected_profile.get("working_profile_id") or "default"),
                 "selection_mode": str(selected_profile.get("selection_mode") or ""),
-                "evaluated_at_utc": now_utc.isoformat(),
+                "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
             },
             "template_render": {
                 "ok": render_result.get("ok"),

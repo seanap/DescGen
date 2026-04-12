@@ -1,15 +1,22 @@
 import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 from chronicle.activity_pipeline import (
+    GARMIN_LOGIN_BLOCKED_UNTIL_KEY,
+    GARMIN_LOGIN_LAST_ERROR_KEY,
     _build_description_context,
     _extract_activity_smashrun_badges,
     _extract_strava_badges,
     _extract_activity_garmin_badges,
     _extract_strava_segment_notables,
+    _ensure_garmin_ready,
+    _get_garmin_client,
     _profile_activity_update_payload,
     _profile_match_reasons,
+    _resolve_cycle_time_context,
     _select_activity_profile,
     preview_specific_profile_against_activity,
 )
@@ -220,6 +227,21 @@ class TestActivitySmashrunBadges(unittest.TestCase):
             strava_activity_id=777,
         )
         self.assertEqual(badges, ["Two by 365 by 10k", "Smashrun and Strava Linked"])
+
+
+class TestCycleTimeContext(unittest.TestCase):
+    def test_resolve_cycle_time_context_uses_reference_activity_date(self) -> None:
+        settings = SimpleNamespace(timezone="America/New_York")
+        reference_utc = datetime(2026, 2, 15, 5, 30, 0, tzinfo=timezone.utc)
+
+        _local_tz, now_local, now_utc, year_start_utc = _resolve_cycle_time_context(
+            settings,
+            reference_utc=reference_utc,
+        )
+
+        self.assertEqual(now_utc, reference_utc)
+        self.assertEqual((now_local.year, now_local.month, now_local.day), (2026, 2, 15))
+        self.assertEqual(year_start_utc.isoformat(), "2026-01-01T05:00:00+00:00")
 
     def test_extract_activity_smashrun_badges_supports_activity_list_shapes(self) -> None:
         rows = [
@@ -1183,6 +1205,103 @@ class TestExecutableProfileCriteria(unittest.TestCase):
         self.assertIn("text_contains_any matched", reasons)
         self.assertIn("moving_time=30min >= 25min", reasons)
         self.assertIn("moving_time=30min <= 35min", reasons)
+
+
+class TestGarminClientLogin(unittest.TestCase):
+    def _settings(self, tmp_path: Path) -> SimpleNamespace:
+        return SimpleNamespace(
+            enable_garmin=True,
+            garmin_email="runner@example.com",
+            garmin_password="secret",
+            state_dir=tmp_path,
+            processed_log_file=tmp_path / "processed_activities.log",
+        )
+
+    def test_get_garmin_client_uses_tokenstore_path_and_clears_rate_limit_state(self) -> None:
+        tmp_path = Path(self.id().replace(".", "_"))
+        settings = self._settings(tmp_path)
+        client = MagicMock()
+
+        with patch("chronicle.activity_pipeline.get_runtime_value", return_value=None), patch(
+            "chronicle.activity_pipeline.delete_runtime_value"
+        ) as delete_runtime_value, patch("garminconnect.Garmin", return_value=client):
+            result = _get_garmin_client(settings)
+
+        self.assertIs(result, client)
+        client.login.assert_called_once_with(str(tmp_path / "garmin_tokens"))
+        delete_runtime_value.assert_has_calls(
+            [
+                call(settings.processed_log_file, GARMIN_LOGIN_BLOCKED_UNTIL_KEY),
+                call(settings.processed_log_file, GARMIN_LOGIN_LAST_ERROR_KEY),
+            ]
+        )
+
+    def test_get_garmin_client_sets_runtime_cooldown_on_rate_limit(self) -> None:
+        tmp_path = Path(self.id().replace(".", "_"))
+        settings = self._settings(tmp_path)
+
+        from garminconnect import GarminConnectTooManyRequestsError
+
+        client = MagicMock()
+        client.login.side_effect = GarminConnectTooManyRequestsError("rate limited")
+
+        with patch("chronicle.activity_pipeline.get_runtime_value", return_value=None), patch(
+            "chronicle.activity_pipeline.set_runtime_values"
+        ) as set_runtime_values, patch(
+            "chronicle.activity_pipeline._garmin_login_retry_cooldown_seconds",
+            return_value=900,
+        ), patch("garminconnect.Garmin", return_value=client):
+            result = _get_garmin_client(settings)
+
+        self.assertIsNone(result)
+        set_runtime_values.assert_called_once()
+        _, stored_values = set_runtime_values.call_args.args
+        self.assertIn(GARMIN_LOGIN_BLOCKED_UNTIL_KEY, stored_values)
+        self.assertEqual(stored_values[GARMIN_LOGIN_LAST_ERROR_KEY], "rate limited")
+        blocked_until = datetime.fromisoformat(stored_values[GARMIN_LOGIN_BLOCKED_UNTIL_KEY])
+        self.assertGreater(blocked_until, datetime.now(timezone.utc))
+
+    def test_get_garmin_client_skips_login_while_rate_limited(self) -> None:
+        tmp_path = Path(self.id().replace(".", "_"))
+        settings = self._settings(tmp_path)
+        blocked_until = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+        with patch("chronicle.activity_pipeline.get_runtime_value", return_value=blocked_until), patch(
+            "garminconnect.Garmin"
+        ) as garmin_cls:
+            result = _get_garmin_client(settings)
+
+        self.assertIsNone(result)
+        garmin_cls.assert_not_called()
+
+    def test_ensure_garmin_ready_raises_retryable_error_while_rate_limited(self) -> None:
+        tmp_path = Path(self.id().replace(".", "_"))
+        settings = self._settings(tmp_path)
+        blocked_until = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+
+        def runtime_lookup(_path: Path, key: str, default: object = None) -> object:
+            if key == GARMIN_LOGIN_BLOCKED_UNTIL_KEY:
+                return blocked_until
+            if key == GARMIN_LOGIN_LAST_ERROR_KEY:
+                return "Too many login attempts. Please wait a few minutes before trying again."
+            return default
+
+        with patch("chronicle.activity_pipeline.get_runtime_value", side_effect=runtime_lookup):
+            with self.assertRaisesRegex(RuntimeError, "rate-limited until"):
+                _ensure_garmin_ready(settings, None)
+
+    def test_ensure_garmin_ready_raises_on_generic_login_failure(self) -> None:
+        tmp_path = Path(self.id().replace(".", "_"))
+        settings = self._settings(tmp_path)
+
+        def runtime_lookup(_path: Path, key: str, default: object = None) -> object:
+            if key == GARMIN_LOGIN_LAST_ERROR_KEY:
+                return "Authentication failed (401 Unauthorized)."
+            return default
+
+        with patch("chronicle.activity_pipeline.get_runtime_value", side_effect=runtime_lookup):
+            with self.assertRaisesRegex(RuntimeError, "Authentication failed"):
+                _ensure_garmin_ready(settings, None)
 
 
 if __name__ == "__main__":

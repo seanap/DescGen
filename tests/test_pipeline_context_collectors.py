@@ -50,6 +50,50 @@ class TestPipelineContextCollectors(unittest.TestCase):
         self.assertEqual(result["smashrun_badges"], [])
         self.assertEqual(calls, [])
 
+    def test_collect_smashrun_context_fetches_notables_for_matched_historical_activity(self) -> None:
+        calls: list[tuple[str, dict[str, Any]]] = []
+
+        def _run_service_call(_settings, service_name, *_args, **kwargs):
+            calls.append((service_name, kwargs))
+            if service_name == "smashrun.activities":
+                return [
+                    {
+                        "activityId": 998877,
+                        "stravaActivityId": 123,
+                        "startDateTimeUtc": "2026-02-10T12:00:00Z",
+                        "distance": 5000.0,
+                    },
+                    {
+                        "activityId": 445566,
+                        "stravaActivityId": 999,
+                        "startDateTimeUtc": "2026-02-12T12:00:00Z",
+                        "distance": 7000.0,
+                    },
+                ]
+            if service_name == "smashrun.notables":
+                self.assertEqual(kwargs.get("latest_activity_id"), 998877)
+                return ["Historic notable"]
+            if service_name == "smashrun.stats":
+                return {"longestStreak": 14}
+            if service_name == "smashrun.badges":
+                return []
+            return None
+
+        result = collect_smashrun_context(
+            _settings(enable_smashrun=True, smashrun_access_token="token"),
+            {"id": 123, "start_date": "2026-02-10T12:00:00Z", "distance": 5000.0},
+            selected_activity_id=123,
+            latest_activity_id=999,
+            now_utc=datetime.now(timezone.utc),
+            service_state={},
+            run_service_call=_run_service_call,
+            as_float=lambda value: float(value) if isinstance(value, (int, float)) else None,
+        )
+
+        self.assertEqual(result["notables"], ["Historic notable"])
+        self.assertEqual(result["longest_streak"], 14)
+        self.assertTrue(any(name == "smashrun.notables" for name, _kwargs in calls))
+
     def test_collect_weather_context_uses_details_then_skips_fallback(self) -> None:
         calls: list[str] = []
 

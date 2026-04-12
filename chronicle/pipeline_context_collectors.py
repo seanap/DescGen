@@ -69,22 +69,26 @@ def collect_smashrun_context(
             now_utc,
             timezone_name=settings.timezone,
         )
-        if selected_activity_id == latest_activity_id:
-            latest_smashrun_activity_id = smashrun_activities[0].get("activityId") if smashrun_activities else None
+        matched_smashrun_activity_id = None
+        if isinstance(context["smashrun_activity_record"], dict):
+            matched_smashrun_activity_id = context["smashrun_activity_record"].get("activityId")
+        if matched_smashrun_activity_id is None and selected_activity_id == latest_activity_id:
+            matched_smashrun_activity_id = smashrun_activities[0].get("activityId") if smashrun_activities else None
+        if matched_smashrun_activity_id is not None:
             notables_payload = run_service_call(
                 settings,
                 "smashrun.notables",
                 get_notables,
                 settings.smashrun_access_token,
-                latest_activity_id=latest_smashrun_activity_id,
+                latest_activity_id=matched_smashrun_activity_id,
                 service_state=service_state,
-                cache_key=f"smashrun.notables:{latest_smashrun_activity_id or 'latest'}",
+                cache_key=f"smashrun.notables:{matched_smashrun_activity_id}",
                 cache_ttl_seconds=settings.service_cache_ttl_seconds,
             )
             if isinstance(notables_payload, list):
                 context["notables"] = [str(item) for item in notables_payload if str(item).strip()]
         else:
-            local_logger.info("Skipping Smashrun notables because selected activity is not latest.")
+            local_logger.info("Skipping Smashrun notables because no matched Smashrun activity was found.")
 
     smashrun_stats_payload = run_service_call(
         settings,

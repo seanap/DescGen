@@ -129,6 +129,30 @@ class TestIntervalsData(unittest.TestCase):
         self.assertIn("Z1", result["zone_summary"])
 
     @patch("chronicle.stat_modules.intervals_data.requests.get")
+    def test_selects_matching_strava_activity_for_historical_rerun(self, mock_get) -> None:
+        mock_get.side_effect = [
+            _response_with_json(
+                [
+                    {"id": 111, "strava_activity_id": 999, "start_date": "2026-03-30T10:00:00Z", "distance": 5000.0},
+                    {"id": 222, "strava_activity_id": 123456, "start_date": "2026-03-20T10:00:00Z", "distance": 10000.0},
+                ]
+            ),
+            _response_with_json({"icu_achievements": []}),
+        ]
+
+        result = get_intervals_activity_data(
+            "athlete",
+            "apikey",
+            strava_activity_id=123456,
+            reference_start="2026-03-20T10:00:00Z",
+            reference_distance_meters=10000.0,
+        )
+
+        self.assertIsNotNone(result)
+        detail_url = mock_get.call_args_list[1].args[0]
+        self.assertIn("/activity/222", detail_url)
+
+    @patch("chronicle.stat_modules.intervals_data.requests.get")
     def test_dashboard_metrics_extracts_strava_match_and_fields(self, mock_get) -> None:
         mock_get.return_value = _response_with_json(
             [
