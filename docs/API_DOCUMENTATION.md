@@ -289,6 +289,24 @@ curl -X POST http://localhost:1609/editor/profiles/working \
 ### POST `/editor/preview`
 - Purpose: Render preview from template and context.
 
+### GET `/editor/assistant/status`
+- Purpose: Report whether the local Codex-backed editor assistant is available on this machine.
+
+### POST `/editor/assistant/customize`
+- Purpose: Send a customization request plus the current template to the local Codex CLI and receive paste-ready text back.
+- Body:
+```json
+{
+  "request": "Make the readiness line shorter.",
+  "template": "Current Jinja template text",
+  "context_mode": "sample",
+  "fixture_name": "default",
+  "profile_id": "default",
+  "preview_text": "Optional current preview text",
+  "selected_text": "Optional selected text from the editor"
+}
+```
+
 ### GET `/editor/fixtures`
 - Purpose: List sample fixture names.
 
@@ -339,6 +357,123 @@ curl -X POST http://localhost:1609/editor/profiles/working \
 
 ### POST `/editor/repository/import`
 - Purpose: Import repository template bundle.
+
+## Agent Control API
+
+These endpoints expose stable, resource-oriented APIs for remote Codex companions and future agent tooling. They are intentionally draft-oriented instead of allowing unrestricted direct writes.
+
+Auth model:
+
+- local requests can use the API without keys when `ENABLE_AGENT_CONTROL_API` is false and the caller is local
+- remote read access uses `X-Chronicle-Agent-Key: <AGENT_CONTROL_READ_API_KEY>`
+- remote apply access uses `X-Chronicle-Agent-Key: <AGENT_CONTROL_WRITE_API_KEY>`
+
+### GET `/agent-control/handshake`
+- Purpose: Protocol/version handshake plus assistant/provider summary.
+
+### GET `/agent-control/capabilities`
+- Purpose: Return supported resources and task names.
+
+### GET `/agent-control/templates/active`
+- Purpose: Get the active template and current base version.
+- Query params:
+  - `profile_id` (optional)
+
+### GET `/agent-control/profiles`
+- Purpose: List profiles and working profile.
+
+### GET `/agent-control/profiles/<profile_id>`
+- Purpose: Get one profile document and base version.
+
+### GET `/agent-control/workouts`
+- Purpose: List workout definitions.
+
+### GET `/agent-control/workouts/<workout_id>`
+- Purpose: Get one workout document and base version.
+
+### GET `/agent-control/plans/week`
+- Purpose: Return one plan week plus its base version.
+- Query params:
+  - `week_start_local` (optional, defaults to the next local week start)
+
+### GET `/agent-control/plans/next-week-context`
+- Purpose: Return focused planning context for `plan-next-week` tasks.
+- Query params:
+  - `week_start_local` (optional)
+
+### GET `/agent-control/drafts`
+- Purpose: List durable drafts.
+- Query params:
+  - `resource_kind` (optional)
+
+### POST `/agent-control/drafts`
+- Purpose: Create a durable draft and optionally validate it immediately.
+- Body fields:
+  - `resource_kind`: `template|profile|workout|plan_week`
+  - `payload`: resource payload object
+  - `title` (optional)
+  - `base_version` (optional)
+  - `metadata` (optional object)
+  - `validate` (optional, default `true`)
+
+### GET `/agent-control/drafts/<draft_id>`
+- Purpose: Get one durable draft.
+
+### PUT `/agent-control/drafts/<draft_id>`
+- Purpose: Update a draft payload/title/metadata before validation/apply.
+
+### POST `/agent-control/drafts/<draft_id>/validate`
+- Purpose: Validate a draft and store the validation result.
+
+### POST `/agent-control/drafts/<draft_id>/apply`
+- Purpose: Dry-run or apply a validated draft through Chronicle’s live save paths.
+- Body fields:
+  - `dry_run` (optional boolean)
+  - `expected_version` (optional optimistic-lock version)
+
+### GET `/agent-control/jobs`
+- Purpose: List durable jobs.
+- Query params:
+  - `task_kind` (optional)
+
+### GET `/agent-control/jobs/<job_id>`
+- Purpose: Get one durable job.
+
+### GET `/agent-control/audit`
+- Purpose: Return recent audit events.
+- Query params:
+  - `limit` (optional, default `100`, max `500`)
+
+## Agent Task API
+
+These endpoints create Codex-backed jobs that return reviewable drafts instead of applying changes immediately.
+
+### POST `/agent/tasks/plan-next-week`
+- Purpose: Ask the configured Codex provider to draft the next week’s plan.
+- Body fields:
+  - `request` (required)
+  - `week_start_local` (optional)
+  - `source` (optional)
+
+Response notes:
+
+- creates a durable `job`
+- creates a `plan_week` draft
+- returns `awaiting_approval` when the draft is ready for review
+
+### POST `/agent/tasks/bundle-create`
+- Purpose: Ask the configured Codex provider to draft a related bundle of profile/template/workout assets.
+- Body fields:
+  - `request` (required)
+  - `profile_id` (optional target profile id)
+  - `workout_id` (optional target workout id)
+  - `source` (optional)
+
+Response notes:
+
+- creates a durable `job`
+- may create multiple drafts
+- template drafts targeting a not-yet-applied profile are allowed, but publishing still requires the profile to exist first
 
 ## Example Request Set
 
