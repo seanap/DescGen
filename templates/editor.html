@@ -222,6 +222,23 @@
             </div>
             <div id="contextSafetyBanner" class="context-banner safe">SAFE mode: sample/fixture preview with no live payload dependency.</div>
 
+            <section class="ai-assistant-shell" aria-labelledby="assistantHeading">
+              <div class="snippet-head">
+                <h3 id="assistantHeading">Local Codex Assistant</h3>
+                <p class="subtext">Describe the customization you want. Chronicle will ask your local Codex CLI and return text to paste into the template.</p>
+              </div>
+              <label for="assistantRequest">Customization Request</label>
+              <textarea id="assistantRequest" class="assistant-request" spellcheck="true" placeholder="Example: Make the readiness line more concise and move it below weather."></textarea>
+              <div class="inline-actions builder-run-actions">
+                <button id="btnAssistantGenerate" class="btn btn-secondary" type="button">Generate Suggestion</button>
+                <button id="btnAssistantInsert" class="btn btn-ghost" type="button">Insert At Cursor</button>
+                <button id="btnAssistantCopy" class="btn btn-ghost" type="button">Copy Suggestion</button>
+              </div>
+              <div id="assistantMeta" class="meta">Uses the local Codex CLI on this machine and reuses your current login.</div>
+              <label for="assistantOutput">Suggested Text To Paste</label>
+              <textarea id="assistantOutput" class="assistant-output" spellcheck="false" readonly></textarea>
+            </section>
+
             <label for="templateEditor">Jinja Template</label>
             <textarea id="templateEditor" spellcheck="false"></textarea>
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -193,6 +194,19 @@ class Settings:
     home_latitude: float | None
     home_longitude: float | None
     home_radius_miles: float
+    enable_editor_ai: bool
+    editor_ai_codex_cli_path: str | None
+    editor_ai_workspace_dir: Path
+    editor_ai_timeout_seconds: int
+    editor_ai_codex_model: str | None
+    agent_provider: str
+    agent_remote_url: str | None
+    agent_remote_api_key: str | None
+    agent_remote_timeout_seconds: int
+    agent_control_base_url: str | None
+    enable_agent_control_api: bool
+    agent_control_read_api_key: str | None
+    agent_control_write_api_key: str | None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -223,6 +237,13 @@ class Settings:
             "description_template.j2",
         )
         runtime_db_file = state_dir / os.getenv("RUNTIME_DB_FILE", "runtime_state.db")
+        default_editor_ai_enabled = shutil.which("codex") is not None
+        editor_ai_workspace_dir = Path(
+            os.getenv(
+                "EDITOR_AI_WORKSPACE_DIR",
+                str((Path(__file__).resolve().parent.parent / "ai" / "editor_assistant").resolve()),
+            )
+        ).expanduser().resolve()
 
         poll_interval_raw = os.getenv("POLL_INTERVAL_SECONDS", "300")
         try:
@@ -333,6 +354,31 @@ class Settings:
             home_latitude=_optional_float_env("HOME_LAT"),
             home_longitude=_optional_float_env("HOME_LON"),
             home_radius_miles=_float_env("HOME_RADIUS_MILES", 8.0, minimum=0.1, maximum=250.0),
+            enable_editor_ai=_bool_env("ENABLE_EDITOR_AI", default_editor_ai_enabled, getenv=env_with_setup_overrides),
+            editor_ai_codex_cli_path=_optional_str_env("EDITOR_AI_CODEX_CLI_PATH", getenv=env_with_setup_overrides),
+            editor_ai_workspace_dir=editor_ai_workspace_dir,
+            editor_ai_timeout_seconds=_int_env(
+                "EDITOR_AI_TIMEOUT_SECONDS",
+                90,
+                minimum=10,
+                maximum=600,
+                getenv=env_with_setup_overrides,
+            ),
+            editor_ai_codex_model=_optional_str_env("EDITOR_AI_CODEX_MODEL", getenv=env_with_setup_overrides),
+            agent_provider=_str_env("AGENT_PROVIDER", default="local_codex_exec", getenv=env_with_setup_overrides),
+            agent_remote_url=_optional_str_env("AGENT_REMOTE_URL", getenv=env_with_setup_overrides),
+            agent_remote_api_key=_optional_str_env("AGENT_REMOTE_API_KEY", getenv=env_with_setup_overrides),
+            agent_remote_timeout_seconds=_int_env(
+                "AGENT_REMOTE_TIMEOUT_SECONDS",
+                120,
+                minimum=5,
+                maximum=600,
+                getenv=env_with_setup_overrides,
+            ),
+            agent_control_base_url=_optional_str_env("AGENT_CONTROL_BASE_URL", getenv=env_with_setup_overrides),
+            enable_agent_control_api=_bool_env("ENABLE_AGENT_CONTROL_API", False, getenv=env_with_setup_overrides),
+            agent_control_read_api_key=_optional_str_env("AGENT_CONTROL_READ_API_KEY", getenv=env_with_setup_overrides),
+            agent_control_write_api_key=_optional_str_env("AGENT_CONTROL_WRITE_API_KEY", getenv=env_with_setup_overrides),
         )
 
     def validate(self) -> None:

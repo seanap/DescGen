@@ -832,6 +832,35 @@ label[for="templateEditor"] {
   background: color-mix(in srgb, var(--panel-soft) 92%, #080808);
 }
 
+.ai-assistant-shell {
+  margin: 14px 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--line));
+  border-radius: 12px;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-soft) 88%, rgba(252, 76, 2, 0.12)), var(--panel-soft));
+}
+
+.assistant-request,
+.assistant-output {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 90%, black 10%);
+  color: var(--ink);
+  font: inherit;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.assistant-output {
+  min-height: 150px;
+  font-family: "JetBrains Mono", monospace;
+  line-height: 1.45;
+}
+
 .snippet-head h3 {
   margin: 0;
   font-size: 0.9rem;

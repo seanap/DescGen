@@ -194,6 +194,9 @@ const state = {
   catalogRows: [],
   sections: SECTION_LIBRARY.map((x) => ({ ...x })),
   snippets: FALLBACK_SNIPPETS,
+  assistantAvailable: false,
+  assistantBusy: false,
+  assistantSuggestion: "",
   autoPreview: true,
   autoPreviewTimer: null,
   previewRequestId: 0,
@@ -275,6 +278,12 @@ const elements = {
   previewContextMode: document.getElementById("previewContextMode"),
   previewFixtureName: document.getElementById("previewFixtureName"),
   contextSafetyBanner: document.getElementById("contextSafetyBanner"),
+  assistantRequest: document.getElementById("assistantRequest"),
+  assistantOutput: document.getElementById("assistantOutput"),
+  assistantMeta: document.getElementById("assistantMeta"),
+  btnAssistantGenerate: document.getElementById("btnAssistantGenerate"),
+  btnAssistantInsert: document.getElementById("btnAssistantInsert"),
+  btnAssistantCopy: document.getElementById("btnAssistantCopy"),
   repositoryTemplateSelect: document.getElementById("repositoryTemplateSelect"),
   repositoryTemplateMeta: document.getElementById("repositoryTemplateMeta"),
   repoTemplateNameInput: document.getElementById("repoTemplateNameInput"),
@@ -1176,12 +1185,41 @@ async function requestJSON(url, options = {}) {
   return { ok: response.ok, status: response.status, payload };
 }
 
+async function loadAssistantStatus() {
+  const res = await requestJSON("/editor/assistant/status");
+  if (!res.ok) {
+    state.assistantAvailable = false;
+    if (elements.assistantMeta) {
+      elements.assistantMeta.textContent = res.payload?.error || "Assistant status unavailable.";
+    }
+    renderAssistantState();
+    return;
+  }
+  const assistant = res.payload?.assistant || {};
+  state.assistantAvailable = Boolean(assistant.available);
+  if (elements.assistantMeta) {
+    elements.assistantMeta.textContent = state.assistantAvailable
+      ? "Uses the local Codex CLI on this machine and reuses your current login."
+      : String(assistant.reason || "Assistant unavailable.");
+  }
+  renderAssistantState();
+}
+
 function decodeEscapedNewlines(text) {
   return String(text || "").replace(/\\n/g, "\n");
 }
 
 function getEditorText() {
   return elements.templateEditor.value;
+}
+
+function getSelectedEditorText() {
+  const editor = elements.templateEditor;
+  if (!editor) return "";
+  const start = Number.isFinite(editor.selectionStart) ? editor.selectionStart : 0;
+  const end = Number.isFinite(editor.selectionEnd) ? editor.selectionEnd : 0;
+  if (end <= start) return "";
+  return String(editor.value || "").slice(start, end);
 }
 
 function setEditorText(templateText) {
@@ -1199,6 +1237,22 @@ function insertAtCursor(text) {
   editor.focus();
   editor.setSelectionRange(nextCursor, nextCursor);
   setEditorDirty(true);
+}
+
+function renderAssistantState() {
+  if (elements.assistantOutput) {
+    elements.assistantOutput.value = String(state.assistantSuggestion || "");
+  }
+  if (elements.btnAssistantGenerate) {
+    elements.btnAssistantGenerate.disabled = state.assistantBusy;
+    elements.btnAssistantGenerate.textContent = state.assistantBusy ? "Generating..." : "Generate Suggestion";
+  }
+  if (elements.btnAssistantInsert) {
+    elements.btnAssistantInsert.disabled = state.assistantBusy || !String(state.assistantSuggestion || "").trim();
+  }
+  if (elements.btnAssistantCopy) {
+    elements.btnAssistantCopy.disabled = state.assistantBusy || !String(state.assistantSuggestion || "").trim();
+  }
 }
 
 function updateValidationPane(result, ok) {
@@ -3212,6 +3266,7 @@ async function loadEditorBootstrap() {
   setStatus((isCustom ? "Loaded custom template" : "Loaded default template") + sourceLabel, "ok");
   renderContextSafetyBanner();
   updateContextChips();
+  await loadAssistantStatus();
 
   await previewTemplate({ force: true });
 }
@@ -3290,6 +3345,77 @@ async function previewTemplate(options = {}) {
   updatePreviewCharMeter();
   await updatePreviewDiff(rendered);
   setStatus("Preview updated", "ok");
+}
+
+async function generateAssistantSuggestion() {
+  const requestText = String(elements.assistantRequest?.value || "").trim();
+  if (!requestText) {
+    setStatus("Enter a customization request first", "error");
+    return;
+  }
+
+  state.assistantBusy = true;
+  renderAssistantState();
+  setStatus("Requesting local Codex suggestion...");
+
+  const res = await requestJSON("/editor/assistant/customize", {
+    method: "POST",
+    body: JSON.stringify({
+      request: requestText,
+      template: getEditorText(),
+      context_mode: elements.previewContextMode.value || "sample",
+      fixture_name: selectedFixtureName(),
+      profile_id: currentProfileId(),
+      preview_text: String(elements.previewText?.textContent || ""),
+      selected_text: getSelectedEditorText(),
+    }),
+  });
+
+  state.assistantBusy = false;
+  if (!res.ok) {
+    if (elements.assistantMeta) {
+      elements.assistantMeta.textContent = res.payload?.error || "Assistant request failed.";
+    }
+    renderAssistantState();
+    setStatus("Assistant request failed", "error");
+    return;
+  }
+
+  state.assistantAvailable = Boolean(res.payload?.assistant?.available);
+  const suggestion = res.payload?.suggestion || {};
+  state.assistantSuggestion = String(suggestion.suggested_text || "");
+  const placementHint = String(suggestion.placement_hint || "").trim();
+  const notes = String(suggestion.notes || "").trim();
+  if (elements.assistantMeta) {
+    const bits = [placementHint, notes].filter(Boolean);
+    elements.assistantMeta.textContent = bits.join(" | ") || "Suggestion ready.";
+  }
+  renderAssistantState();
+  setStatus("Assistant suggestion ready", "ok");
+}
+
+async function copyAssistantSuggestion() {
+  const text = String(state.assistantSuggestion || "").trim();
+  if (!text) {
+    setStatus("Nothing to copy", "error");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus("Assistant suggestion copied", "ok");
+  } catch (_err) {
+    setStatus("Copy failed", "error");
+  }
+}
+
+function insertAssistantSuggestion() {
+  const text = String(state.assistantSuggestion || "").trim();
+  if (!text) {
+    setStatus("Nothing to insert", "error");
+    return;
+  }
+  insertAtCursor(text);
+  setStatus("Assistant suggestion inserted", "ok");
 }
 
 function queueAutoPreview() {
@@ -3444,6 +3570,15 @@ function bindUI() {
   document.getElementById("btnValidate").addEventListener("click", validateTemplate);
   document.getElementById("btnPreview").addEventListener("click", () => previewTemplate({ force: true }));
   document.getElementById("btnSave").addEventListener("click", openPublishModal);
+  if (elements.btnAssistantGenerate) {
+    elements.btnAssistantGenerate.addEventListener("click", generateAssistantSuggestion);
+  }
+  if (elements.btnAssistantInsert) {
+    elements.btnAssistantInsert.addEventListener("click", insertAssistantSuggestion);
+  }
+  if (elements.btnAssistantCopy) {
+    elements.btnAssistantCopy.addEventListener("click", copyAssistantSuggestion);
+  }
   const repoLoadBtn = document.getElementById("btnRepoLoad");
   if (repoLoadBtn) {
     repoLoadBtn.addEventListener("click", () => loadRepositoryTemplateIntoEditor(repositorySelectedId(), { promptIfOverwrite: true }));
