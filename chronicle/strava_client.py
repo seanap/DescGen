@@ -118,6 +118,23 @@ class StravaClient:
         )
         return response.json()
 
+    def get_activity_streams(
+        self,
+        activity_id: int,
+        *,
+        keys: tuple[str, ...] = ("latlng",),
+        key_by_type: bool = True,
+    ) -> Any:
+        response = self._request(
+            "GET",
+            f"/activities/{activity_id}/streams",
+            params={
+                "keys": ",".join(keys),
+                "key_by_type": str(key_by_type).lower(),
+            },
+        )
+        return response.json()
+
     def get_activities_after(self, after_dt: datetime, per_page: int = 200) -> list[dict[str, Any]]:
         activities: list[dict[str, Any]] = []
         page = 1

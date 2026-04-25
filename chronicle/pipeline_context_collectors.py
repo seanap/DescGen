@@ -44,6 +44,7 @@ def collect_smashrun_context(
         "latest_elevation_feet": None,
         "smashrun_elevation_totals": {"week": 0.0, "month": 0.0, "year": 0.0},
         "smashrun_activity_record": None,
+        "smashrun_activities": [],
         "smashrun_stats": None,
         "smashrun_badges": [],
     }
@@ -62,6 +63,9 @@ def collect_smashrun_context(
     )
 
     if smashrun_activities:
+        context["smashrun_activities"] = [
+            item for item in smashrun_activities if isinstance(item, dict)
+        ]
         context["smashrun_activity_record"] = get_activity_record(smashrun_activities, detailed_activity)
         context["latest_elevation_feet"] = get_activity_elevation_feet(smashrun_activities, detailed_activity)
         context["smashrun_elevation_totals"] = aggregate_elevation_totals(

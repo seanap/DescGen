@@ -112,6 +112,7 @@ http://localhost:1609
 - Android widget companion: [`docs/ANDROID_WIDGET_COMPANION.md`](docs/ANDROID_WIDGET_COMPANION.md)
 - Android widget APK downloads: [GitHub Releases](https://github.com/seanap/Chronicle/releases)
 - Misery Index report: [`docs/MISERY_INDEX_REPORT.md`](docs/MISERY_INDEX_REPORT.md)
+- Run Nut x Everest challenge profile: [`docs/RUN_NUT_EVEREST_CHALLENGE.md`](docs/RUN_NUT_EVEREST_CHALLENGE.md)
 
 ## Thanks!
 Borrowed ideas, inspiration, code, and style from the following great projects:

@@ -8,7 +8,7 @@ import math
 import os
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -61,6 +61,18 @@ DEFAULT_STRAVA_PERIOD_STATS_INCREMENTAL_OVERLAP_HOURS = 48
 GARMIN_LOGIN_BLOCKED_UNTIL_KEY = "garmin.login_blocked_until_utc"
 GARMIN_LOGIN_LAST_ERROR_KEY = "garmin.login_last_error"
 DEFAULT_GARMIN_LOGIN_RETRY_COOLDOWN_SECONDS = 6 * 60 * 60
+CHALLENGE_300_30_PROFILE_ID = "300-30-challenge"
+CHALLENGE_300_30_NAME = "300/30 Challenge"
+CHALLENGE_300_30_START = date(2026, 5, 1)
+CHALLENGE_300_30_DAYS = 31
+CHALLENGE_300_30_END_EXCLUSIVE = date(2026, 6, 1)
+CHALLENGE_300_30_DISTANCE_GOAL_MILES = 300.0
+CHALLENGE_300_30_ELEVATION_GOAL_METERS = 8848.0
+CHALLENGE_300_30_ELEVATION_GOAL_FEET = 29029.0
+ROYALE_HILL_LATITUDE = 34.24659
+ROYALE_HILL_LONGITUDE = -83.96339
+ROYALE_HILL_RADIUS_FEET = 60.0
+ROYALE_HILL_SUMMIT_REGISTRY_KEY = "challenge.royale_hill.activity_summits"
 
 
 def _configure_logging(level: str) -> None:
@@ -1341,6 +1353,488 @@ def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
     return radius_miles * c
 
 
+def _activity_local_datetime(
+    activity: dict[str, Any],
+    timezone_name: str,
+) -> datetime | None:
+    local_raw = activity.get("start_date_local")
+    if isinstance(local_raw, str) and local_raw.strip():
+        try:
+            parsed = datetime.fromisoformat(local_raw.strip().replace("Z", "+00:00"))
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                try:
+                    return parsed.replace(tzinfo=ZoneInfo(timezone_name))
+                except ZoneInfoNotFoundError:
+                    return parsed.replace(tzinfo=timezone.utc)
+            return parsed
+
+    start_utc = _parse_utc_datetime(activity.get("start_date"))
+    if start_utc is None:
+        return None
+    try:
+        return start_utc.astimezone(ZoneInfo(timezone_name))
+    except ZoneInfoNotFoundError:
+        return start_utc.astimezone(timezone.utc)
+
+
+def _activity_local_date(activity: dict[str, Any], timezone_name: str) -> date | None:
+    local_dt = _activity_local_datetime(activity, timezone_name)
+    return local_dt.date() if isinstance(local_dt, datetime) else None
+
+
+def _is_challenge_running_activity(activity: dict[str, Any]) -> bool:
+    sport_type = _normalize_activity_type_key(activity.get("sport_type") or activity.get("type"))
+    return sport_type in {"run", "trailrun", "virtualrun"}
+
+
+def _challenge_day_index(local_date: date | None) -> int | None:
+    if local_date is None:
+        return None
+    if local_date < CHALLENGE_300_30_START or local_date >= CHALLENGE_300_30_END_EXCLUSIVE:
+        return None
+    return (local_date - CHALLENGE_300_30_START).days + 1
+
+
+def _format_percent(value: float) -> str:
+    return f"{max(0.0, value):.1f}"
+
+
+def _status_emoji_for_delta(delta: float) -> str:
+    if delta > 0:
+        return "🟢"
+    if delta >= -10:
+        return "🟡"
+    return "🔴"
+
+
+def _signed_decimal(value: float, decimals: int = 1) -> str:
+    return f"{value:+.{max(0, int(decimals))}f}"
+
+
+def _signed_int(value: float) -> str:
+    return f"{int(round(value)):+d}"
+
+
+def _smashrun_activity_local_date(activity: dict[str, Any], timezone_name: str) -> date | None:
+    for key in (
+        "startDateTimeUtc",
+        "startDateTimeLocal",
+        "startDateTime",
+        "startDate",
+        "date",
+    ):
+        raw = activity.get(key)
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        try:
+            parsed = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None:
+            try:
+                parsed = parsed.replace(tzinfo=ZoneInfo(timezone_name))
+            except ZoneInfoNotFoundError:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        try:
+            return parsed.astimezone(ZoneInfo(timezone_name)).date()
+        except ZoneInfoNotFoundError:
+            return parsed.astimezone(timezone.utc).date()
+    return None
+
+
+def _smashrun_elevation_feet(activity: dict[str, Any]) -> float | None:
+    for feet_key in ("elevationGainFeet", "climbFeet"):
+        value = _as_float(activity.get(feet_key))
+        if value is not None:
+            return value
+    for meters_key in (
+        "elevationGain",
+        "elevationGainMeters",
+        "climb",
+        "climbMeters",
+        "totalAscent",
+        "elevation",
+    ):
+        value = _as_float(activity.get(meters_key))
+        if value is not None:
+            return value * 3.28084
+    return None
+
+
+def _latlng_points_from_streams(streams: Any) -> list[tuple[float, float]]:
+    payload: Any = None
+    if isinstance(streams, dict):
+        payload = streams.get("latlng")
+    elif isinstance(streams, list):
+        for item in streams:
+            if isinstance(item, dict) and item.get("type") == "latlng":
+                payload = item
+                break
+    if isinstance(payload, dict):
+        payload = payload.get("data")
+    if not isinstance(payload, list):
+        return []
+
+    points: list[tuple[float, float]] = []
+    for item in payload:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        lat = _as_float(item[0])
+        lon = _as_float(item[1])
+        if lat is None or lon is None:
+            continue
+        points.append((lat, lon))
+    return points
+
+
+def _decode_polyline_points(encoded: Any) -> list[tuple[float, float]]:
+    if not isinstance(encoded, str) or not encoded:
+        return []
+    points: list[tuple[float, float]] = []
+    index = 0
+    lat = 0
+    lon = 0
+    length = len(encoded)
+    while index < length:
+        coordinates: list[int] = []
+        for _axis in range(2):
+            result = 0
+            shift = 0
+            while index < length:
+                byte = ord(encoded[index]) - 63
+                index += 1
+                result |= (byte & 0x1F) << shift
+                shift += 5
+                if byte < 0x20:
+                    break
+            delta = ~(result >> 1) if result & 1 else result >> 1
+            coordinates.append(delta)
+        if len(coordinates) != 2:
+            break
+        lat += coordinates[0]
+        lon += coordinates[1]
+        points.append((lat / 1e5, lon / 1e5))
+    return points
+
+
+def _activity_polyline_points(activity: dict[str, Any]) -> list[tuple[float, float]]:
+    map_payload = activity.get("map")
+    if not isinstance(map_payload, dict):
+        return []
+    return _decode_polyline_points(
+        map_payload.get("polyline") or map_payload.get("summary_polyline")
+    )
+
+
+def _count_radius_entries(
+    points: list[tuple[float, float]],
+    *,
+    latitude: float,
+    longitude: float,
+    radius_feet: float,
+) -> int:
+    if not points:
+        return 0
+    radius_miles = max(0.0, radius_feet) / 5280.0
+    first_lat, first_lon = points[0]
+    inside = _haversine_miles(first_lat, first_lon, latitude, longitude) <= radius_miles
+    count = 0
+    for lat, lon in points[1:]:
+        next_inside = _haversine_miles(lat, lon, latitude, longitude) <= radius_miles
+        if next_inside and not inside:
+            count += 1
+        inside = next_inside
+    return count
+
+
+def _load_royale_hill_registry(settings: Settings) -> dict[str, Any]:
+    payload = get_runtime_value(settings.processed_log_file, ROYALE_HILL_SUMMIT_REGISTRY_KEY, {})
+    return payload if isinstance(payload, dict) else {}
+
+
+def _store_royale_hill_summit_count(
+    settings: Settings,
+    *,
+    activity_id: Any,
+    local_date: date | None,
+    sport_type: str,
+    count: int,
+    source: str,
+) -> dict[str, Any]:
+    registry = _load_royale_hill_registry(settings)
+    activity_key = str(activity_id or "").strip()
+    if not activity_key:
+        return registry
+    registry[activity_key] = {
+        "activity_id": activity_key,
+        "local_date": local_date.isoformat() if isinstance(local_date, date) else None,
+        "sport_type": str(sport_type or ""),
+        "count": max(0, int(count)),
+        "source": source,
+        "updated_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    set_runtime_value(settings.processed_log_file, ROYALE_HILL_SUMMIT_REGISTRY_KEY, registry)
+    return registry
+
+
+def _royale_hill_registry_total(registry: dict[str, Any], *, through_date: date | None = None) -> int:
+    total = 0
+    for record in registry.values():
+        if not isinstance(record, dict):
+            continue
+        local_date_raw = record.get("local_date")
+        if not isinstance(local_date_raw, str):
+            continue
+        try:
+            local_date = date.fromisoformat(local_date_raw)
+        except ValueError:
+            continue
+        if local_date < CHALLENGE_300_30_START or local_date >= CHALLENGE_300_30_END_EXCLUSIVE:
+            continue
+        if through_date is not None and local_date > through_date:
+            continue
+        total += max(0, int(_as_float(record.get("count")) or 0))
+    return total
+
+
+def _royale_hill_registry_date_total(registry: dict[str, Any], target_date: date | None) -> int:
+    if target_date is None:
+        return 0
+    total = 0
+    for record in registry.values():
+        if not isinstance(record, dict):
+            continue
+        if record.get("local_date") != target_date.isoformat():
+            continue
+        total += max(0, int(_as_float(record.get("count")) or 0))
+    return total
+
+
+def _collect_royale_hill_current_summits(
+    settings: Settings,
+    strava_client: StravaClient,
+    detailed_activity: dict[str, Any],
+    *,
+    local_date: date | None,
+    service_state: dict[str, Any] | None,
+) -> dict[str, Any]:
+    activity_id = detailed_activity.get("id")
+    registry = _load_royale_hill_registry(settings)
+    activity_key = str(activity_id or "").strip()
+    existing = registry.get(activity_key) if activity_key else None
+
+    if not _is_challenge_running_activity(detailed_activity):
+        return {
+            "count": 0,
+            "source": "not_running_activity",
+            "registry": registry,
+        }
+
+    points: list[tuple[float, float]] = []
+    source = "unavailable"
+    if activity_key:
+        streams = _run_service_call(
+            settings,
+            "strava.activity_streams",
+            strava_client.get_activity_streams,
+            int(activity_key),
+            service_state=service_state,
+            cache_key=f"strava.activity_streams:{activity_key}:latlng",
+            cache_ttl_seconds=settings.service_cache_ttl_seconds,
+        )
+        points = _latlng_points_from_streams(streams)
+        if points:
+            source = "strava_streams"
+
+    if not points:
+        points = _activity_polyline_points(detailed_activity)
+        if points:
+            source = "strava_polyline"
+
+    if not points:
+        if isinstance(existing, dict):
+            return {
+                "count": max(0, int(_as_float(existing.get("count")) or 0)),
+                "source": str(existing.get("source") or "stored"),
+                "registry": registry,
+            }
+        return {
+            "count": 0,
+            "source": "unavailable",
+            "registry": registry,
+        }
+
+    count = _count_radius_entries(
+        points,
+        latitude=ROYALE_HILL_LATITUDE,
+        longitude=ROYALE_HILL_LONGITUDE,
+        radius_feet=ROYALE_HILL_RADIUS_FEET,
+    )
+    registry = _store_royale_hill_summit_count(
+        settings,
+        activity_id=activity_key,
+        local_date=local_date,
+        sport_type=str(detailed_activity.get("sport_type") or detailed_activity.get("type") or ""),
+        count=count,
+        source=source,
+    )
+    return {
+        "count": count,
+        "source": source,
+        "registry": registry,
+    }
+
+
+def _build_300_30_challenge_context(
+    settings: Settings,
+    strava_client: StravaClient,
+    detailed_activity: dict[str, Any],
+    strava_activities: list[dict[str, Any]],
+    smashrun_activities: list[dict[str, Any]],
+    *,
+    profile_id: str,
+    service_state: dict[str, Any] | None,
+) -> dict[str, Any]:
+    timezone_name = str(getattr(settings, "timezone", "UTC") or "UTC")
+    activity_date = _activity_local_date(detailed_activity, timezone_name)
+    day_index = _challenge_day_index(activity_date)
+    active = profile_id == CHALLENGE_300_30_PROFILE_ID and day_index is not None
+
+    activities_by_id: dict[str, dict[str, Any]] = {}
+    for item in strava_activities:
+        if isinstance(item, dict) and item.get("id") is not None:
+            activities_by_id[str(item["id"])] = item
+    normalized_current = _normalize_period_stats_activity(detailed_activity)
+    if normalized_current is not None:
+        activities_by_id[str(normalized_current["id"])] = normalized_current
+
+    today_distance_miles = 0.0
+    total_distance_miles = 0.0
+    today_run_count = 0
+    total_run_count = 0
+    through_date = activity_date if day_index is not None else CHALLENGE_300_30_START - timedelta(days=1)
+
+    for activity in activities_by_id.values():
+        if not _is_challenge_running_activity(activity):
+            continue
+        local_date = _activity_local_date(activity, timezone_name)
+        if local_date is None:
+            continue
+        if local_date == activity_date:
+            today_distance_miles += _distance_miles(activity)
+            today_run_count += 1
+        if CHALLENGE_300_30_START <= local_date <= through_date:
+            total_distance_miles += _distance_miles(activity)
+            total_run_count += 1
+
+    today_elevation_feet = 0.0
+    total_elevation_feet = 0.0
+    for activity in smashrun_activities:
+        if not isinstance(activity, dict):
+            continue
+        local_date = _smashrun_activity_local_date(activity, timezone_name)
+        if local_date is None:
+            continue
+        elevation_feet = _smashrun_elevation_feet(activity)
+        if elevation_feet is None:
+            continue
+        if local_date == activity_date:
+            today_elevation_feet += elevation_feet
+        if CHALLENGE_300_30_START <= local_date <= through_date:
+            total_elevation_feet += elevation_feet
+
+    summit_result = {
+        "count": 0,
+        "source": "inactive",
+        "registry": _load_royale_hill_registry(settings),
+    }
+    if active:
+        summit_result = _collect_royale_hill_current_summits(
+            settings,
+            strava_client,
+            detailed_activity,
+            local_date=activity_date,
+            service_state=service_state,
+        )
+    registry = summit_result.get("registry") if isinstance(summit_result.get("registry"), dict) else {}
+    today_summits = _royale_hill_registry_date_total(registry, activity_date)
+    total_summits = _royale_hill_registry_total(registry, through_date=through_date)
+
+    distance_remaining = max(0.0, CHALLENGE_300_30_DISTANCE_GOAL_MILES - total_distance_miles)
+    elevation_remaining = max(0.0, CHALLENGE_300_30_ELEVATION_GOAL_FEET - total_elevation_feet)
+    today_elevation_meters = today_elevation_feet / 3.28084
+    total_elevation_meters = total_elevation_feet / 3.28084
+    elevation_remaining_meters = elevation_remaining / 3.28084
+    daily_distance_target = round(CHALLENGE_300_30_DISTANCE_GOAL_MILES / CHALLENGE_300_30_DAYS, 1)
+    daily_elevation_target_feet = math.ceil(CHALLENGE_300_30_ELEVATION_GOAL_FEET / CHALLENGE_300_30_DAYS)
+    expected_distance_miles = float(day_index or 0) * daily_distance_target
+    expected_elevation_feet = float(day_index or 0) * daily_elevation_target_feet
+    distance_delta_miles = total_distance_miles - expected_distance_miles
+    elevation_delta_feet = total_elevation_feet - expected_elevation_feet
+
+    days_remaining = max(0, CHALLENGE_300_30_DAYS - int(day_index or 0))
+    return {
+        "id": CHALLENGE_300_30_PROFILE_ID,
+        "name": CHALLENGE_300_30_NAME,
+        "active": bool(active),
+        "day": int(day_index or 0),
+        "days": CHALLENGE_300_30_DAYS,
+        "date": activity_date.isoformat() if activity_date is not None else "",
+        "start_date": CHALLENGE_300_30_START.isoformat(),
+        "end_date": (CHALLENGE_300_30_END_EXCLUSIVE - timedelta(days=1)).isoformat(),
+        "days_remaining": days_remaining,
+        "goals": {
+            "distance_miles": CHALLENGE_300_30_DISTANCE_GOAL_MILES,
+            "elevation_feet": CHALLENGE_300_30_ELEVATION_GOAL_FEET,
+            "elevation_meters": CHALLENGE_300_30_ELEVATION_GOAL_METERS,
+            "daily_distance_miles": CHALLENGE_300_30_DISTANCE_GOAL_MILES / CHALLENGE_300_30_DAYS,
+            "daily_elevation_feet": CHALLENGE_300_30_ELEVATION_GOAL_FEET / CHALLENGE_300_30_DAYS,
+            "daily_elevation_meters": CHALLENGE_300_30_ELEVATION_GOAL_METERS / CHALLENGE_300_30_DAYS,
+        },
+        "pace": {
+            "daily_distance_miles": daily_distance_target,
+            "daily_elevation_feet": daily_elevation_target_feet,
+            "expected_distance_miles": round(expected_distance_miles, 1),
+            "expected_elevation_feet": int(round(expected_elevation_feet)),
+            "distance_delta_miles": round(distance_delta_miles, 1),
+            "elevation_delta_feet": int(round(elevation_delta_feet)),
+            "distance_delta_display": f"{_signed_decimal(distance_delta_miles, 1)}mi",
+            "elevation_delta_display": f"{_signed_int(elevation_delta_feet)}'",
+            "distance_status_emoji": _status_emoji_for_delta(distance_delta_miles),
+            "elevation_status_emoji": _status_emoji_for_delta(elevation_delta_feet),
+        },
+        "today": {
+            "distance_miles": round(today_distance_miles, 2),
+            "elevation_feet": int(round(today_elevation_feet)),
+            "elevation_meters": int(round(today_elevation_meters)),
+            "run_count": today_run_count,
+            "royale_hill_summits": int(today_summits),
+        },
+        "totals": {
+            "distance_miles": round(total_distance_miles, 2),
+            "distance_remaining_miles": round(distance_remaining, 2),
+            "distance_percent": _format_percent((total_distance_miles / CHALLENGE_300_30_DISTANCE_GOAL_MILES) * 100.0),
+            "elevation_feet": int(round(total_elevation_feet)),
+            "elevation_meters": int(round(total_elevation_meters)),
+            "elevation_remaining_feet": int(round(elevation_remaining)),
+            "elevation_remaining_meters": int(round(elevation_remaining_meters)),
+            "elevation_percent": _format_percent((total_elevation_feet / CHALLENGE_300_30_ELEVATION_GOAL_FEET) * 100.0),
+            "run_count": total_run_count,
+            "royale_hill_summits": int(total_summits),
+        },
+        "royale_hill": {
+            "latitude": ROYALE_HILL_LATITUDE,
+            "longitude": ROYALE_HILL_LONGITUDE,
+            "radius_feet": ROYALE_HILL_RADIUS_FEET,
+            "current_activity_summits": int(summit_result.get("count") or 0),
+            "current_activity_source": str(summit_result.get("source") or ""),
+        },
+    }
+
+
 def _text_blob(activity: dict[str, Any]) -> str:
     parts = [
         str(activity.get("name") or ""),
@@ -1525,6 +2019,18 @@ def _criteria_time_minutes(value: Any) -> int | None:
     return hour * 60 + minute
 
 
+def _criteria_date_value(value: Any) -> date | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 def _normalized_strava_tags(activity: dict[str, Any]) -> set[str]:
     tags: set[str] = set()
     sport_type = _normalize_activity_type_key(activity.get("sport_type") or activity.get("type"))
@@ -1650,6 +2156,7 @@ def _criteria_match_reasons(
     match_dt = _activity_match_datetime(activity, settings)
     match_minutes = (match_dt.hour * 60 + match_dt.minute) if isinstance(match_dt, datetime) else None
     match_weekday = match_dt.weekday() if isinstance(match_dt, datetime) else None
+    match_date = match_dt.date() if isinstance(match_dt, datetime) else None
 
     if "sport_type" in criteria:
         evaluated = True
@@ -1852,6 +2359,20 @@ def _criteria_match_reasons(
         if maximum_minutes is None or match_minutes is None or match_minutes > maximum_minutes:
             return []
         reasons.append(f"time_of_day={match_minutes} <= {maximum_minutes}")
+
+    if "date_local_on_or_after" in criteria:
+        evaluated = True
+        minimum_date = _criteria_date_value(criteria.get("date_local_on_or_after"))
+        if minimum_date is None or match_date is None or match_date < minimum_date:
+            return []
+        reasons.append(f"date_local={match_date.isoformat()} >= {minimum_date.isoformat()}")
+
+    if "date_local_before" in criteria:
+        evaluated = True
+        maximum_date = _criteria_date_value(criteria.get("date_local_before"))
+        if maximum_date is None or match_date is None or match_date >= maximum_date:
+            return []
+        reasons.append(f"date_local={match_date.isoformat()} < {maximum_date.isoformat()}")
 
     if "start_geofence" in criteria:
         evaluated = True
@@ -2477,6 +2998,7 @@ def _build_description_context(
     smashrun_stats: dict[str, Any] | None = None,
     smashrun_badges: list[dict[str, Any]] | None = None,
     garmin_period_fallback: dict[str, dict[str, Any]] | None = None,
+    challenge_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     intervals_payload = intervals_payload or {}
     achievements = intervals_payload.get("achievements", [])
@@ -2868,6 +3390,7 @@ def _build_description_context(
             "latest_activity": smashrun_activity_context,
             "stats": smashrun_stats_context,
         },
+        "challenge": challenge_context or {},
         "periods": {
             "week": {
                 "gap": week["gap"],
@@ -2993,6 +3516,9 @@ def _normalize_period_stats_activity(activity: dict[str, Any]) -> dict[str, Any]
         "moving_time": float(_as_float(activity.get("moving_time")) or 0.0),
         "calories": float(_as_float(activity.get("calories")) or 0.0),
     }
+    elevation_gain = _as_float(activity.get("total_elevation_gain"))
+    if elevation_gain is not None and elevation_gain > 0:
+        normalized["total_elevation_gain"] = float(elevation_gain)
     average_speed = _as_float(activity.get("average_speed"))
     if average_speed is not None and average_speed > 0:
         normalized["average_speed"] = float(average_speed)
@@ -3528,6 +4054,8 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             reference_date=detailed_activity.get("start_date"),
         )
         training["_garmin_activity_aligned"] = bool(isinstance(matched_garmin_activity, dict) and matched_garmin_activity)
+        selected_profile = _select_activity_profile(settings, detailed_activity, training=training)
+        profile_id = str(selected_profile.get("profile_id") or "default")
         garmin_period_fallback = _run_service_call(
             settings,
             "garmin.period_fallback",
@@ -3583,6 +4111,18 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             service_state=service_state,
         )
 
+        challenge_context = _build_300_30_challenge_context(
+            settings,
+            strava_client,
+            detailed_activity,
+            strava_activities,
+            smashrun_context.get("smashrun_activities")
+            if isinstance(smashrun_context.get("smashrun_activities"), list)
+            else [],
+            profile_id=profile_id,
+            service_state=service_state,
+        )
+
         description_context = _build_description_context(
             detailed_activity=detailed_activity,
             training=training,
@@ -3605,10 +4145,9 @@ def run_once(force_update: bool = False, activity_id: int | None = None) -> dict
             smashrun_stats=smashrun_stats,
             smashrun_badges=smashrun_badges,
             garmin_period_fallback=garmin_period_fallback,
+            challenge_context=challenge_context,
         )
 
-        selected_profile = _select_activity_profile(settings, detailed_activity, training=training)
-        profile_id = str(selected_profile.get("profile_id") or "default")
         description_context["profile"] = {
             "id": profile_id,
             "label": str(selected_profile.get("profile_label") or profile_id.title()),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -551,6 +551,63 @@ SAMPLE_TEMPLATE_CONTEXT: dict[str, Any] = {
             "least_often_run_day": "Thursday",
         },
     },
+    "challenge": {
+        "id": "300-30-challenge",
+        "name": "300/30 Challenge",
+        "active": True,
+        "day": 15,
+        "days": 31,
+        "date": "2026-05-15",
+        "start_date": "2026-05-01",
+        "end_date": "2026-05-31",
+        "days_remaining": 16,
+        "goals": {
+            "distance_miles": 300.0,
+            "elevation_feet": 29029.0,
+            "elevation_meters": 8848.0,
+            "daily_distance_miles": 9.68,
+            "daily_elevation_feet": 936.42,
+            "daily_elevation_meters": 285.42,
+        },
+        "pace": {
+            "daily_distance_miles": 9.7,
+            "daily_elevation_feet": 937,
+            "expected_distance_miles": 145.5,
+            "expected_elevation_feet": 14055,
+            "distance_delta_miles": 6.3,
+            "elevation_delta_feet": 1057,
+            "distance_delta_display": "+6.3mi",
+            "elevation_delta_display": "+1057'",
+            "distance_status_emoji": "🟢",
+            "elevation_status_emoji": "🟢",
+        },
+        "today": {
+            "distance_miles": 13.24,
+            "elevation_feet": 1420,
+            "elevation_meters": 433,
+            "run_count": 2,
+            "royale_hill_summits": 3,
+        },
+        "totals": {
+            "distance_miles": 151.8,
+            "distance_remaining_miles": 148.2,
+            "distance_percent": "50.6",
+            "elevation_feet": 15112,
+            "elevation_meters": 4606,
+            "elevation_remaining_feet": 13917,
+            "elevation_remaining_meters": 4242,
+            "elevation_percent": "52.1",
+            "run_count": 24,
+            "royale_hill_summits": 19,
+        },
+        "royale_hill": {
+            "latitude": 34.24659,
+            "longitude": -83.96339,
+            "radius_feet": 60.0,
+            "current_activity_summits": 2,
+            "current_activity_source": "strava_streams",
+        },
+    },
     "profile": {
         "id": "default",
         "label": "Default",
@@ -888,6 +945,17 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
         "criteria": {"kind": "fallback", "description": "Fallback profile when no enabled rule matches."},
     },
     {
+        "profile_id": "300-30-challenge",
+        "label": "300/30 Challenge",
+        "enabled": False,
+        "locked": False,
+        "priority": 120,
+        "criteria": {
+            "kind": "challenge",
+            "description": "May 2026 Run Nut + Conquered Everest challenge runs.",
+        },
+    },
+    {
         "profile_id": "incline_treadmill",
         "label": "Incline Treadmill",
         "enabled": True,
@@ -993,6 +1061,23 @@ PROFILE_BUILTINS: list[dict[str, Any]] = [
 
 PROFILE_TEMPLATE_DEFAULTS: dict[str, str] = {
     "default": DEFAULT_DESCRIPTION_TEMPLATE,
+    "300-30-challenge": """🔥 Run Nut x Everest - Day {{ challenge.day }}/{{ challenge.days }}
+{{ challenge.pace.distance_status_emoji }} {{ challenge.pace.distance_delta_display }} | {{ challenge.pace.elevation_status_emoji }} {{ challenge.pace.elevation_delta_display }}
+🏃 Today: {{ '%.1f' | format(challenge.today.distance_miles) }} mi | +{{ challenge.today.elevation_feet }}' | 🏔️ {{ challenge.today.royale_hill_summits }}
+📈 Total: {{ '%.1f' | format(challenge.totals.distance_miles) }} mi | +{{ challenge.totals.elevation_feet }}' | 🏔️ {{ challenge.totals.royale_hill_summits }}
+
+🏆 {{ streak_days }} days in a row
+{% for notable in notables %}🏅 {{ notable }}
+{% endfor %}{% for achievement in achievements %}🏅 {{ achievement }}
+{% endfor %}{% for segment_notable in segment_notables | default([]) %}🥇 {{ segment_notable }}
+{% endfor %}{% for badge in badges | default([]) %}🎖️ {{ badge }}
+{% endfor %}🌤️🌡️ MI {{ misery.index }} {{ misery.index.emoji }}{% if misery.index.polarity in ['hot', 'cold'] %} ({{ misery.index.polarity }}){% endif %} | 🏭 AQI {{ weather.aqi }}{{ weather.aqi_description }}
+🌤️🚦 Readiness {{ training.readiness_score }} {{ training.readiness_emoji }} | RHR {{ training.resting_hr }} | Sleep {{ training.sleep_score }}
+👟🏃 {{ activity.gap_pace }} | 🗺️ {{ activity.distance_miles }} mi | 🏔️ {{ activity.elevation_feet }}' | 🕓 {{ activity.time }} | 🍺 {{ activity.beers }}
+👟👣 {{ activity.cadence_spm }}spm | 💼 {{ activity.work }} | ⚡ {{ activity.norm_power }} | 💓 {{ activity.average_hr }} | ⚙️ {{ activity.efficiency }}
+🚄 {{ training.status_emoji }} {{ training.status_key }} | TE {{ training.aerobic_te }} : {{ training.anaerobic_te }} - {{ training.te_label }}
+🚄 {{ intervals.summary }}
+❤️‍🔥 {{ training.vo2 }} | ♾ Endur {{ training.endurance_score }} | 🗻 Hill {{ training.hill_score }}""",
     "incline_treadmill": """∠ Incline: 15%
 {% set distance_m = raw.activity.distance | default(0) | float %}
 {% set moving_s = raw.activity.moving_time | default(raw.activity.elapsed_time | default(0)) | float %}
@@ -1472,6 +1557,17 @@ def _profile_builtin_criteria(settings: Settings | None, profile_id: str) -> dic
             "kind": "fallback",
             "description": "Fallback profile when no enabled rule matches.",
         }
+    if normalized == "300-30-challenge":
+        return {
+            "kind": "challenge",
+            "description": "May 2026 Run Nut + Conquered Everest challenge runs.",
+            "all_of": [
+                {"sport_type": ["run", "trailrun", "virtualrun"]},
+                {"date_local_on_or_after": "2026-05-01"},
+                {"date_local_before": "2026-06-01"},
+                {"none_of": [{"strength_like": True}]},
+            ],
+        }
     if normalized == "incline_treadmill":
         return {
             "kind": "activity",
@@ -1678,6 +1774,10 @@ _PROFILE_RULE_TIME_KEYS = {
     "time_of_day_after",
     "time_of_day_before",
 }
+_PROFILE_RULE_DATE_KEYS = {
+    "date_local_on_or_after",
+    "date_local_before",
+}
 _PROFILE_RULE_COMPOUND_KEYS = {
     "all_of",
     "any_of",
@@ -1705,6 +1805,16 @@ def _criteria_time_value_is_valid(value: Any) -> bool:
     except ValueError:
         return False
     return 0 <= hour <= 23 and 0 <= minute <= 59
+
+
+def _criteria_date_value_is_valid(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        date.fromisoformat(value.strip())
+    except ValueError:
+        return False
+    return True
 
 
 def _normalize_profile_rule_string(value: Any, *, field: str) -> str:
@@ -1824,6 +1934,12 @@ def validate_template_profile_criteria(
         if key in _PROFILE_RULE_TIME_KEYS:
             if not _criteria_time_value_is_valid(value):
                 raise ValueError(f"{child_field} must use HH:MM 24-hour time.")
+            normalized[key] = str(value).strip()
+            continue
+
+        if key in _PROFILE_RULE_DATE_KEYS:
+            if not _criteria_date_value_is_valid(value):
+                raise ValueError(f"{child_field} must use YYYY-MM-DD date format.")
             normalized[key] = str(value).strip()
             continue
 
@@ -2124,8 +2240,7 @@ def _ensure_template_profiles(settings: Settings) -> dict[str, Any]:
             continue
         template_path = _template_profile_template_path(settings, profile_id)
         if not template_path.exists():
-            template_path.parent.mkdir(parents=True, exist_ok=True)
-            template_path.write_text(_profile_template_seed(profile_id) + "\n", encoding="utf-8")
+            _write_text_file_atomic(template_path, _profile_template_seed(profile_id) + "\n")
 
         meta_path = _template_profile_meta_path(settings, profile_id)
         if not meta_path.exists():
@@ -2625,6 +2740,37 @@ def _template_versions_dir_for_profile(settings: Settings, profile_id: str) -> P
     return _template_profile_versions_dir(settings, normalized)
 
 
+def _template_from_current_version(
+    settings: Settings,
+    profile_id: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any] | None:
+    version_id = str(metadata.get("current_version") or "").strip()
+    if not version_id:
+        return None
+    record = get_template_version(settings, version_id, profile_id=profile_id)
+    if not isinstance(record, dict):
+        return None
+    template_text = record.get("template")
+    if not isinstance(template_text, str) or not template_text.strip():
+        return None
+    normalized_text = _normalize_template_text(template_text)
+    return {
+        "template": normalized_text,
+        "is_custom": True,
+        "path": str(_template_path_for_profile(settings, profile_id)),
+        "profile_id": profile_id,
+        "template_hash": _template_hash(normalized_text),
+        "name": metadata.get("name"),
+        "current_version": metadata.get("current_version"),
+        "updated_at_utc": metadata.get("updated_at_utc"),
+        "updated_by": metadata.get("updated_by"),
+        "source": metadata.get("source"),
+        "metadata": metadata,
+        "recovered_from_version": True,
+    }
+
+
 def _template_repository_builtin_records(settings: Settings | None = None) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = [
         {
@@ -3029,6 +3175,13 @@ def _write_yaml_file(path: Path, payload: dict[str, Any]) -> None:
     tmp_path.replace(path)
 
 
+def _write_text_file_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)
+
+
 def _new_version_id(template_text: str) -> str:
     now = datetime.now(timezone.utc)
     digest = hashlib.sha256(template_text.encode("utf-8")).hexdigest()[:10]
@@ -3217,6 +3370,14 @@ def get_active_template(settings: Settings, profile_id: str = DEFAULT_PROFILE_ID
                 "source": metadata.get("source"),
                 "metadata": metadata,
             }
+        recovered = _template_from_current_version(settings, normalized_profile_id, metadata)
+        if recovered is not None:
+            recovered["profile_label"] = (
+                str(profile.get("label") or normalized_profile_id.title())
+                if profile
+                else normalized_profile_id.title()
+            )
+            return recovered
     default_meta = _template_metadata_defaults()
     seeded_template = _profile_template_seed(normalized_profile_id)
     return {
@@ -3256,8 +3417,7 @@ def save_active_template(
     normalized = _normalize_template_text(template_text)
     if not normalized:
         raise ValueError("template_text must not be empty.")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(normalized + "\n", encoding="utf-8")
+    _write_text_file_atomic(path, normalized + "\n")
 
     current = get_active_template(settings, profile_id=normalized_profile_id)
     record = _build_template_version_record(

@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -5,9 +7,14 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 from chronicle.activity_pipeline import (
+    CHALLENGE_300_30_PROFILE_ID,
     GARMIN_LOGIN_BLOCKED_UNTIL_KEY,
     GARMIN_LOGIN_LAST_ERROR_KEY,
+    ROYALE_HILL_LATITUDE,
+    ROYALE_HILL_LONGITUDE,
+    _build_300_30_challenge_context,
     _build_description_context,
+    _count_radius_entries,
     _extract_activity_smashrun_badges,
     _extract_strava_badges,
     _extract_activity_garmin_badges,
@@ -255,6 +262,132 @@ class TestCycleTimeContext(unittest.TestCase):
             strava_activity_id="777",
         )
         self.assertEqual(badges, ["List Associated Badge", "Nested Associated Badge"])
+
+
+class TestChallenge30030Context(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self._old_runtime = os.environ.get("RUNTIME_DB_FILE")
+        os.environ["RUNTIME_DB_FILE"] = "runtime_state.db"
+        self.settings = SimpleNamespace(
+            timezone="America/New_York",
+            processed_log_file=Path(self.temp_dir.name) / "processed_activities.log",
+            enable_service_result_cache=False,
+            enable_service_call_budget=False,
+            service_cache_ttl_seconds=600,
+            service_retry_count=0,
+            service_retry_backoff_seconds=1,
+            service_cooldown_base_seconds=60,
+            service_cooldown_max_seconds=1800,
+        )
+
+    def tearDown(self) -> None:
+        if self._old_runtime is None:
+            os.environ.pop("RUNTIME_DB_FILE", None)
+        else:
+            os.environ["RUNTIME_DB_FILE"] = self._old_runtime
+        self.temp_dir.cleanup()
+
+    def test_count_radius_entries_counts_outside_to_inside_transitions(self) -> None:
+        points = [
+            (34.24500, ROYALE_HILL_LONGITUDE),
+            (ROYALE_HILL_LATITUDE, ROYALE_HILL_LONGITUDE),
+            (ROYALE_HILL_LATITUDE, ROYALE_HILL_LONGITUDE),
+            (34.24500, ROYALE_HILL_LONGITUDE),
+            (ROYALE_HILL_LATITUDE, ROYALE_HILL_LONGITUDE),
+        ]
+
+        self.assertEqual(
+            _count_radius_entries(
+                points,
+                latitude=ROYALE_HILL_LATITUDE,
+                longitude=ROYALE_HILL_LONGITUDE,
+                radius_feet=60.0,
+            ),
+            2,
+        )
+
+    def test_build_300_30_challenge_context_sums_run_day_totals_and_summits(self) -> None:
+        detailed = {
+            "id": 3003,
+            "sport_type": "TrailRun",
+            "type": "TrailRun",
+            "start_date": "2026-05-02T12:00:00Z",
+            "distance": 5 * 1609.34,
+            "moving_time": 2400,
+        }
+        strava_activities = [
+            {
+                "id": "3001",
+                "sport_type": "Run",
+                "type": "Run",
+                "start_date": "2026-05-01T12:00:00Z",
+                "distance": 10 * 1609.34,
+                "moving_time": 4800,
+            },
+            {
+                "id": "3002",
+                "sport_type": "Run",
+                "type": "Run",
+                "start_date": "2026-05-02T10:00:00Z",
+                "distance": 4 * 1609.34,
+                "moving_time": 1920,
+            },
+            {
+                "id": "ride",
+                "sport_type": "Ride",
+                "type": "Ride",
+                "start_date": "2026-05-02T11:00:00Z",
+                "distance": 20 * 1609.34,
+                "moving_time": 3600,
+            },
+        ]
+        smashrun_activities = [
+            {"activityId": 1, "startDateTimeUtc": "2026-05-01T12:00:00Z", "elevationGainFeet": 1000},
+            {"activityId": 2, "startDateTimeUtc": "2026-05-02T10:00:00Z", "elevationGainFeet": 300},
+            {"activityId": 3, "startDateTimeUtc": "2026-05-02T12:00:00Z", "elevationGainFeet": 400},
+            {"activityId": 4, "startDateTimeUtc": "2026-06-01T12:00:00Z", "elevationGainFeet": 9999},
+        ]
+        strava_client = MagicMock()
+        strava_client.get_activity_streams.return_value = {
+            "latlng": {
+                "data": [
+                    [34.24500, ROYALE_HILL_LONGITUDE],
+                    [ROYALE_HILL_LATITUDE, ROYALE_HILL_LONGITUDE],
+                    [34.24500, ROYALE_HILL_LONGITUDE],
+                    [ROYALE_HILL_LATITUDE, ROYALE_HILL_LONGITUDE],
+                ]
+            }
+        }
+
+        context = _build_300_30_challenge_context(
+            self.settings,
+            strava_client,
+            detailed,
+            strava_activities,
+            smashrun_activities,
+            profile_id=CHALLENGE_300_30_PROFILE_ID,
+            service_state={},
+        )
+
+        self.assertTrue(context["active"])
+        self.assertEqual(context["day"], 2)
+        self.assertAlmostEqual(context["today"]["distance_miles"], 9.0)
+        self.assertAlmostEqual(context["totals"]["distance_miles"], 19.0)
+        self.assertEqual(context["today"]["elevation_feet"], 700)
+        self.assertEqual(context["totals"]["elevation_feet"], 1700)
+        self.assertEqual(context["today"]["run_count"], 2)
+        self.assertEqual(context["totals"]["run_count"], 3)
+        self.assertEqual(context["pace"]["daily_distance_miles"], 9.7)
+        self.assertEqual(context["pace"]["daily_elevation_feet"], 937)
+        self.assertEqual(context["pace"]["distance_delta_display"], "-0.4mi")
+        self.assertEqual(context["pace"]["elevation_delta_display"], "-174'")
+        self.assertEqual(context["pace"]["distance_status_emoji"], "🟡")
+        self.assertEqual(context["pace"]["elevation_status_emoji"], "🔴")
+        self.assertEqual(context["royale_hill"]["current_activity_summits"], 2)
+        self.assertEqual(context["today"]["royale_hill_summits"], 2)
+        self.assertEqual(context["totals"]["royale_hill_summits"], 2)
+        strava_client.get_activity_streams.assert_called_once_with(3003)
 
 
 class TestStrengthProfileBehavior(unittest.TestCase):
@@ -1143,6 +1276,25 @@ class TestExecutableProfileCriteria(unittest.TestCase):
         self.assertIn("day_of_week=0", reasons)
         self.assertIn("time_of_day=1095 >= 1020", reasons)
         self.assertIn("time_of_day=1095 <= 1200", reasons)
+
+    def test_profile_match_reasons_supports_local_date_windows(self) -> None:
+        activity = {
+            "sport_type": "TrailRun",
+            "type": "TrailRun",
+            "name": "May hills",
+            "start_date_local": "2026-05-15T06:30:00-04:00",
+            "moving_time": 3600,
+        }
+        criteria = {
+            "sport_type": ["run", "trailrun"],
+            "date_local_on_or_after": "2026-05-01",
+            "date_local_before": "2026-06-01",
+        }
+
+        reasons = _profile_match_reasons("may_challenge", activity, self.settings, criteria=criteria)
+        self.assertIn("sport_type=TrailRun", reasons)
+        self.assertIn("date_local=2026-05-15 >= 2026-05-01", reasons)
+        self.assertIn("date_local=2026-05-15 < 2026-06-01", reasons)
 
     def test_profile_match_reasons_supports_geofence_within(self) -> None:
         activity = {

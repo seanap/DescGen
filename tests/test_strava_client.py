@@ -58,6 +58,14 @@ class TestStravaUtils(unittest.TestCase):
         self.assertEqual(client.calls[0]["path"], "/activities/12345")
         self.assertEqual(client.calls[0]["params"], {"include_all_efforts": "true"})
 
+    def test_get_activity_streams_requests_latlng_keyed_by_type(self) -> None:
+        client = _DummyClient()
+        payload = StravaClient.get_activity_streams(client, 12345)
+        self.assertEqual(payload, {"ok": True})
+        self.assertEqual(client.calls[0]["method"], "GET")
+        self.assertEqual(client.calls[0]["path"], "/activities/12345/streams")
+        self.assertEqual(client.calls[0]["params"], {"keys": "latlng", "key_by_type": "true"})
+
     def test_get_activities_after_honors_max_page_cap(self) -> None:
         class _PagedClient:
             def __init__(self):

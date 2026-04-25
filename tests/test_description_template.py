@@ -64,6 +64,23 @@ class TestDescriptionTemplate(unittest.TestCase):
             self.assertEqual(active["template"], "Hello {{ name }}")
             self.assertTrue(active.get("current_version"))
 
+    def test_challenge_profile_is_seeded_disabled_with_valid_template(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            profiles = list_template_profiles(settings)
+            challenge = next(item for item in profiles if item["profile_id"] == "300-30-challenge")
+            self.assertEqual(challenge["label"], "300/30 Challenge")
+            self.assertFalse(challenge["enabled"])
+
+            active = get_active_template(settings, profile_id="300-30-challenge")
+            self.assertIn("Run Nut x Everest", active["template"])
+            self.assertIn("challenge.pace.distance_delta_display", active["template"])
+            self.assertNotIn("Remaining:", active["template"])
+            validation = validate_template_text(active["template"], get_sample_template_context())
+            self.assertTrue(validation["valid"], validation)
+
     def test_validate_and_render(self) -> None:
         context = {"name": "Runner"}
         validation = validate_template_text("Hello {{ name }}", context)
@@ -462,6 +479,51 @@ class TestDescriptionTemplate(unittest.TestCase):
             trail_versions = list_template_versions(settings, profile_id="trail")
             self.assertGreaterEqual(len(default_versions), 1)
             self.assertGreaterEqual(len(trail_versions), 2)
+
+    def test_profile_template_recovers_from_current_version_when_live_file_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            save_active_template(settings, "Trail custom {{ value }}", profile_id="trail", author="tester")
+
+            live_path = template_path.parent / "template_profiles" / "trail.j2"
+            live_path.write_text("", encoding="utf-8")
+
+            recovered = get_active_template(settings, profile_id="trail")
+            self.assertTrue(recovered["is_custom"])
+            self.assertEqual(recovered["template"], "Trail custom {{ value }}")
+            self.assertTrue(recovered.get("recovered_from_version"))
+            self.assertEqual(recovered["profile_id"], "trail")
+
+    def test_custom_profile_template_recovers_from_current_version_when_live_file_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            template_path = Path(td) / "description_template.j2"
+            settings = _settings_for(template_path)
+
+            created = create_template_profile(
+                settings,
+                "weekday-commute",
+                label="Weekday Commute",
+                criteria={"strava_tags_any": ["commute"]},
+            )
+            self.assertEqual(created["profile_id"], "weekday-commute")
+
+            save_active_template(
+                settings,
+                "Weekday commute {{ value }}",
+                profile_id="weekday-commute",
+                author="tester",
+            )
+
+            live_path = template_path.parent / "template_profiles" / "weekday-commute.j2"
+            live_path.write_text("", encoding="utf-8")
+
+            recovered = get_active_template(settings, profile_id="weekday-commute")
+            self.assertTrue(recovered["is_custom"])
+            self.assertEqual(recovered["template"], "Weekday commute {{ value }}")
+            self.assertTrue(recovered.get("recovered_from_version"))
+            self.assertEqual(recovered["profile_id"], "weekday-commute")
 
     def test_profile_enable_disable_and_working_profile(self) -> None:
         with tempfile.TemporaryDirectory() as td:
